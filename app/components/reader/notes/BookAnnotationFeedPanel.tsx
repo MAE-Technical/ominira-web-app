@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FeedEntry } from "@/lib/reader/annotationFeed";
 import type { AnnotationFeedFilter, FeedItem } from "@/lib/reader/useBookAnnotationFeed";
 import type { Note } from "@/lib/api/types";
@@ -34,35 +34,71 @@ function feedItemElementId(item: FeedItem): string {
   return item.kind === "highlight" ? `feed-item-${item.entry.annotation.id}` : `feed-item-${item.note.id}`;
 }
 
-/** One item's own context label — which chapter a highlight's passage
- * lives in, or "General discussion" for a book-level note. Small and
- * muted, sitting right on the item itself rather than a page-level section
- * header above a whole group of them: everything scrolls as one
- * continuous, single-screen feed (expand/collapse a thread in place, same
- * as the standalone note panel), and every item still says where it's from
- * without the feed being sliced into separate per-chapter mini-lists to
- * say it. Full-bleed (-mx-5/px-5 cancels the body's own side padding) — a
+type FeedItemRun = { key: string; label: string; items: FeedItem[] };
+
+/** Which category an item belongs to — "general" for every General
+ * discussion note (they're all one category together), a highlight's own
+ * `sectionId` otherwise. */
+function feedItemCategoryKey(item: FeedItem): string {
+  return item.kind === "general" ? "general" : item.entry.sectionId;
+}
+
+function feedItemCategoryLabel(item: FeedItem): string {
+  return item.kind === "general" ? "General discussion" : item.entry.label;
+}
+
+/** Buckets a flat, already-grouped `items` list (General discussion first,
+ * then every highlight in spine order — chapters are necessarily
+ * contiguous runs there) into consecutive same-category runs — one pass,
+ * no re-sorting. Each run renders under a single FeedItemLabel (with its
+ * own count) instead of the label repeating above every item. */
+function groupFeedItemsByCategory(items: FeedItem[]): FeedItemRun[] {
+  const runs: FeedItemRun[] = [];
+  for (const item of items) {
+    const key = feedItemCategoryKey(item);
+    const last = runs[runs.length - 1];
+    if (last && last.key === key) last.items.push(item);
+    else runs.push({ key, label: feedItemCategoryLabel(item), items: [item] });
+  }
+  return runs;
+}
+
+/** One category's own context label — which chapter a run of highlights'
+ * passages live in, or "General discussion" for a run of book-level
+ * notes — plus that run's own count, same "N topics"/"N highlights"
+ * convention this feed's per-section headers used before it flattened
+ * into one continuous list. A page-level section header in spirit, just
+ * without the sticky per-section grouping the feed used to have:
+ * everything still scrolls as one continuous, single-screen feed
+ * (expand/collapse a thread in place, same as the standalone note panel),
+ * this only stops the label itself from repeating above every single
+ * item. Full-bleed (-mx-5/px-5 cancels the body's own side padding) — a
  * thin bar spanning the panel's full width, not padded/inset to match the
- * note card sitting under it, so it reads as this item's own running head
- * rather than another line inside the card. No icon — the text alone
- * (General discussion vs. an actual chapter title) already tells the two
- * kinds apart, so one wasn't earning its keep. Plain text over a
+ * note card sitting under it, so it reads as this run's own running head
+ * rather than another line inside the first card. No icon — the text
+ * alone (General discussion vs. an actual chapter title) already tells
+ * the two kinds apart, so one wasn't earning its keep. Plain text over a
  * border-bottom for now, same treatment this feed already used before a
  * background tint was tried here — a background sized to just the text
  * (not the full-bleed bar) is worth another pass later, but isn't this
  * one. */
-function FeedItemLabel({ item }: { item: FeedItem }) {
-  const text = item.kind === "general" ? "General discussion" : item.entry.label;
+function FeedItemLabel({ run, filter }: { run: FeedItemRun; filter: AnnotationFeedFilter }) {
+  const count = run.items.length;
+  const noun = filter === "notes" ? (count === 1 ? "note" : "notes") : count === 1 ? "highlight" : "highlights";
   return (
-    <div className="-mx-5 mb-2 border-b border-[var(--reader-border)] px-5 py-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--reader-text-subtle)]">
-      <span className="truncate">{text}</span>
+    <div className="-mx-5 mb-2 flex items-center justify-between gap-3 border-b border-[var(--reader-border)] px-5 py-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--reader-text-subtle)]">
+      <span className="min-w-0 flex-1 truncate">{run.label}</span>
+      <span className="flex-none normal-case tracking-normal text-[var(--reader-text-subtle)]">
+        {count} {noun}
+      </span>
     </div>
   );
 }
 
-/** The book-wide annotation feed — every mark of any kind, each item
- * showing its context label (which chapter, or General discussion) plus
- * its full, real interactive thread (see FeedHighlightThread) — a bare
+/** The book-wide annotation feed — every mark of any kind, grouped under a
+ * context label per run (which chapter, or General discussion — see
+ * FeedItemLabel), each item's own full, real interactive thread (see
+ * FeedHighlightThread) sitting under it — a bare
  * highlight renders as just the quote and a collapsed "add a note"
  * composer, same component either way. One continuous, single-screen feed:
  * a thread expands/collapses in place (its own ReplyButton toggle), it
@@ -108,6 +144,7 @@ export default function BookAnnotationFeedPanel({
 }) {
   const createNote = useCreateNote(materialId);
   const [generalComposerError, setGeneralComposerError] = useState<string | null>(null);
+  const runs = useMemo(() => groupFeedItemsByCategory(items), [items]);
   // Fires once per "the panel just opened" — this component only mounts
   // while open (see Reader.tsx's `{noteFeed.open && <BookAnnotationFeedPanel/>}`),
   // so a plain mount-effect is exactly "once per open," no extra ref guard needed.
@@ -199,23 +236,34 @@ export default function BookAnnotationFeedPanel({
       ) : (
         // pt-4 — PanelShell's own body has no top padding by default (its
         // bottom padding is for scroll clearance above the footer, not a
-        // symmetric pair), so without this the first item's label sits
+        // symmetric pair), so without this the first run's label sits
         // flush against the subheader's own bottom border with no breathing
         // room at all.
-        <div className="flex flex-col gap-6 pt-4">
-          {items.map((item) => (
-            <div key={feedItemElementId(item)} id={feedItemElementId(item)}>
-              <FeedItemLabel item={item} />
-              {item.kind === "highlight" ? (
-                <FeedHighlightThread
-                  materialId={materialId}
-                  entry={item.entry}
-                  getPassageText={getPassageText}
-                  onJump={onJump}
-                />
-              ) : (
-                <GeneralNoteThread materialId={materialId} note={item.note} allNotes={notes} />
-              )}
+        <div className="flex flex-col pt-4">
+          {runs.map((run, runIndex) => (
+            <div key={run.key} className={runIndex === 0 ? undefined : "mt-6"}>
+              <FeedItemLabel run={run} filter={filter} />
+              {/* Items within the same run sit closer together (gap-4)
+                  than the space reserved above the next run (mt-6 on the
+                  wrapper above) — same "tighter within a group, looser
+                  between groups" convention as the general run's own
+                  spacing before it was flattened here. */}
+              <div className="flex flex-col gap-4">
+                {run.items.map((item) => (
+                  <div key={feedItemElementId(item)} id={feedItemElementId(item)}>
+                    {item.kind === "highlight" ? (
+                      <FeedHighlightThread
+                        materialId={materialId}
+                        entry={item.entry}
+                        getPassageText={getPassageText}
+                        onJump={onJump}
+                      />
+                    ) : (
+                      <GeneralNoteThread materialId={materialId} note={item.note} allNotes={notes} />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>

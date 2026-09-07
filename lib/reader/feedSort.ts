@@ -2,14 +2,18 @@ import type { Note } from "@/lib/api/types";
 import type { Annotation } from "@/stores/library-store";
 import { lastActivityAt, repliesFor } from "./noteThread";
 
-/** "book" — labeled "Default" in FeedSortToggle's own UI, General
- * discussion first then every highlight in spine order, same as browsing
- * the book itself — plus the same two engagement sorts as
- * CommunityFeedSortToggle's own `CommunityFeedSort` (the home community
- * feed): "Top" (most engaged with) or "Recent" (most recently active).
- * Computed client-side from annotations already in memory, unlike the
- * community feed's own server `?sort=` param — this panel already has
- * everything it needs loaded. */
+/** "book" — General discussion first, then every highlight in spine
+ * order, same as browsing the book itself (`useBookAnnotationFeed`'s own
+ * default, and currently the only one actually reachable — there's no UI
+ * control for this anymore; a native `<select>` here fought mobile
+ * Safari's 16px-floor anti-zoom rule and looked oversized, so it was
+ * dropped rather than rebuilt as something else right away) — plus the
+ * same two engagement sorts as CommunityFeedSortToggle's own
+ * `CommunityFeedSort` (the home community feed): "Top" (most engaged
+ * with) or "Recent" (most recently active), kept here dormant for when a
+ * sort control returns. Computed client-side from annotations already in
+ * memory, unlike the community feed's own server `?sort=` param — this
+ * panel already has everything it needs loaded. */
 export type FeedSort = "book" | "recent" | "top";
 
 /** A rough "how much is happening here" score for "Top" — every note (root
