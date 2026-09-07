@@ -110,7 +110,7 @@ export default function AppSplashScreen() {
           <p className="mt-5">{quote.attribution}</p>
         </div>
         <Image
-          src={`/images/splash/${assetTheme}-illustration.svg`}
+          src={`/images/splash/${assetTheme}-illustration-new.svg`}
           alt=""
           width={340}
           height={347}
