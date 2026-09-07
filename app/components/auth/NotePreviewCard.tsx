@@ -67,7 +67,7 @@ export default function NotePreviewCard({ pseudonym }: { pseudonym: string }) {
 
         <Quote text={SAMPLE_QUOTE} />
 
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <AuthorRow name={name} savedAt={savedAt} />
           <NoteContent content={{ kind: "text", text: SAMPLE_NOTE }} />
           <div className="flex items-center gap-3.5">

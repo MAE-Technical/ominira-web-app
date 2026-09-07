@@ -233,7 +233,12 @@ function EditPanel({
               startCollapsed
               showMemberPrompt
               action="note"
-              onSave={(content) => createNote.mutate({ ranges, content }, { onError: () => ui.reportError("Couldn't save your note — check your connection and try again.") })}
+              onSave={(content, visibility) =>
+                createNote.mutate(
+                  { ranges, content, visibility },
+                  { onError: () => ui.reportError("Couldn't save your note — check your connection and try again.") }
+                )
+              }
             />
           )}
         </>

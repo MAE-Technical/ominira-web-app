@@ -347,7 +347,7 @@ const BookContent = memo(function BookContent({
         key={raw.id}
         data-passage-id={raw.id}
         data-passage-type={raw.type}
-        className="m-0 font-serif rounded-xs select-text"
+        className="m-0 font-serif rounded-xs select-text no-callout"
         // sharedStyle deliberately carries no margin — every other passage
         // type (code, blockquote, table, list item, ...) applies
         // marginTop/marginBottom itself on whatever element it renders.

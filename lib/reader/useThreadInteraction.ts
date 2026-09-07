@@ -22,6 +22,7 @@ export function useThreadInteraction({
   allNotes,
   initialEditingId,
   initialExpandAll,
+  onNoteAdded,
 }: {
   materialId: string;
   ranges: AnnotationRange[];
@@ -37,6 +38,18 @@ export function useThreadInteraction({
    * and shouldn't have to expand every reply by hand to see it. A plain
    * marker click leaves this unset (collapsed default). */
   initialExpandAll?: boolean;
+  /** Fires right when a reply is sent (optimistic-timed, not gated on the
+   * request actually landing — same "instant" feel as the optimistic row
+   * itself) — the book-wide feed's own FeedHighlightThread uses this to
+   * jump the reader to the passage a reply just landed on, the same
+   * "navigate to where it is" a note deserves whether the reader tapped
+   * its quote or just added to it from afar while browsing. Never fires
+   * for edit/delete/react — none of those move where a note lives, so
+   * there's nothing to navigate to. Left unset (no-op) by every caller
+   * where "position" isn't a meaningful concept: the standalone per-
+   * highlight panel (the reader's already there) and a rangeless general
+   * note's own thread (nowhere to jump to). */
+  onNoteAdded?: () => void;
 }) {
   const createNote = useCreateNote(materialId);
   const updateNote = useUpdateNote(materialId);
@@ -89,8 +102,11 @@ export function useThreadInteraction({
     // reply; Edit/Delete's menu items never render for a non-owned note,
     // and a reader is never "own" while signed out — see useIsOwnNote), and
     // ReactionButton gates itself before calling toggleReaction.
-    reply: (parentId, content) => createNote.mutate({ ranges, content, parentId }, { onError }),
-    saveEdit: (noteId, content) => updateNote.mutate({ noteId, content }, { onError }),
+    reply: (parentId, content, visibility) => {
+      createNote.mutate({ ranges, content, parentId, visibility }, { onError });
+      onNoteAdded?.();
+    },
+    saveEdit: (noteId, content, visibility) => updateNote.mutate({ noteId, content, visibility }, { onError }),
     delete: (noteId) => deleteNote.mutate(noteId, { onError }),
     toggleReaction: (noteId) => toggleReaction.mutate(noteId, { onError }),
   };

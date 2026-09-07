@@ -35,6 +35,11 @@ export default function FeedHighlightThread({
     materialId,
     ranges: annotation.ranges,
     allNotes: annotation.notes,
+    // A reply added from here can be added to a highlight the reader isn't
+    // actually looking at right now (they're browsing the feed, not
+    // necessarily at this passage) — same "always land where the note
+    // actually is" reasoning as the bottom composer's own onSave below.
+    onNoteAdded: () => onJump(entry),
   });
   const roots = sortNotes(topLevelNotes(annotation.notes), "chronological");
 
@@ -74,12 +79,16 @@ export default function FeedHighlightThread({
           startCollapsed
           showMemberPrompt
           action="note"
-          onSave={(content) =>
+          onSave={(content, visibility) => {
             createNote.mutate(
-              { ranges: annotation.ranges, content },
+              { ranges: annotation.ranges, content, visibility },
               { onError: () => ui.reportError("Couldn't save your note — check your connection and try again.") }
-            )
-          }
+            );
+            // Same reasoning as useThreadInteraction's own onNoteAdded —
+            // this composer adds a fresh top-level note to a highlight the
+            // reader may be browsing from afar in the feed, not standing at.
+            onJump(entry);
+          }}
         />
       )}
     </div>

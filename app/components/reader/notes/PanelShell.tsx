@@ -26,6 +26,7 @@ export default function PanelShell({
   headerMenu,
   subheader,
   bodyClassName = "om-scroll flex-1 min-h-0 overflow-y-auto overscroll-y-contain px-5 pb-10 flex flex-col gap-3.5",
+  footer,
   onClose,
   children,
 }: {
@@ -60,6 +61,18 @@ export default function PanelShell({
    * horizontal pad) via this instead of PanelShell growing a layout prop
    * per caller. */
   bodyClassName?: string;
+  /** A pinned row below the scrollable body, bottom-docked like a chat
+   * input bar — e.g. the book feed's own "share a thought" composer
+   * (BookAnnotationFeedPanel). Unlike `subheader`, this isn't part of the
+   * scrolling content at all, so it stays reachable regardless of where
+   * the reader has scrolled to and regardless of which tab/filter the body
+   * itself currently shows. Safe to dock a real input here now that
+   * NoteComposer's own expanded state is a `createPortal`'d overlay rather
+   * than growing in place — the old iOS Safari keyboard-resize fight this
+   * component's own doc comment used to warn about only applied to a
+   * composer that grew *inline* inside a flex region; the idle pill this
+   * slot actually holds is a fixed, non-growing row. */
+  footer?: ReactNode;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -186,6 +199,14 @@ export default function PanelShell({
           </div>
         )}
         <div className={bodyClassName}>{children}</div>
+        {footer && (
+          <div
+            className="flex-none border-t border-[var(--reader-border)] bg-[var(--reader-surface)] px-5 py-3"
+            style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

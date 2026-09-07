@@ -914,6 +914,8 @@ export default function Reader({
               <BookAnnotationFeedPanel
                 materialId={materialId}
                 groups={noteFeed.groups}
+                generalNotes={noteFeed.generalNotes}
+                notes={noteFeed.notes}
                 filter={noteFeed.filter}
                 onFilterChange={noteFeed.setFilter}
                 totalNoteCount={noteFeed.totalNoteCount}

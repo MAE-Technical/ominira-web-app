@@ -112,16 +112,28 @@ body {
   }
 }
 
-/* Long-press callout ("Copy/Look Up/Save Image"...) suppressed on anything
-   that isn't the passage text itself — chrome buttons, gutter markers, the
-   selection pill, drawer rows. Paired with Tailwind's select-text/select-
-   none utilities (applied per-element, see BookContent.tsx/ReaderHeader.tsx/
-   etc.), this is the standard fix for a WebKit bug where a long-press
-   selection started inside a scrolling container that mixes selectable text
-   with non-text siblings (buttons, markers) balloons past the tapped word
-   to select the entire visible screen and locks scrolling until it's
-   cleared — Safari needs an explicit, unambiguous user-select boundary
-   around the actual selectable text rather than inheriting/guessing one.
+/* Long-press callout ("Copy/Look Up/Save Image"...) suppressed everywhere
+   text-selection happens under our own control — chrome buttons, gutter
+   markers, the selection pill, drawer rows, AND the passage text itself
+   (BookContent.tsx's paragraph <p>). Paired with Tailwind's select-text/
+   select-none utilities (applied per-element, see BookContent.tsx/
+   ReaderHeader.tsx/etc.):
+   - On the non-text chrome, this is the standard fix for a WebKit bug where
+     a long-press selection started inside a scrolling container that mixes
+     selectable text with non-text siblings (buttons, markers) balloons past
+     the tapped word to select the entire visible screen and locks
+     scrolling until it's cleared — Safari needs an explicit, unambiguous
+     user-select boundary around the actual selectable text rather than
+     inheriting/guessing one.
+   - On the passage text itself, this is what keeps iOS Safari's own native
+     selection bubble (Copy/Look Up/Translate/Share…) from popping up
+     alongside our own SelectionMenu the instant a reader selects a passage
+     — selection itself (drag handles, onTouchEnd → onTextSelect) is
+     untouched, since that's governed by user-select/select-text, not
+     touch-callout; only the system's own popup UI is suppressed, leaving
+     just the app's own menu. iOS-version-dependent, per Apple's own
+     (undocumented) behavior here — not guaranteed on every version, but
+     the closest a web page gets to full control over it.
    Tailwind's own select-text/select-none utilities already emit both the
    unprefixed and -webkit- prefixed user-select properties, so only the
    touch-callout piece needs a rule of its own here. */

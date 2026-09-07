@@ -108,7 +108,13 @@ export async function POST(request: Request) {
   if (!reader) return unauthorized();
 
   const body = (await request.json()) as CreateNoteBody;
-  if (!body.materialId || !Array.isArray(body.ranges) || body.ranges.length === 0 || !body.content) {
+  // `ranges` may be empty — a book-level note with no text anchor (see
+  // NotesFeedFab's general-note composer) rather than one tied to a
+  // highlight. A reply still can't invent its own anchor independent of its
+  // parent: the rangesEqual check below already enforces a reply's ranges
+  // exactly match its resolved thread root's (vacuously true when both are
+  // empty), so a reply to a general note naturally stays rangeless too.
+  if (!body.materialId || !Array.isArray(body.ranges) || !body.content) {
     return validationError("materialId, ranges, and content are required.");
   }
   if (body.content.kind === "voice" && !body.content.audioUrl.includes("/storage/v1/object/public/voice-notes/")) {

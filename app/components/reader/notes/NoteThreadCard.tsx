@@ -71,10 +71,16 @@ export default function NoteThreadCard({
           universal preview/"See more" every other Quote does. */}
       {quote && <Quote text={quote} />}
 
-      <div className="flex flex-col gap-2">
+      {/* min-w-0: this is a flex item of the outer `flex flex-col` above —
+          without it, a long unbroken run inside NoteContent (a URL) sets
+          this column's own automatic minimum width to that run's full
+          length, overflowing the panel instead of letting NoteContent's own
+          wrap utilities actually engage. */}
+      <div className="flex min-w-0 flex-col gap-2">
         <AuthorRow
           name={note.author.pseudonym}
           savedAt={Date.parse(note.updatedAt)}
+          isPrivate={own && note.visibility === "private"}
           menu={
             own ? (
               <div className="relative ml-auto flex-none">
@@ -106,10 +112,11 @@ export default function NoteThreadCard({
         {isEditing ? (
           <NoteComposer
             initialText={note.content.kind === "text" ? note.content.text : ""}
+            initialVisibility={note.visibility}
             startCollapsed={false}
             onCancel={() => ui.startEdit(null)}
-            onSave={(content) => {
-              actions.saveEdit(note.id, content);
+            onSave={(content, visibility) => {
+              actions.saveEdit(note.id, content, visibility);
               ui.startEdit(null);
             }}
           />
@@ -164,7 +171,7 @@ export default function NoteThreadCard({
                 showMemberPrompt={hasRequestedRootReply || ui.activeComposerFor !== null}
                 action="reply"
                 onCancel={ui.activeComposerFor ? () => ui.toggleComposer(ui.activeComposerFor!) : undefined}
-                onSave={(content) => actions.reply(ui.activeComposerFor ?? note.id, content)}
+                onSave={(content, visibility) => actions.reply(ui.activeComposerFor ?? note.id, content, visibility)}
               />
             )}
         </div>

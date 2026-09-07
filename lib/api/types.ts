@@ -10,6 +10,8 @@ export type NoteContent =
   | { kind: "text"; text: string }
   | { kind: "voice"; audioUrl: string; durationMs: number };
 
+export type NoteVisibility = "public" | "private";
+
 export type MaterialSummary = {
   id: string;
   slug: string;
@@ -59,7 +61,7 @@ export type Note = {
   parentId: string | null;
   replyingToId: string | null;
   content: NoteContent;
-  visibility: "public" | "private";
+  visibility: NoteVisibility;
   reactionCount: number;
   reactedByMe: boolean;
   createdAt: string;

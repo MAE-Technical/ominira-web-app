@@ -1,37 +1,66 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { RefObject } from "react";
-import { ArrowRight, Loader2, Mic, Pause, Play, Square, X } from "lucide-react";
+import { ArrowRight, Globe, Loader2, Lock, Mic, Pause, Play, Square, X } from "lucide-react";
 import { LiveWaveform, WaveformBars } from "../Waveform";
 import { formatSeconds, useMeasuredWidth, useWaveformBars } from "./noteAudioUtils";
 import { useVoiceRecorder } from "./useVoiceRecorder";
 import { useUploadVoiceNote } from "@/lib/community/useUploadVoiceNote";
 import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
+import { useNoteVisibilityStore } from "@/stores/noteVisibilityStore";
+import type { NoteVisibility } from "@/lib/api/types";
 import MembersOnlyPrompt, { type MembersOnlyAction } from "./MembersOnlyPrompt";
 
+// Matches Tailwind's own `sm:` breakpoint (640px) — this is the one place
+// that breakpoint has to be a real JS decision rather than a CSS class:
+// which of two entirely different DOM shapes to render (see `isDesktop`
+// below), not just how one shared shape is sized. A precise/hover pointer
+// is desktop's actual signal (a touch laptop under 640px should still get
+// the immersive mobile treatment, a mouse-driven window resized wide
+// shouldn't switch to a modal mid-drag) but width is what Tailwind's own
+// `sm:` already means everywhere else in this codebase, and this composer
+// living in a fixed-width side panel either way makes the distinction
+// mostly moot in practice.
+const DESKTOP_BREAKPOINT_PX = 640;
+
 // Caps how tall the textarea will grow to fit a long note before it starts
-// scrolling internally instead — a chat-input pattern (Slack/iMessage-style),
-// so one very long note can't push the Save/mic row out past the panel's own
-// viewport.
-const MAX_COMPOSER_TEXTAREA_HEIGHT = 150;
+// scrolling internally instead — a chat-input pattern (Slack/iMessage-style).
+// Mobile's immersive overlay gets the roomier pair (it's the whole point of
+// a full-screen surface, not one item sharing space in a list); desktop
+// keeps the original inline-box shape the reader asked to get back, just a
+// bit taller than the original 150px.
+const MOBILE_MAX_TEXTAREA_HEIGHT = 320;
+// Starts this tall even empty on mobile — an inviting, obviously-a-real-
+// writing-space box (the X/Facebook "what's on your mind" feel) rather than
+// a one-line input that happens to grow. Desktop's inline box has no
+// equivalent minimum — it still starts at one line and grows, matching how
+// it always has.
+const MOBILE_MIN_TEXTAREA_HEIGHT = 120;
+const DESKTOP_MAX_TEXTAREA_HEIGHT = 260;
 
 /** The text/voice composer — shared by every composing surface in the
  * thread panel: a brand-new top-level note, a reply to a note or another
- * reply, and editing an existing entry in place. Flows as an item inside
- * the panel's single scrollable region, never a fixed footer outside it —
- * that used to be a `flex-none` sibling of the scrollable body, which on
- * iOS Safari made the whole panel balloon past the viewport the moment
- * this textarea took focus (the keyboard's viewport resize fought the two
- * competing flex regions). One scroll container, composer last in reading
- * order wherever it's mounted, sidesteps that entirely.
+ * reply, and editing an existing entry in place.
  *
- * Starts as a single-line idle pill (see `startCollapsed`) that expands
- * into the full text/voice chrome on focus or on tapping its mic — the
- * same collapsed-by-default shape whether it's the always-present root
- * composer or a reply composer a "Reply" tap just mounted. */
+ * Starts as a single-line idle pill inline in the panel (see
+ * `startCollapsed`) on every screen size. Focusing it (or tapping its mic)
+ * then forks by `isDesktop`:
+ * - Mobile hands off to a `createPortal`'d full-screen overlay — the
+ *   "immersive, modern" compose surface X/Facebook/etc. use on a phone, so
+ *   the reader isn't fighting a cramped inline box (and, on iOS Safari, the
+ *   keyboard's viewport resize) the moment they start typing.
+ * - Desktop stays exactly where the pill already was — a plain inline box
+ *   that grows in place, just a bit taller than before a modal was ever
+ *   tried here. A desktop reader already has the screen real estate and
+ *   pointer precision a modal is meant to compensate for on a phone; taking
+ *   over the whole screen (or even just dimming behind a centered card) for
+ *   what's still a small, contextual write here read as a worse fit for the
+ *   surface, not a better one. */
 export default function NoteComposer({
   initialText,
+  initialVisibility,
   placeholder = "Add a note…",
   startCollapsed = false,
   showMemberPrompt = false,
@@ -41,6 +70,13 @@ export default function NoteComposer({
   onSave,
 }: {
   initialText: string;
+  /** The toggle's own starting value. Present only for editing an existing
+   * entry in place — that composer should reflect *this note's* current
+   * visibility, not silently override it with whatever the reader happened
+   * to leave the toggle on last time (see useNoteVisibilityStore's own doc
+   * comment). Every fresh compose surface (root note or reply) omits this
+   * and falls back to that persisted last-used preference instead. */
+  initialVisibility?: NoteVisibility;
   placeholder?: string;
   /** True for a fresh compose surface (root or reply) — starts as the
    * idle pill. False for editing an existing entry in place, which starts
@@ -65,12 +101,30 @@ export default function NoteComposer({
    * its own toggle handler instead of racing with this composer's own
    * dismissal and immediately reopening. */
   excludeRef?: RefObject<HTMLElement | null>;
-  onSave: (content: { kind: "text"; text: string } | { kind: "voice"; audioUrl: string; durationMs: number }) => void;
+  onSave: (
+    content: { kind: "text"; text: string } | { kind: "voice"; audioUrl: string; durationMs: number },
+    visibility: NoteVisibility
+  ) => void;
 }) {
   const isAuthenticated = useIsAuthenticated();
   const [text, setText] = useState(initialText);
   const [expanded, setExpanded] = useState(!startCollapsed);
   const [isFocused, setIsFocused] = useState(false);
+  const lastVisibility = useNoteVisibilityStore((s) => s.lastVisibility);
+  const setLastVisibility = useNoteVisibilityStore((s) => s.setLastVisibility);
+  // Locked in once at mount, same reasoning as `text`'s own useState(initialText)
+  // — this is a starting value, not a live subscription; a reader flipping
+  // the toggle on some *other* composer elsewhere shouldn't reach into this
+  // one mid-edit and change what it's about to save.
+  const [visibility, setVisibility] = useState<NoteVisibility>(initialVisibility ?? lastVisibility);
+  const toggleVisibility = () => {
+    const next: NoteVisibility = visibility === "public" ? "private" : "public";
+    setVisibility(next);
+    // Only a fresh compose surface's own choice becomes the new default for
+    // next time — flipping an edit's toggle changes just this one note,
+    // same "this instance only" scope `initialVisibility` itself has.
+    if (!initialVisibility) setLastVisibility(next);
+  };
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [uploadError, setUploadError] = useState(false);
   const [waveRef, waveWidth] = useMeasuredWidth<HTMLDivElement>();
@@ -80,16 +134,35 @@ export default function NoteComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Grows the textarea to fit its content (up to MAX_COMPOSER_TEXTAREA_HEIGHT,
-  // past which it scrolls internally) instead of a fixed-height box, which
-  // clipped anything longer than a couple of lines — both while typing and
-  // while editing an already-long saved note.
+  // Which of the two composer shapes to render — see this component's own
+  // doc comment. Defaults to the mobile (narrower) shape so a server-
+  // rendered/first-paint pass never briefly shows the desktop inline box on
+  // a phone before hydration corrects it; `matchMedia`'s own `change` event
+  // (not a resize listener) is what keeps this in sync with the viewport
+  // afterward, same idiom, cheaper than a resize listener that only ever
+  // cares about one threshold crossing.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${DESKTOP_BREAKPOINT_PX}px)`);
+    const onChange = () => setIsDesktop(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // Grows the textarea to fit its content (past which it scrolls internally
+  // — the `om-scroll` class) instead of a fixed-height box, which clipped
+  // anything longer than a couple of lines — both while typing and while
+  // editing an already-long saved note. Bounds differ by shape (see the
+  // MOBILE_*/DESKTOP_* constants' own doc comments).
   const resizeTextarea = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_TEXTAREA_HEIGHT)}px`;
-  }, []);
+    const max = isDesktop ? DESKTOP_MAX_TEXTAREA_HEIGHT : MOBILE_MAX_TEXTAREA_HEIGHT;
+    const min = isDesktop ? 0 : MOBILE_MIN_TEXTAREA_HEIGHT;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, min), max)}px`;
+  }, [isDesktop]);
 
   // Re-measures whenever the textarea (re)appears — on mount (so an existing
   // long note starts already expanded, no flash of a clipped single line)
@@ -127,9 +200,9 @@ export default function NoteComposer({
         return;
       }
       setIsUploadingVoice(false);
-      onSave({ kind: "voice", audioUrl, durationMs: recorder.audioDurationMs });
+      onSave({ kind: "voice", audioUrl, durationMs: recorder.audioDurationMs }, visibility);
     } else if (text.trim()) {
-      onSave({ kind: "text", text: text.trim() });
+      onSave({ kind: "text", text: text.trim() }, visibility);
     } else {
       return;
     }
@@ -141,8 +214,11 @@ export default function NoteComposer({
     // NoteEntry now points at its own uploaded copy, not this draft's blob
     // URL, but discardRecording revoking that blob URL out from under this
     // same composer's just-finished recorded-review UI mid-reset would
-    // still be wrong.
+    // still be wrong. Visibility resets to the (possibly just-updated)
+    // persisted default, not hardcoded back to "public" — a root composer
+    // that just posted privately should still default to private next time.
     setText("");
+    setVisibility(lastVisibility);
     if (recorder.mode !== "idle") recorder.releaseDraft();
     setExpanded(false);
   };
@@ -194,6 +270,54 @@ export default function NoteComposer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleCancel/onCancel close over stable identity per mount for this component's purposes; re-subscribing on hasUnsavedProgress/excludeRef is sufficient.
   }, [hasUnsavedProgress, excludeRef]);
 
+  // Only the mobile overlay covers the whole screen — desktop's inline box
+  // is still just one item among others in the panel's own scroll region,
+  // same as it always was, so locking the page behind it would be wrong
+  // there (there's no "behind it" the reader could accidentally scroll into
+  // in the first place). `startCollapsed === false` (the edit-in-place
+  // composer) never renders the idle pill at all, going straight to
+  // `expanded` on mount, so this needs to run for that case too — not just
+  // the pill-to-overlay handoff.
+  useEffect(() => {
+    if (!expanded || isDesktop) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [expanded, isDesktop]);
+
+  // Not part of MembersOnlyAction (that's about *why* a write was blocked,
+  // shown while signed out) — this is purely the mobile overlay header's
+  // own label for a signed-in reader (desktop's inline box has no header to
+  // put it in), one of the three shapes this component ever actually
+  // renders expanded in: writing a fresh top-level note, replying, or
+  // editing something already saved (`startCollapsed` is only ever passed
+  // `false` by an in-place edit — see its own doc comment).
+  const headerTitle = !startCollapsed ? "Edit note" : action === "reply" ? "Reply" : "New note";
+
+  // The public/private toggle — one shared element both the desktop and
+  // mobile return shapes below render (rather than two hand-maintained
+  // copies), right in the same toolbar row as the mic button in both. A
+  // small pill rather than a checkbox/switch: it needs to carry its own
+  // label (which state it's *in*, not just an on/off position) since
+  // there's no separate text anywhere else in either layout saying so.
+  const visibilityToggle = (
+    <button
+      type="button"
+      onClick={toggleVisibility}
+      title={
+        visibility === "public"
+          ? "Visible to everyone — tap to make this just for you"
+          : "Only visible to you — tap to make this public"
+      }
+      className="flex flex-none items-center gap-1 rounded-full border border-[var(--reader-border)] bg-transparent px-2.5 py-1 text-[11px] font-semibold text-[var(--reader-text-muted)] cursor-pointer hover:text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
+    >
+      {visibility === "public" ? <Globe size={12} /> : <Lock size={12} />}
+      {visibility === "public" ? "Public" : "Private"}
+    </button>
+  );
+
   // A membership prompt is feedback for a deliberate attempt to reply, not
   // persistent panel copy. Keeping it opt-in prevents repeated prompts when
   // a panel contains several otherwise-idle compose surfaces.
@@ -234,144 +358,304 @@ export default function NoteComposer({
     );
   }
 
-  return (
-    <div
-      ref={containerRef}
-      className={`rounded-sm p-3 flex flex-col gap-2.5 border transition-colors ${
-        hasDraft || recorder.mode === "recording" || isFocused
-          ? "border-brand-300 bg-[var(--reader-surface)]"
-          : "border-[var(--reader-border)] bg-[var(--reader-surface-hover)]"
-      }`}
-    >
-      {recorder.mode === "recording" ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-brand-500 flex-none animate-pulse" />
-            <span className="text-sm font-semibold tabular-nums text-[var(--reader-text)]">
-              {formatSeconds(recorder.recordSeconds)}
-            </span>
-            <span className="text-xs text-[var(--reader-text-muted)]">Recording&hellip;</span>
-          </div>
-          <div ref={waveRef} className="h-8 w-full">
-            {recorder.mediaRecorder && waveWidth > 0 && (
-              <LiveWaveform
-                stream={recorder.mediaRecorder.stream}
-                width={waveWidth}
-                height={32}
-                barWidth={2.5}
-                gap={1}
-                barColor="var(--color-brand-500)"
-              />
-            )}
-          </div>
-        </div>
-      ) : recorder.mode === "recorded" ? (
-        <div onClick={recorder.toggleDraftPlayback} className="cursor-pointer flex items-center gap-2">
-          <span className="w-6.5 h-6.5 rounded-full bg-brand-500 flex items-center justify-center flex-none text-white">
-            {recorder.isPlayingDraft ? <Pause size={11} /> : <Play size={11} fill="currentColor" stroke="none" />}
-          </span>
-          <div ref={waveRef} className="flex-1 min-w-0 h-8">
-            {waveWidth > 0 && (
-              <WaveformBars
-                bars={recordedBars}
-                width={waveWidth}
-                height={32}
-                barWidth={2.5}
-                gap={1}
-                barColor="var(--reader-text-subtle)"
-                barPlayedColor="var(--color-brand-500)"
-                progress={
-                  recorder.audioDurationMs > 0 ? recorder.draftCurrentTime / (recorder.audioDurationMs / 1000) : 0
-                }
-              />
-            )}
-          </div>
-          <span className="text-xs font-medium text-[var(--reader-text-muted)] flex-none">
-            {formatSeconds(recorder.audioDurationMs / 1000)}
-          </span>
-        </div>
-      ) : (
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            resizeTextarea();
-          }}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          placeholder={placeholder}
-          rows={1}
-          className="om-scroll w-full resize-none border-none outline-none bg-transparent text-[13px] font-medium text-[var(--reader-text)] placeholder:text-[var(--reader-text-muted)]"
-          style={{ maxHeight: MAX_COMPOSER_TEXTAREA_HEIGHT, overflowY: "auto" }}
-        />
-      )}
-
-      <div className="flex justify-between items-center gap-1.5">
-        <div className="flex items-center">
-          {recorder.mode === "recorded" ? (
-            <button
-              onClick={recorder.discardRecording}
-              disabled={isUploadingVoice}
-              title="Discard recording"
-              className="w-7 h-7 rounded-full border-none cursor-pointer flex items-center justify-center flex-none bg-transparent text-[var(--reader-text-muted)] disabled:cursor-default disabled:opacity-50"
-            >
-              <X size={15} />
-            </button>
-          ) : recorder.mode === "idle" ? (
-            <button
-              onClick={recorder.startRecording}
-              title="Record a voice note"
-              className="w-7 h-7 rounded-full border-none cursor-pointer flex items-center justify-center flex-none bg-transparent text-[var(--reader-text-muted)] hover:text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
-            >
-              <Mic size={16} />
-            </button>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2">
-          {recorder.mode === "recording" ? (
-            <button
-              onClick={recorder.stopRecording}
-              className="w-7 h-7 rounded-full bg-brand-500 border-none cursor-pointer flex items-center justify-center flex-none text-white"
-            >
-              <Square size={11} fill="currentColor" />
-            </button>
-          ) : (
-            <>
-              {recorder.mode === "idle" && (
-                <button
-                  onClick={handleCancel}
-                  className="bg-transparent border-none cursor-pointer text-xs font-medium text-[var(--reader-text-muted)] px-1 py-1.5"
-                >
-                  Cancel
-                </button>
+  if (isDesktop) {
+    return (
+      <div
+        ref={containerRef}
+        className={`rounded-sm p-3 flex flex-col gap-2.5 border transition-colors ${
+          hasDraft || recorder.mode === "recording" || isFocused
+            ? "border-brand-300 bg-[var(--reader-surface)]"
+            : "border-[var(--reader-border)] bg-[var(--reader-surface-hover)]"
+        }`}
+      >
+        {recorder.mode === "recording" ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-brand-500 flex-none animate-pulse" />
+              <span className="text-sm font-semibold tabular-nums text-[var(--reader-text)]">
+                {formatSeconds(recorder.recordSeconds)}
+              </span>
+              <span className="text-xs text-[var(--reader-text-muted)]">Recording&hellip;</span>
+            </div>
+            <div ref={waveRef} className="h-8 w-full">
+              {recorder.mediaRecorder && waveWidth > 0 && (
+                <LiveWaveform
+                  stream={recorder.mediaRecorder.stream}
+                  width={waveWidth}
+                  height={32}
+                  barWidth={2.5}
+                  gap={1}
+                  barColor="var(--color-brand-500)"
+                />
               )}
+            </div>
+          </div>
+        ) : recorder.mode === "recorded" ? (
+          <div onClick={recorder.toggleDraftPlayback} className="cursor-pointer flex items-center gap-2">
+            <span className="w-6.5 h-6.5 rounded-full bg-brand-500 flex items-center justify-center flex-none text-white">
+              {recorder.isPlayingDraft ? <Pause size={11} /> : <Play size={11} fill="currentColor" stroke="none" />}
+            </span>
+            <div ref={waveRef} className="flex-1 min-w-0 h-8">
+              {waveWidth > 0 && (
+                <WaveformBars
+                  bars={recordedBars}
+                  width={waveWidth}
+                  height={32}
+                  barWidth={2.5}
+                  gap={1}
+                  barColor="var(--reader-text-subtle)"
+                  barPlayedColor="var(--color-brand-500)"
+                  progress={
+                    recorder.audioDurationMs > 0 ? recorder.draftCurrentTime / (recorder.audioDurationMs / 1000) : 0
+                  }
+                />
+              )}
+            </div>
+            <span className="text-xs font-medium text-[var(--reader-text-muted)] flex-none">
+              {formatSeconds(recorder.audioDurationMs / 1000)}
+            </span>
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              resizeTextarea();
+            }}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder={placeholder}
+            rows={1}
+            className="om-scroll w-full resize-none border-none outline-none bg-transparent text-[13px] font-medium text-[var(--reader-text)] placeholder:text-[var(--reader-text-muted)]"
+            style={{ maxHeight: DESKTOP_MAX_TEXTAREA_HEIGHT, overflowY: "auto" }}
+          />
+        )}
+
+        <div className="flex justify-between items-center gap-1.5">
+          <div className="flex items-center">
+            {recorder.mode === "recorded" ? (
               <button
-                onClick={handleSave}
-                disabled={!canSave}
-                title="Send"
-                className={`w-7 h-7 rounded-full border-none flex items-center justify-center flex-none transition-colors ${
-                  canSave
-                    ? "bg-brand-500 text-white cursor-pointer hover:bg-brand-600"
-                    : "bg-[var(--reader-surface-hover)] text-[var(--reader-text-muted)] cursor-default"
-                }`}
+                onClick={recorder.discardRecording}
+                disabled={isUploadingVoice}
+                title="Discard recording"
+                className="w-7 h-7 rounded-full border-none cursor-pointer flex items-center justify-center flex-none bg-transparent text-[var(--reader-text-muted)] disabled:cursor-default disabled:opacity-50"
               >
-                {isUploadingVoice ? <Loader2 size={13} className="animate-spin" /> : <ArrowRight size={13} />}
+                <X size={15} />
               </button>
-            </>
+            ) : recorder.mode === "idle" ? (
+              <div className="flex items-center gap-1.5">
+                {visibilityToggle}
+                <button
+                  onClick={recorder.startRecording}
+                  title="Record a voice note"
+                  className="w-7 h-7 rounded-full border-none cursor-pointer flex items-center justify-center flex-none bg-transparent text-[var(--reader-text-muted)] hover:text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
+                >
+                  <Mic size={16} />
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            {recorder.mode === "recording" ? (
+              <button
+                onClick={recorder.stopRecording}
+                className="w-7 h-7 rounded-full bg-brand-500 border-none cursor-pointer flex items-center justify-center flex-none text-white"
+              >
+                <Square size={11} fill="currentColor" />
+              </button>
+            ) : (
+              <>
+                {recorder.mode === "idle" && (
+                  <button
+                    onClick={handleCancel}
+                    className="bg-transparent border-none cursor-pointer text-xs font-medium text-[var(--reader-text-muted)] px-1 py-1.5"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  onClick={handleSave}
+                  disabled={!canSave}
+                  title="Send"
+                  className={`w-7 h-7 rounded-full border-none flex items-center justify-center flex-none transition-colors ${
+                    canSave
+                      ? "bg-brand-500 text-white cursor-pointer hover:bg-brand-600"
+                      : "bg-[var(--reader-surface-hover)] text-[var(--reader-text-muted)] cursor-default"
+                  }`}
+                >
+                  {isUploadingVoice ? <Loader2 size={13} className="animate-spin" /> : <ArrowRight size={13} />}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        {recorder.micError && (
+          <div className="text-[11px] text-[var(--reader-text-muted)]">
+            Couldn&rsquo;t access the microphone — check your browser&rsquo;s permission for this site.
+          </div>
+        )}
+        {uploadError && (
+          <div className="text-[11px] text-[var(--reader-text-muted)]">
+            Couldn&rsquo;t save the voice note — check your connection and try again.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Guards against an SSR crash in a hypothetical future call site that
+  // renders straight into `expanded` on first mount (every one today starts
+  // collapsed or, for editing, only mounts client-side from a click — see
+  // headerTitle's own doc comment) — `document` doesn't exist server-side.
+  // Also covers the very first client render, before the isDesktop effect
+  // above has run: `isDesktop` starts false, so a desktop reader's first
+  // paint would otherwise flash this mobile overlay for one frame.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    // Edge-to-edge and opaque — this *is* the screen on mobile, no page
+    // visible behind it, the immersive takeover a phone actually benefits
+    // from (see this component's own doc comment for why desktop opts out
+    // of this branch entirely rather than getting a scaled-down version of
+    // it). A click landing here (not on the card itself) is "outside" for
+    // the existing mousedown listener above — no separate backdrop-click
+    // handler needed.
+    <div className="fixed inset-0 z-[100] flex flex-col bg-[var(--reader-surface)]">
+      <div ref={containerRef} className="flex h-full w-full flex-col bg-[var(--reader-surface)]" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+        <div className="flex flex-none items-center justify-between gap-3 border-b border-[var(--reader-border)] px-4 py-3">
+          <button
+            onClick={handleCancel}
+            className="bg-transparent border-none cursor-pointer text-sm font-medium text-[var(--reader-text-muted)] hover:text-[var(--reader-text)] px-1 py-1"
+          >
+            Cancel
+          </button>
+          <span className="text-sm font-semibold text-[var(--reader-text)]">{headerTitle}</span>
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            className={`rounded-full border-none px-4 py-1.5 text-sm font-semibold transition-colors ${
+              canSave
+                ? "bg-brand-500 text-white cursor-pointer hover:bg-brand-600"
+                : "bg-[var(--reader-surface-hover)] text-[var(--reader-text-muted)] cursor-default"
+            }`}
+          >
+            {isUploadingVoice ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : !startCollapsed ? (
+              "Save"
+            ) : (
+              "Post"
+            )}
+          </button>
+        </div>
+
+        <div className="om-scroll flex-1 min-h-0 overflow-y-auto p-4">
+          {recorder.mode === "recording" ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-brand-500 flex-none animate-pulse" />
+                <span className="text-sm font-semibold tabular-nums text-[var(--reader-text)]">
+                  {formatSeconds(recorder.recordSeconds)}
+                </span>
+                <span className="text-xs text-[var(--reader-text-muted)]">Recording&hellip;</span>
+              </div>
+              <div ref={waveRef} className="h-10 w-full">
+                {recorder.mediaRecorder && waveWidth > 0 && (
+                  <LiveWaveform
+                    stream={recorder.mediaRecorder.stream}
+                    width={waveWidth}
+                    height={40}
+                    barWidth={2.5}
+                    gap={1}
+                    barColor="var(--color-brand-500)"
+                  />
+                )}
+              </div>
+            </div>
+          ) : recorder.mode === "recorded" ? (
+            <div onClick={recorder.toggleDraftPlayback} className="cursor-pointer flex items-center gap-3">
+              <span className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center flex-none text-white">
+                {recorder.isPlayingDraft ? <Pause size={13} /> : <Play size={13} fill="currentColor" stroke="none" />}
+              </span>
+              <div ref={waveRef} className="flex-1 min-w-0 h-10">
+                {waveWidth > 0 && (
+                  <WaveformBars
+                    bars={recordedBars}
+                    width={waveWidth}
+                    height={40}
+                    barWidth={2.5}
+                    gap={1}
+                    barColor="var(--reader-text-subtle)"
+                    barPlayedColor="var(--color-brand-500)"
+                    progress={
+                      recorder.audioDurationMs > 0 ? recorder.draftCurrentTime / (recorder.audioDurationMs / 1000) : 0
+                    }
+                  />
+                )}
+              </div>
+              <span className="text-xs font-medium text-[var(--reader-text-muted)] flex-none">
+                {formatSeconds(recorder.audioDurationMs / 1000)}
+              </span>
+            </div>
+          ) : (
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                resizeTextarea();
+              }}
+              placeholder={placeholder}
+              rows={1}
+              className="w-full resize-none border-none outline-none bg-transparent text-base font-medium leading-relaxed text-[var(--reader-text)] placeholder:text-[var(--reader-text-muted)]"
+              style={{ minHeight: MOBILE_MIN_TEXTAREA_HEIGHT, maxHeight: MOBILE_MAX_TEXTAREA_HEIGHT, overflowY: "auto" }}
+            />
           )}
         </div>
+
+        <div className="flex flex-none items-center justify-between gap-1.5 border-t border-[var(--reader-border)] px-4 py-2.5">
+          <div className="flex items-center">
+            {recorder.mode === "recorded" ? (
+              <button
+                onClick={recorder.discardRecording}
+                disabled={isUploadingVoice}
+                title="Discard recording"
+                className="w-8 h-8 rounded-full border-none cursor-pointer flex items-center justify-center flex-none bg-transparent text-[var(--reader-text-muted)] disabled:cursor-default disabled:opacity-50"
+              >
+                <X size={16} />
+              </button>
+            ) : recorder.mode === "idle" ? (
+              <div className="flex items-center gap-1.5">
+                {visibilityToggle}
+                <button
+                  onClick={recorder.startRecording}
+                  title="Record a voice note"
+                  className="w-8 h-8 rounded-full border-none cursor-pointer flex items-center justify-center flex-none bg-transparent text-[var(--reader-text-muted)] hover:text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
+                >
+                  <Mic size={17} />
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {recorder.mode === "recording" && (
+            <button
+              onClick={recorder.stopRecording}
+              className="w-8 h-8 rounded-full bg-brand-500 border-none cursor-pointer flex items-center justify-center flex-none text-white"
+            >
+              <Square size={12} fill="currentColor" />
+            </button>
+          )}
+        </div>
+        {(recorder.micError || uploadError) && (
+          <div className="flex-none px-4 pb-3 text-[11px] text-[var(--reader-text-muted)]">
+            {recorder.micError
+              ? "Couldn’t access the microphone — check your browser’s permission for this site."
+              : "Couldn’t save the voice note — check your connection and try again."}
+          </div>
+        )}
       </div>
-      {recorder.micError && (
-        <div className="text-[11px] text-[var(--reader-text-muted)]">
-          Couldn&rsquo;t access the microphone — check your browser&rsquo;s permission for this site.
-        </div>
-      )}
-      {uploadError && (
-        <div className="text-[11px] text-[var(--reader-text-muted)]">
-          Couldn&rsquo;t save the voice note — check your connection and try again.
-        </div>
-      )}
-    </div>
+    </div>,
+    document.body
   );
 }

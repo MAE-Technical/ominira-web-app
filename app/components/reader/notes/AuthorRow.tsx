@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import { avatarColor, avatarInitial, comradeName } from "@/lib/reader/authorDisplay";
 import { formatShortTimeAgo } from "@/lib/reader/timeAgo";
 import { pseudonymToSlug } from "@/lib/reader/profileSlug";
@@ -18,12 +19,22 @@ export default function AuthorRow({
   name,
   savedAt,
   size = "default",
+  isPrivate = false,
   menu,
 }: {
   name: string;
   savedAt: number;
   /** Reply-tier entries render smaller than top-level notes. */
   size?: "default" | "small";
+  /** True only for a note/reply that's both `visibility: "private"` *and*
+   * the signed-in reader's own (see callers' `useIsOwnNote`) — RLS already
+   * means nobody else's client ever receives a private row that isn't
+   * theirs, so this is belt-and-braces, not the actual boundary. Shows a
+   * small lock chip so a reader scanning their own notes/replies can tell,
+   * at a glance, which of their own entries nobody else can see — without
+   * it, "private" was invisible after the fact, indistinguishable from
+   * public once the composer that set it had closed. */
+  isPrivate?: boolean;
   menu?: ReactNode;
 }) {
   const small = size === "small";
@@ -57,6 +68,17 @@ export default function AuthorRow({
         >
           {formatShortTimeAgo(savedAt)}
         </span>
+        {isPrivate && (
+          <span
+            title="Only visible to you"
+            className={`flex items-center gap-0.5 font-semibold text-[var(--reader-text-subtle)] ${
+              small ? "text-[9px]" : "text-[10px]"
+            }`}
+          >
+            <Lock size={small ? 8 : 9} />
+            Only you
+          </span>
+        )}
       </div>
       {menu}
     </div>

@@ -7,7 +7,7 @@ import { communityKeys } from "@/lib/community/queryKeys";
 import { makeTempId } from "@/lib/api/optimisticId";
 import { useProfile } from "@/lib/auth/useProfile";
 import { useSessionStore } from "@/stores/session-store";
-import type { AnnotationRange, Note, NoteContent } from "@/lib/api/types";
+import type { AnnotationRange, Note, NoteContent, NoteVisibility } from "@/lib/api/types";
 
 /** A write can also change two views this material's own note list doesn't
  * cover: the book details page's community-notes tab (every sort variant —
@@ -27,7 +27,7 @@ export type CreateNoteInput = {
   ranges: AnnotationRange[];
   content: NoteContent;
   parentId?: string;
-  visibility?: "public" | "private";
+  visibility?: NoteVisibility;
 };
 
 /** `POST /api/community/notes` — creates a top-level note or (with
@@ -89,7 +89,7 @@ export function useCreateNote(materialId: string) {
 export function useUpdateNote(materialId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ noteId, ...input }: { noteId: string; content?: NoteContent; visibility?: "public" | "private" }) =>
+    mutationFn: ({ noteId, ...input }: { noteId: string; content?: NoteContent; visibility?: NoteVisibility }) =>
       apiFetch<Note>(`/community/notes/${noteId}`, { method: "PATCH", json: input }),
     onMutate: async ({ noteId, ...input }) => {
       const key = materialKeys.notes(materialId);

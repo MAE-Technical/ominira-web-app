@@ -1,4 +1,4 @@
-import type { NoteContent } from "@/lib/api/types";
+import type { NoteContent, NoteVisibility } from "@/lib/api/types";
 
 /** Cross-entry UI state one thread shares — which single menu/edit is
  * active at a time, and which single entry the thread's one shared
@@ -33,8 +33,8 @@ export type ThreadUIState = {
  * whichever entry's own Reply button was tapped (root note or a reply) —
  * the store itself resolves that down to the two-tier-flat shape. */
 export type ThreadActions = {
-  reply: (parentId: string, content: NoteContent) => void;
-  saveEdit: (noteId: string, content: NoteContent) => void;
+  reply: (parentId: string, content: NoteContent, visibility: NoteVisibility) => void;
+  saveEdit: (noteId: string, content: NoteContent, visibility: NoteVisibility) => void;
   delete: (noteId: string) => void;
   toggleReaction: (noteId: string) => void;
 };

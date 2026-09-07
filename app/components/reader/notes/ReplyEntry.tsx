@@ -40,11 +40,17 @@ export default function ReplyEntry({
   const isMenuOpen = ui.activeMenuFor === reply.id;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    // min-w-0: see the identical comment on NoteThreadCard's own content
+    // column — this is a flex item of NoteThreadCard's reply-list column,
+    // and without it a long unbroken run inside NoteContent (a URL) sets
+    // this reply's own minimum width to that run's full length rather than
+    // letting NoteContent's wrap utilities engage.
+    <div className="flex min-w-0 flex-col gap-1.5">
       <AuthorRow
         name={reply.author.pseudonym}
         savedAt={Date.parse(reply.updatedAt)}
         size="small"
+        isPrivate={own && reply.visibility === "private"}
         menu={
           own ? (
             <div className="relative ml-auto flex-none">
@@ -84,10 +90,11 @@ export default function ReplyEntry({
       {isEditing ? (
         <NoteComposer
           initialText={reply.content.kind === "text" ? reply.content.text : ""}
+          initialVisibility={reply.visibility}
           startCollapsed={false}
           onCancel={() => ui.startEdit(null)}
-          onSave={(content) => {
-            actions.saveEdit(reply.id, content);
+          onSave={(content, visibility) => {
+            actions.saveEdit(reply.id, content, visibility);
             ui.startEdit(null);
           }}
         />

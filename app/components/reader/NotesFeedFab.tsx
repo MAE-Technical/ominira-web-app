@@ -19,7 +19,13 @@ type Props = {
 
 /**
  * Floating trigger for the book-wide notes/highlights feed — moved out of
- * the header (previously a header icon button) to cut header clutter.
+ * the header (previously a header icon button) to cut header clutter. The
+ * feed panel this opens now also carries a pinned "share a thought about
+ * this book" composer docked at the bottom of the panel itself, reachable
+ * regardless of which tab is selected (see BookAnnotationFeedPanel's own
+ * `footer`) — a reader who taps this FAB to say something general, with no
+ * highlight or reply involved, lands one tap away from writing it, not
+ * just from browsing.
  *
  * One style for every screen size (Tailwind handles the one place sizing
  * actually needs to flex — see `sm:` below — rather than a hand-maintained
