@@ -15,8 +15,11 @@ import NoteComposer from "./NoteComposer";
  * the standalone note panel renders for this highlight — full
  * reply/edit/delete/react, not a read-only summary, via the same
  * useThreadInteraction hook that panel uses. Which section this excerpt
- * belongs to is the enclosing feed's own divider's job (see
- * BookAnnotationFeedPanel), not repeated per card. */
+ * belongs to is the enclosing feed's own label's job (see
+ * BookAnnotationFeedPanel), not repeated per card. Every root note's own
+ * replies start expanded (`initialExpandAll`), same as CommunityNoteCard on
+ * the home feed — a reader browsing the feed came to read the discussion,
+ * not to expand every thread by hand first. */
 export default function FeedHighlightThread({
   materialId,
   entry,
@@ -40,6 +43,7 @@ export default function FeedHighlightThread({
     // necessarily at this passage) — same "always land where the note
     // actually is" reasoning as the bottom composer's own onSave below.
     onNoteAdded: () => onJump(entry),
+    initialExpandAll: true,
   });
   const roots = sortNotes(topLevelNotes(annotation.notes), "chronological");
 
@@ -77,7 +81,14 @@ export default function FeedHighlightThread({
           initialText=""
           placeholder="Add your thoughts"
           startCollapsed
-          showMemberPrompt
+          // No showMemberPrompt here — unlike a deliberate "Reply" tap
+          // (NoteThreadCard's own composer), this one sits under every
+          // single highlight in the feed with nothing to trigger it, so a
+          // signed-out reader would otherwise see the same "Only members
+          // can add notes" box repeated under every item on the page. It
+          // simply doesn't render for them instead — the footer composer
+          // and the top-of-feed auth banner already say that once, which
+          // is enough.
           action="note"
           onSave={(content, visibility) => {
             createNote.mutate(

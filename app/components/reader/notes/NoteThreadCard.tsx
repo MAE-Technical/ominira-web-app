@@ -165,7 +165,7 @@ export default function NoteThreadCard({
                 placeholder={
                   ui.activeComposerFor
                     ? `Reply to ${replies.find((r) => r.id === ui.activeComposerFor)?.author.pseudonym}…`
-                    : "Add your thoughts"
+                    : "Add a reply"
                 }
                 startCollapsed
                 showMemberPrompt={hasRequestedRootReply || ui.activeComposerFor !== null}

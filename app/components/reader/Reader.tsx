@@ -913,8 +913,7 @@ export default function Reader({
             {noteFeed.open && (
               <BookAnnotationFeedPanel
                 materialId={materialId}
-                groups={noteFeed.groups}
-                generalNotes={noteFeed.generalNotes}
+                items={noteFeed.items}
                 notes={noteFeed.notes}
                 filter={noteFeed.filter}
                 onFilterChange={noteFeed.setFilter}

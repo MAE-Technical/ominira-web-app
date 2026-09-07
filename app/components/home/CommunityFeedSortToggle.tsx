@@ -1,7 +1,7 @@
 "use client";
 
 import type { CommunityFeedSort } from "@/lib/community/useCommunityFeed";
-import PillGroup from "../PillGroup";
+import SortSelect from "../SortSelect";
 
 const OPTIONS: { value: CommunityFeedSort; label: string }[] = [
   { value: "top", label: "Top" },
@@ -15,5 +15,5 @@ export default function CommunityFeedSortToggle({
   mode: CommunityFeedSort;
   onChange: (mode: CommunityFeedSort) => void;
 }) {
-  return <PillGroup options={OPTIONS} selected={mode} onSelect={onChange} />;
+  return <SortSelect options={OPTIONS} value={mode} onChange={onChange} />;
 }

@@ -5,10 +5,11 @@ export type PillOption<T extends string> = { value: T; label: string };
 /**
  * The one pill-filter look this app uses everywhere a reader narrows a
  * list down to one of a few named options — CategoryPills (library
- * categories), CommunityFeedSortToggle (Top/Recent), and the reader's own
- * annotation-feed filter (All/Notes/Highlights) all render through this,
- * rather than each inventing its own bordered-pill/segmented-control
- * styling. Individually bordered/filled pills, not a single joined
+ * categories) and the reader's own annotation-feed filter (All/Notes/
+ * Highlights) render through this, rather than each inventing its own
+ * bordered-pill/segmented-control styling. Real ranking/sort controls
+ * (Top/Recent) use SortSelect instead, not this — see its own doc comment.
+ * Individually bordered/filled pills, not a single joined
  * segmented track — reads clearly as "N independent choices" even at three
  * options on a narrow phone screen, which a joined segmented control (equal
  * splits of one shared border) started to compress unreadably.

@@ -148,7 +148,7 @@ export default function SignupPage() {
                 Let&rsquo;s get you started, <br></br> Comrade.
               </h1>
               <p className="mt-3 font-literata text-[14px] text-[var(--reader-text-muted)]">
-                Enter your details below to create your account.
+                Enter your details below to create your account. <br></br> Use a fake identity if you have to.
               </p>
             </div>
             <div className="mt-8 w-full max-w-sm space-y-5 shell:mt-0 shell:justify-self-center">
@@ -160,7 +160,7 @@ export default function SignupPage() {
                 }}
               >
                 <TextField
-                  label="Full name"
+                  label="Name"
                   placeholder="e.g. Ama Mensah"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -223,7 +223,7 @@ export default function SignupPage() {
           <div className="shell:contents">
             <div>
               <h1 className="font-serif text-3xl leading-tight font-semibold text-[var(--reader-text)]">
-                Where are you reading from?
+                Where are you studying from?
               </h1>
               <div className="mt-6 flex gap-3">
                 <p className="font-literata text-[14px] leading-relaxed text-[var(--reader-text-muted)]">

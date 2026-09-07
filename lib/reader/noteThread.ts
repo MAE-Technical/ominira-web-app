@@ -13,6 +13,17 @@ export function repliesFor(allNotes: Note[], noteId: string): Note[] {
   return allNotes.filter((n) => n.parentId === noteId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+/** A thread's own "last activity" (ms epoch) — the max `updatedAt` across
+ * its root note and every one of its replies. Distinct from the root
+ * note's own `updatedAt` (which AuthorRow already shows per-entry): this is
+ * what makes a section/bucket in the book-wide feed feel like a forum
+ * rather than an archive — a thread that just got a new reply should read
+ * as more "alive" than one nobody's touched in weeks, regardless of which
+ * one was *started* first. */
+export function lastActivityAt(note: Note, replies: Note[]): number {
+  return replies.reduce((max, r) => Math.max(max, Date.parse(r.updatedAt)), Date.parse(note.updatedAt));
+}
+
 export type NoteSortMode = "top" | "chronological";
 
 /** Sorts a list of top-level notes for display — "top" ranks by

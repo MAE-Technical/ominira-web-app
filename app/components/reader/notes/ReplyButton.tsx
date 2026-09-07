@@ -2,18 +2,19 @@
 
 import { MessageCircle } from "lucide-react";
 
-/** The reply count + thread-toggle, labelled "note(s)" rather than
- * "reply/replies" — every reply is itself just another note in the thread,
- * so the whole product only ever talks about "notes," never "replies."
- * Same bordered-pill shape as
+/** The reply count + thread-toggle, labelled "reply/replies" — a reply is
+ * still stored as a note under the hood, but the count and the composer
+ * that adds one should read as what a reader actually did: replied to the
+ * note, not authored a second independent one. Same bordered-pill shape as
  * ReactionButton (icon + text inside one control), but deliberately
  * neutral: no brand color, no filled icon background when expanded, even
  * on click — reply is a plain disclosure control, not a "reacted" state,
- * so it only ever shifts to a neutral surface tint. Always shows its
- * count, including zero, same "always shown" convention as the reaction
- * pill. Its one job is opening/closing the note's own reply thread
- * (existing replies + a composer to add one) — there's no separate
- * "Reply" trigger anymore. */
+ * so it only ever shifts to a neutral surface tint. Unlike the reaction
+ * pill, a zero count reads as "0 replies" nowhere here — with nothing to
+ * count yet, this is just an invitation to reply, so it collapses to the
+ * bare word "Reply" instead. Its one job is opening/closing the note's own
+ * reply thread (existing replies + a composer to add one) — there's no
+ * separate "Reply" trigger anymore. */
 export default function ReplyButton({
   count,
   expanded,
@@ -33,7 +34,7 @@ export default function ReplyButton({
       }`}
     >
       <MessageCircle size={13} />
-      {count} {count === 1 ? "note" : "notes"}
+      {count === 0 ? "Reply" : `${count} ${count === 1 ? "reply" : "replies"}`}
     </button>
   );
 }

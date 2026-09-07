@@ -32,6 +32,10 @@ export default function GeneralNoteThread({
     materialId,
     ranges: note.ranges,
     allNotes: [note, ...repliesFor(allNotes, note.id)],
+    // Same "arrive already expanded" default as FeedHighlightThread/
+    // CommunityNoteCard — a reader browsing the feed came to read what's
+    // already there, not to expand every thread by hand first.
+    initialExpandAll: true,
   });
 
   return (
