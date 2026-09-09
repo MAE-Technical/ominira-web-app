@@ -45,7 +45,7 @@ export default function PillGroup<T extends string>({
           <button
             key={opt.value}
             onClick={() => onSelect(opt.value)}
-            className={`flex-none whitespace-nowrap rounded-sm border px-3 py-2 text-xs font-bold cursor-pointer overflow-hidden transition-colors ${
+            className={`flex-none whitespace-nowrap rounded-sm border px-3 py-1 text-xs font-semibold cursor-pointer overflow-hidden transition-colors ${
               active
                 ? "border-brand-500 bg-brand-500 text-white"
                 : "border-[var(--reader-border)] bg-[var(--reader-surface)] text-[var(--reader-text-muted)] hover:bg-[var(--reader-surface-hover)]"
