@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Section } from "@/lib/book/schema";
 
@@ -17,6 +18,17 @@ type Props = {
   visible: boolean;
   /** Pushed up above the fixed "now playing" bar when one is active. */
   bottomOffsetPx: number;
+  /** Reports this footer's real rendered height (the same measure-and-store
+   * trick NowPlayingBar/AppBottomNav already use for their own height, just
+   * kept local to Reader.tsx instead of a global store — nothing outside
+   * the reader needs it) — Reader.tsx uses this to keep NotesFeedFab's own
+   * floating position pinned just above whichever bottom bar is actually
+   * on screen (this footer or the player) instead of a guessed constant
+   * that drifted out of sync with either one. Reported unconditionally,
+   * including while `visible` is false: the box still occupies its real
+   * height then (hidden via opacity/translate, not display:none), and the
+   * caller is the one that decides whether that height should count. */
+  onHeightChange?: (px: number) => void;
 };
 
 const buttonClass =
@@ -50,11 +62,34 @@ export default function ChapterNavFooter({
   onNext,
   visible,
   bottomOffsetPx,
+  onHeightChange,
 }: Props) {
-  if (!prevSection && !nextSection) return null;
+  const elRef = useRef<HTMLDivElement>(null);
+  const hasContent = Boolean(prevSection || nextSection);
+
+  // One effect, unconditional (hooks can't live inside the early-return
+  // branch below) — prevSection/nextSection are in the dep list so this
+  // also re-fires the render right after either goes away, at which point
+  // React has already nulled elRef.current (refs detach during the same
+  // commit that removes the element, before effects run), landing in the
+  // `!el` branch below and reporting 0 rather than leaving the caller with
+  // a stale last-known height for a footer that no longer exists.
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el || !onHeightChange) {
+      onHeightChange?.(0);
+      return;
+    }
+    const ro = new ResizeObserver((entries) => onHeightChange(entries[0].contentRect.height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHeightChange, hasContent]);
+
+  if (!hasContent) return null;
 
   return (
     <div
+      ref={elRef}
       // Reserves the home-indicator safe area on notched iPhones instead of
       // running the tap targets flush to the very edge of the screen —
       // AppBottomNav (the app shell's own bottom bar) already does the same

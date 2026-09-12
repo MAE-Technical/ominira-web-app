@@ -21,9 +21,11 @@ type Props = {
    * overlay is always X and a standalone page is always back, regardless
    * of viewport. */
   onClose?: () => void;
-  /** No listen button at all when the book has no narrator — not even a
-   * disabled one, per product decision: there's nothing for it to do. */
-  hasNarration: boolean;
+  /** No listen button at all when there's nothing to narrate — not even a
+   * disabled one. Otherwise always true in practice: NarrationEngine falls
+   * back to live, on-demand AI narration for any section without a
+   * prerecorded track, so this isn't gated on one existing. */
+  canListen: boolean;
   /** While true, the button below is hidden entirely rather than turned
    * into a play/pause toggle — the persistent player (NowPlayingBar) is
    * the only place play/pause lives once listening has started, so
@@ -63,7 +65,7 @@ export default function ReaderHeader({
   topBarHeightPx,
   railInsetPx,
   onClose,
-  hasNarration,
+  canListen,
   isListen,
   onListen,
   onToggleSearch,
@@ -118,7 +120,7 @@ export default function ReaderHeader({
       </div>
 
       <div className="flex items-center gap-1.5 md:gap-2 flex-none">
-        {hasNarration && !isListen && (
+        {canListen && !isListen && (
           <Tooltip label="Listen to this book" side="bottom">
             <button onClick={onListen} aria-label="Listen to this book" className={iconButtonClass}>
               <Play size={16} />

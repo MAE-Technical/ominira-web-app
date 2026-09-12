@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { BookDocument } from "@/lib/book/schema";
+import { DEFAULT_VOICE_ID } from "@/lib/audio/voices";
 
 /**
  * Playback state lives outside the Reader component tree on purpose: the
@@ -16,7 +17,10 @@ import type { BookDocument } from "@/lib/book/schema";
 type AudioState = {
   isPlaying: boolean;
   currentTimeMs: number;
-  narratorId: string;
+  /** Which Edge TTS voice (lib/audio/voices.ts) live narration speaks in —
+   * a reader-wide preference, same footing as `speed`, not tied to any one
+   * book. */
+  voice: string;
   speed: number;
   /** Real rendered height of the root-level player bar, in px — Reader
    * reads this to reserve bottom space and to position the "back to
@@ -34,29 +38,43 @@ type AudioState = {
   pause: () => void;
   toggle: () => void;
   seekTo: (ms: number) => void;
-  setNarratorId: (id: string) => void;
+  setVoice: (voice: string) => void;
   setSpeed: (speed: number) => void;
   setPlayerHeight: (px: number) => void;
   /** Starts (or switches) listen mode to this book and begins playback —
    * the engine's own resume-position effect immediately reconciles
    * currentTimeMs against whatever was last saved for it. */
   openBook: (book: BookDocument, materialId: string) => void;
+  /** Keeps `book` in sync as more of it arrives — Reader.tsx's own prose
+   * loads progressively (see useProgressiveText's doc comment: every
+   * section's structure is real from the start, but non-eager sections'
+   * passage.text starts blank and backfills asynchronously). openBook is
+   * called once, at listen-start, with whatever's loaded *then*; without
+   * this, any section that finishes loading its real text *after* that —
+   * which is the common case, since progressive loading is still running
+   * in the background — would stay permanently blank as far as
+   * NarrationEngine's narrationIndex is concerned, even though the reader
+   * itself is already showing real prose for it. A no-op if `book` isn't
+   * the one currently playing (stale call from a book the reader has since
+   * navigated away from/closed listen mode for). */
+  updateBookContent: (book: BookDocument) => void;
   /** Exits listen mode entirely — resume position is left untouched in
    * reading-position-store, so reopening the book later picks up where
    * playback left off instead of restarting. */
   closePlayer: () => void;
 };
 
-// Only `speed` is persisted — every other field is session/playback state
-// (the "now playing" slot itself, current position, etc.) that should never
-// survive a reload. Playback speed is the one preference a reader expects to
-// stick until they change it again, defaulting back to 1x otherwise.
+// Only `speed`/`voice` are persisted — every other field is session/
+// playback state (the "now playing" slot itself, current position, etc.)
+// that should never survive a reload. Both are preferences a reader
+// expects to stick until changed again, defaulting back to 1x/the first
+// African voice otherwise.
 export const useAudioStore = create<AudioState>()(
   persist(
     (set) => ({
       isPlaying: false,
       currentTimeMs: 0,
-      narratorId: "",
+      voice: DEFAULT_VOICE_ID,
       speed: 1,
       playerHeight: 0,
       book: null,
@@ -66,19 +84,16 @@ export const useAudioStore = create<AudioState>()(
       pause: () => set({ isPlaying: false }),
       toggle: () => set((s) => ({ isPlaying: !s.isPlaying })),
       seekTo: (ms) => set({ currentTimeMs: Math.max(0, ms) }),
-      // Switching narrator switches timelines entirely (a different
-      // recording, or the live TTS engine) — the old currentTimeMs has no
-      // meaning on the new one, so reset it rather than leaving playback
-      // looking corrupted.
-      setNarratorId: (narratorId) => set({ narratorId, currentTimeMs: 0 }),
+      setVoice: (voice) => set({ voice }),
       setSpeed: (speed) => set({ speed }),
       setPlayerHeight: (playerHeight) => set({ playerHeight }),
       openBook: (book, materialId) => set({ book, materialId, currentTimeMs: 0, isPlaying: true }),
+      updateBookContent: (book) => set((s) => (s.book && s.book.id === book.id ? { book } : {})),
       closePlayer: () => set({ book: null, materialId: null, isPlaying: false }),
     }),
     {
       name: "ominira-audio-prefs",
-      partialize: (state) => ({ speed: state.speed }),
+      partialize: (state) => ({ speed: state.speed, voice: state.voice }),
     }
   )
 );

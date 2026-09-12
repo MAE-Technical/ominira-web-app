@@ -32,6 +32,7 @@ import { useSessionStore, isSessionValid } from "@/stores/session-store";
 import { useLayoutStore } from "@/stores/layout-store";
 import { useAudioStore } from "@/stores/audio-store";
 import { useNarrationStore } from "@/stores/narration-store";
+import { activeWordIndex } from "@/lib/audio/karaoke";
 import { buildSectionsById, resolveSpineTarget } from "@/lib/reader/sections";
 import { useSectionCarousel } from "@/lib/reader/useSectionCarousel";
 import { useResumeScroll } from "@/lib/reader/useResumeScroll";
@@ -143,22 +144,77 @@ export default function Reader({
   // clears the slot, never just navigating away from this book's page.
   const audioStoreBook = useAudioStore((s) => s.book);
   const openBook = useAudioStore((s) => s.openBook);
+  const updateBookContent = useAudioStore((s) => s.updateBookContent);
   const playerHeight = useAudioStore((s) => s.playerHeight);
   const anyPlayerActive = audioStoreBook !== null;
-  const hasNarration = book.narrators.length > 0;
+  // Listening no longer requires a prerecorded narratorTrack — NarrationEngine
+  // falls back to live, on-demand AI narration for any section without one —
+  // so this only guards against a genuinely empty book.
+  const canListen = book.spine.length > 0;
   const isListen = audioStoreBook?.id === book.id;
+
+  // Every section's structure (spine order, ids, audio, passage counts/
+  // types) is real from the very first render — only the actual prose
+  // fills in progressively, section by section, starting from whichever
+  // one(s) `eagerSectionIds` names (see toBookDocument.ts). `sections`
+  // below is what every downstream consumer (orderedSections,
+  // passageLookup, search, the book-wide notes feed, BookContent itself,
+  // and — critically — audio-store's `book` once listen mode opens) reads
+  // instead of the static `book.sections` prop, so all of them improve
+  // automatically as more of the book arrives, with no separate "is this
+  // stale" bookkeeping needed anywhere else in this file.
+  const { sections, ensureTextLoaded, loadAllTextInBackground } = useProgressiveText({
+    materialId,
+    initialSections: book.sections,
+    eagerSectionIds,
+  });
+  // The same BookDocument shape every child already expects, just with the
+  // live (progressively-filling) sections tree swapped in for the static
+  // one the server sent — so BookContent/ChaptersDrawer/NarrationEngine
+  // need no prop-shape changes at all, only this one substitution at each
+  // call site.
+  const liveBook = useMemo<BookDocument>(() => ({ ...book, sections }), [book, sections]);
 
   // See autoListen's own doc comment above — a one-time echo of what
   // ReaderHeader's onListen does on click, fired instead on mount when the
-  // book-detail page's Listen button is why we're here.
+  // book-detail page's Listen button is why we're here. Opens with
+  // liveBook, not the static `book` prop — passing the static prop here
+  // used to mean any non-eager section (most of the book, on first open)
+  // permanently had blank passage.text as far as NarrationEngine's
+  // narrationIndex was concerned, even once the reader itself had the real
+  // prose in hand — a section like this wouldn't just be missing from the
+  // narration queue, it would never make a single narration request at
+  // all, silently.
   useEffect(() => {
-    if (autoListen && !isListen) openBook(book, materialId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately fires once on mount only; autoListen/book/materialId are fixed for this page's lifetime, and isListen is read once as a mount-time guard, not tracked afterward.
+    if (autoListen && !isListen) openBook(liveBook, materialId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately fires once on mount only; autoListen/liveBook/materialId are fixed at mount for this purpose, and isListen is read once as a mount-time guard, not tracked afterward.
   }, []);
+
+  // Keeps audio-store's own book copy current as more prose arrives —
+  // openBook above (or ReaderHeader's onListen) only ever runs once, at
+  // whatever moment listen mode starts, and progressive loading keeps
+  // running in the background well past that moment for any book longer
+  // than its eager section(s). Guarded to this book only (updateBookContent
+  // itself also checks id, but isListen is the cheaper/earlier check) — a
+  // reader who has navigated to a different book, or closed listen mode
+  // for this one, shouldn't push stale content into whatever's playing now.
+  useEffect(() => {
+    if (isListen) updateBookContent(liveBook);
+  }, [isListen, liveBook, updateBookContent]);
 
   const narrationAudioIndex = useNarrationStore((s) => s.audioIndex);
   const narrationAudioSection = useNarrationStore((s) => s.audioSection);
   const currentPlayingPassageId = useNarrationStore((s) => s.currentPlayingPassageId);
+  const currentNarrationWords = useNarrationStore((s) => s.currentWords);
+  const handleNarrationWordClick = useNarrationStore((s) => s.handleWordClick);
+  const narrationExplicitJumpSeq = useNarrationStore((s) => s.explicitJumpSeq);
+  const jumpNarrationToSection = useNarrationStore((s) => s.jumpToSection);
+  // Drives om-listen-active (globals.css) — the cursor/hover affordance on
+  // every word, not the active-word mark itself (that's the imperative
+  // effect below, keyed on currentTimeMs, which changes far too often to
+  // also drive a BookContent prop without defeating its memo()).
+  const audioIsPlaying = useAudioStore((s) => s.isPlaying);
+  const audioCurrentTimeMs = useAudioStore((s) => s.currentTimeMs);
 
   // These stores skip automatic persist hydration (see their own comments)
   // specifically so the server and the client's first paint render
@@ -200,27 +256,6 @@ export default function Reader({
   const lineHeight = lineHeightFromScale(lineSpacingScale);
   const contentWidth = contentWidthPxFromScale(contentWidthScale);
   const fontFamilyVar = FONT_FAMILY_VARS[fontFamily];
-
-  // Every section's structure (spine order, ids, audio, passage counts/
-  // types) is real from the very first render — only the actual prose
-  // fills in progressively, section by section, starting from whichever
-  // one(s) `eagerSectionIds` names (see toBookDocument.ts). `sections`
-  // below is what every downstream consumer (orderedSections,
-  // passageLookup, search, the book-wide notes feed, BookContent itself)
-  // reads instead of the static `book.sections` prop, so all of them
-  // improve automatically as more of the book arrives — no separate
-  // "is this stale" bookkeeping needed anywhere else in this file.
-  const { sections, ensureTextLoaded, loadAllTextInBackground } = useProgressiveText({
-    materialId,
-    initialSections: book.sections,
-    eagerSectionIds,
-  });
-  // The same BookDocument shape every child already expects, just with the
-  // live (progressively-filling) sections tree swapped in for the static
-  // one the server sent — so BookContent/ChaptersDrawer/SearchModal need
-  // no prop-shape changes at all, only this one substitution at the call
-  // site.
-  const liveBook = useMemo<BookDocument>(() => ({ ...book, sections }), [book, sections]);
 
   const sectionsById = useMemo(() => buildSectionsById(sections), [sections]);
 
@@ -444,17 +479,39 @@ export default function Reader({
   // already turned away" — isFollowingNarration below is a plain snapshot
   // of the current relationship, but by the time audioIndex has already
   // moved, comparing against it directly would always read "away".
+  //
+  // This is the ONE place the carousel ever moves in response to
+  // narration — every "jump narration somewhere" entry point (chapter-skip
+  // buttons, the chapters drawer, clicking a passage/word, all the way
+  // down in NarrationEngine) only ever changes narration-store's own
+  // audioIndex/explicitJumpSeq; none of them touch the carousel directly
+  // any more. The drawer used to also call navigateToSection itself,
+  // alongside jumpNarrationToSection, on the theory that this effect's
+  // "only follow if already following" rule would otherwise leave an
+  // explicit jump not visually followed — two independent places each
+  // deciding "what section is the reader looking at" for the same click,
+  // racing each other, which is exactly the kind of multi-site state churn
+  // that produced real "page unresponsive" hangs. explicitJumpSeq is what
+  // let that second call site go away for good: an explicit jump (the seq
+  // bumping) always forces the carousel to follow below, regardless of
+  // `activeIndex`, while a quiet 'ended' auto-advance (the seq NOT
+  // bumping) keeps the original "only if you were already watching along"
+  // behavior. One producer of "narration moved" (NarrationEngine), one
+  // consumer that decides what the carousel does about it (here).
   const prevAudioIndexRef = useRef(narrationAudioIndex);
+  const seenExplicitJumpSeqRef = useRef(narrationExplicitJumpSeq);
   useEffect(() => {
+    const isExplicitJump = narrationExplicitJumpSeq !== seenExplicitJumpSeqRef.current;
+    seenExplicitJumpSeqRef.current = narrationExplicitJumpSeq;
     if (
       isListen &&
       narrationAudioIndex !== prevAudioIndexRef.current &&
-      activeIndex === prevAudioIndexRef.current
+      (isExplicitJump || activeIndex === prevAudioIndexRef.current)
     ) {
       goTo(narrationAudioIndex, { animate: true });
     }
     prevAudioIndexRef.current = narrationAudioIndex;
-  }, [narrationAudioIndex, isListen, activeIndex, goTo]);
+  }, [narrationAudioIndex, narrationExplicitJumpSeq, isListen, activeIndex, goTo]);
 
   // Which spine position audio is on, vs which slide the reader is
   // actually looking at (activeIndex, from the carousel) — deliberately
@@ -474,14 +531,135 @@ export default function Reader({
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [currentPlayingPassageId, isFollowingNarration, narrationAudioSection, getSlideEl]);
 
+  // "Now narrating" word marker — plain classList toggling on whichever
+  // [data-word-index] span is currently playing (om-narrating-word,
+  // globals.css), concept 1b's "Highlighter Wash": exactly one word lit at
+  // a time, nothing else in the sentence touched. Imperative DOM, not a
+  // React prop threaded through BookContent: that tree is memoized
+  // precisely so most of a long book never re-renders, and this changes far
+  // too often (several times a second, every tick of playback) to route
+  // through props without defeating that — the same reasoning the old
+  // passage-level marker this replaced already used, just at a frequency
+  // that makes it even more necessary here. Independent of
+  // isFollowingNarration — the marker reflects what's actually playing
+  // regardless of where the reader has scrolled to, same as any podcast app
+  // still knows what's playing while you browse its list.
+  //
+  // Keyed off (passageId, word index) found, not off audioCurrentTimeMs
+  // directly, so a tick that lands on the same word as before (most of
+  // them — words last longer than one timeupdate interval) touches the DOM
+  // not at all. Passage id is part of the key, not just the numeric index,
+  // because the index alone can coincidentally repeat across a passage
+  // switch (a new passage nearly always starts at word 0, which is exactly
+  // the index a short previous passage was often already sitting on) — an
+  // idx-only key would then treat "moved to a new passage's word 0" as "no
+  // change" and leave the *old* passage's word 0 marked, which read as the
+  // highlight reverting to the previous paragraph for a moment.
+  //
+  // currentNarrationWords[0].passageId !== currentPlayingPassageId guards a
+  // separate race, on top of that: when a passage switch happens,
+  // audio-store's currentTimeMs resets to 0 synchronously (NarrationEngine's
+  // stopCurrentAudio), but narration-store's currentPlayingPassageId/
+  // currentWords only catch up a render later (a separate effect, reacting
+  // to the new `target`). For that one tick this effect would otherwise see
+  // currentTimeMs=0 paired with the *previous* passage's still-cached words
+  // and compute a wrong index off that mismatched pair entirely. Every
+  // KaraokeWord already carries its own passageId (liveNarrationCache
+  // stamps it on), so this just holds the last real highlight until the two
+  // stores agree again.
+  //
+  // Even when the key matches, this still re-applies the class if the
+  // element it's supposedly already on isn't actually connected/marked
+  // anymore — BackToCurrentButton's jump (and any other cross-section
+  // navigation) remounts BookContent's active-section subtree entirely
+  // (key={section.id}), which tears down and recreates every passage
+  // span. Nothing about *which word* is playing changes when that happens,
+  // so the key alone wouldn't notice — but the freshly-mounted span never
+  // got the class applied to it, which is what read as the highlight
+  // vanishing (or freezing on nothing) right after using that button.
+  const narratingWordElRef = useRef<Element | null>(null);
+  const narratingWordKeyRef = useRef<string>("");
+  useEffect(() => {
+    if (!isListen || !currentPlayingPassageId || !narrationAudioSection) {
+      narratingWordElRef.current?.classList.remove("om-narrating-word");
+      narratingWordElRef.current = null;
+      narratingWordKeyRef.current = "";
+      return;
+    }
+    if (currentNarrationWords.length === 0 || currentNarrationWords[0].passageId !== currentPlayingPassageId) return;
+    const idx = activeWordIndex(currentNarrationWords, audioCurrentTimeMs);
+    const key = `${currentPlayingPassageId}:${idx}`;
+    const alreadyCorrect =
+      key === narratingWordKeyRef.current &&
+      narratingWordElRef.current?.isConnected &&
+      narratingWordElRef.current.classList.contains("om-narrating-word");
+    if (alreadyCorrect) return;
+    narratingWordKeyRef.current = key;
+    narratingWordElRef.current?.classList.remove("om-narrating-word");
+    const passageEl = getSlideEl(narrationAudioSection.id)?.querySelector(
+      `[data-passage-id="${currentPlayingPassageId}"]`
+    );
+    const el = passageEl?.querySelector(`[data-word-index="${idx}"]`) ?? null;
+    el?.classList.add("om-narrating-word");
+    narratingWordElRef.current = el;
+  }, [isListen, currentPlayingPassageId, narrationAudioSection, currentNarrationWords, audioCurrentTimeMs, getSlideEl]);
+
+  // Whether the actual passage element currently narrating is scrolled into
+  // view — distinct from isFollowingNarration, which only tracks the
+  // section-level carousel position. A long chapter is exactly where these
+  // two disagree: the reader can be sitting on the *same* section
+  // (isFollowingNarration stays true) while having scrolled several
+  // screens away from the one passage actually playing, with nothing today
+  // offering a way back short of hunting for it. Tracked via
+  // IntersectionObserver against the section's own scroll container (the
+  // same element getSlideEl already returns), not scroll-position math —
+  // it fires once per actual visibility change rather than on every scroll
+  // event, and `entry.boundingClientRect`/`rootBounds` hand back exactly
+  // the "which side did it leave from" comparison the up/down arrow needs.
+  const [passageInView, setPassageInView] = useState(true);
+  const [passageOffscreenDirection, setPassageOffscreenDirection] = useState<"up" | "down">("down");
+  useEffect(() => {
+    if (!isListen || !currentPlayingPassageId || !narrationAudioSection) {
+      setPassageInView(true);
+      return;
+    }
+    const container = getSlideEl(narrationAudioSection.id);
+    const el = container?.querySelector(`[data-passage-id="${currentPlayingPassageId}"]`);
+    if (!container || !el) {
+      setPassageInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setPassageInView(entry.isIntersecting);
+        if (!entry.isIntersecting && entry.rootBounds) {
+          setPassageOffscreenDirection(entry.boundingClientRect.top < entry.rootBounds.top ? "up" : "down");
+        }
+      },
+      { root: container, threshold: 0.01 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isListen, currentPlayingPassageId, narrationAudioSection, getSlideEl]);
+
   // "Back to narration" — the nudge that appears once the reader has
-  // manually turned away from whichever section is actually playing. Only
-  // makes sense while listening: audio playing somewhere is a plain fact
-  // to navigate back to, unlike plain reading (no playback, just a
+  // manually turned away from whichever passage is actually playing, either
+  // by leaving its section entirely (!isFollowingNarration) or by scrolling
+  // past it within the same long section (!passageInView). Only makes
+  // sense while listening: audio playing somewhere is a plain fact to
+  // navigate back to, unlike plain reading (no playback, just a
   // resume-position guess) where the same nudge would read as the app
   // second-guessing a reader who may have turned away on purpose.
-  const awayFromNarration = isListen && !isFollowingNarration;
-  const nudgeDirection: "up" | "down" = narrationAudioIndex < activeIndex ? "up" : "down";
+  const awayFromNarration = isListen && (!isFollowingNarration || !passageInView);
+  // Cross-section direction (a real spine-order comparison) takes priority
+  // over the in-section IntersectionObserver reading when both could apply
+  // — !isFollowingNarration is already the coarser, more reliable signal of
+  // the two.
+  const nudgeDirection: "up" | "down" = !isFollowingNarration
+    ? narrationAudioIndex < activeIndex
+      ? "up"
+      : "down"
+    : passageOffscreenDirection;
   const jumpToNarration = useCallback(() => {
     goTo(narrationAudioIndex, { animate: false });
     if (!currentPlayingPassageId || !narrationAudioSection) return;
@@ -495,6 +673,15 @@ export default function Reader({
   const activeSectionForSidebar = activeSectionId ?? book.spine[0];
   const prevSection = orderedSections[activeIndex - 1];
   const nextSection = orderedSections[activeIndex + 1];
+  // ChapterNavFooter's own real rendered height (the measure-and-store
+  // trick NowPlayingBar/AppBottomNav already use for their own height, kept
+  // local here rather than a global store since nothing outside the reader
+  // needs it) — NotesFeedFab reads this so it can stack directly above
+  // whichever bottom bar is actually on screen (this footer, or the player)
+  // instead of a guessed constant that used to get added unconditionally,
+  // even while the footer it was meant to clear was itself hidden (see that
+  // prop's own comment).
+  const [footerHeight, setFooterHeight] = useState(0);
   const getPassageText = useCallback(
     (passageId: string) => passageLookup.byId.get(passageId)?.text ?? "",
     [passageLookup]
@@ -709,9 +896,9 @@ export default function Reader({
           topBarHeightPx={topBarHeightPx}
           railInsetPx={railInsetPx}
           onClose={onClose}
-          hasNarration={hasNarration}
+          canListen={canListen}
           isListen={isListen}
-          onListen={() => openBook(book, materialId)}
+          onListen={() => openBook(liveBook, materialId)}
           onToggleSearch={() => setSearchOpen((o) => !o)}
           activeSection={orderedSections[activeIndex]}
           onToggleChapters={() => setChaptersOpen((o) => !o)}
@@ -730,7 +917,28 @@ export default function Reader({
             activeSectionId={activeSectionForSidebar}
             isMobile={isMobile}
             open={chaptersOpen}
-            onNavigate={(id) => navigateToSection(id, { animate: false })}
+            // In listen mode this needs to behave like the audio player's
+            // own skip buttons — jump narration there and start playing —
+            // rather than just scrolling this page while playback carries
+            // on wherever it already was. Plain reading keeps the old
+            // scroll-only navigation.
+            //
+            // Deliberately only jumpNarrationToSection here, not also a
+            // direct navigateToSection call: an earlier version called
+            // both, on the theory that the carousel needed its own explicit
+            // push since the auto-follow effect above only followed when
+            // already-following. That meant two independent places each
+            // deciding "what section is the reader looking at" for the
+            // same click — this component's own activeIndex state, and
+            // NarrationEngine's target/narration-store — racing each
+            // other, which produced real "page unresponsive" hangs. The
+            // fix was in the reconciler itself (NarrationEngine's
+            // explicitJumpSeq, which the auto-follow effect above now
+            // checks), not a second navigation call site here: this jump
+            // (like the skip buttons and word clicks) is now always
+            // followed by that one effect, without this needing to know
+            // anything about the carousel at all.
+            onNavigate={(id) => (isListen ? jumpNarrationToSection(id) : navigateToSection(id, { animate: false }))}
             onClose={() => setChaptersOpen(false)}
           />
 
@@ -766,6 +974,8 @@ export default function Reader({
               onTextSelect={onTextSelect}
               onNoteMarkerClick={openNoteMarker}
               justJumpedAnnotationId={justJumpedAnnotationId}
+              onWordClick={isListen ? handleNarrationWordClick : undefined}
+              isNarrationPlaying={isListen && audioIsPlaying}
             />
 
             <ChapterNavFooter
@@ -777,9 +987,15 @@ export default function Reader({
               // mobile the selection pill is itself a fixed bottom bar (see
               // SelectionMenu.tsx), and would otherwise land directly on
               // top of this one if the reader selects text right at the
-              // end of a section.
-              visible={footerVisible && !selection}
+              // end of a section — and for as long as any audio player is
+              // active, since its own skip-prev/skip-next chapter buttons
+              // (NarrationEngine's skipToPrevSection/skipToNextSection)
+              // already cover this footer's whole job, and stacking both
+              // just doubles up the same affordance right above the "now
+              // playing" bar.
+              visible={footerVisible && !selection && !anyPlayerActive}
               bottomOffsetPx={anyPlayerActive ? playerHeight : 0}
+              onHeightChange={setFooterHeight}
             />
 
             {/* Selection menu is a fixed-position overlay, so it doesn't need
@@ -965,15 +1181,23 @@ export default function Reader({
           }
         }}
         // Same lifecycle as ChapterNavFooter itself, not an independent
-        // always-on FAB — see NotesFeedFab's own doc comment.
+        // always-on FAB — see NotesFeedFab's own doc comment. Deliberately
+        // not also gated on !anyPlayerActive the way the footer's own
+        // `visible` is: the FAB stays reachable while listening too, just
+        // repositioned above the player instead of the (then-hidden)
+        // footer — see bottomOffsetPx below.
         visible={footerVisible && !selection}
-        // Stacks above the player bar when one's active, and above
-        // ChapterNavFooter's own height (same rough constant Reader.tsx
-        // already assumes for its bottom content padding, see
-        // contentBottomPad above) — the footer is always showing whenever
-        // this is (same `visible` condition above), so the FAB always sits
-        // above it, never on top of the Next/Previous tap targets.
-        bottomOffsetPx={(anyPlayerActive ? playerHeight : 0) + (isMobile ? 80 : 72)}
+        // The real height of whichever bottom bar is actually on screen —
+        // playerHeight while listening (the footer hides itself then, per
+        // its own `visible`), footerHeight otherwise (real whenever this
+        // FAB is, since `visible` above is exactly the footer's own
+        // condition minus the player check). Used to be the player height
+        // plus a guessed, hand-tuned mobile/desktop constant standing in
+        // for the footer — added unconditionally, even while the footer it
+        // was meant to clear was itself hidden behind the player, which is
+        // what put the FAB floating in a dead gap above the player bar
+        // instead of hugging it.
+        bottomOffsetPx={anyPlayerActive ? playerHeight : footerHeight}
       />
 
       {/* Masks the reader until theme/font/position (hydrated) and scroll

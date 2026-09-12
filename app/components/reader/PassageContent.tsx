@@ -89,18 +89,32 @@ function buildSegments(
   return tokens;
 }
 
-// Theme-fitting active-narration-word highlight (reader-issues.md) —
-// --reader-active-word-bg/text are per-theme tokens (app/globals.css), so
-// this reads correctly in both themes instead of a single hardcoded color.
-// Deliberately a cool blue, nowhere near --reader-highlight's marker
-// yellow, so "this is just what's playing" is never visually confused
-// with "I highlighted this."
-const ACTIVE_WORD_STYLE: React.CSSProperties = {
-  background: "var(--reader-active-word-bg)",
-  color: "var(--reader-active-word-text)",
-  borderRadius: 4,
-  padding: "1px 2px",
-};
+/** Every plain-text word segment gets these (data-word-index for
+ * Reader.tsx's imperative om-narrating-word toggle; onClick for tap-to-
+ * seek) whenever narration is live for this passage — `onWordClick` is
+ * undefined outside listen mode, so plain reading never attaches a click
+ * handler or a data attribute to ordinary text at all. Skipped on the
+ * link/note-marker branches below: those already own a click of their own
+ * (navigate / open thread), and layering a second, conflicting one over
+ * the same word would race it. */
+function wordProps(
+  seg: Segment,
+  onWordClick: ((wordIndex: number) => void) | undefined
+): { "data-word-index"?: number; onClick?: (e: React.MouseEvent) => void } {
+  if (seg.wordIndex === undefined || !onWordClick) return {};
+  return {
+    "data-word-index": seg.wordIndex,
+    onClick: (e) => {
+      // Don't hijack a fresh drag-selection that merely happens to end on
+      // top of this word — same guard the annotation-marker click below
+      // already uses.
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+      e.stopPropagation();
+      onWordClick(seg.wordIndex!);
+    },
+  };
+}
 
 function renderLeaf(
   seg: Segment,
@@ -108,25 +122,24 @@ function renderLeaf(
   notesById: Map<string, NoteLookup>,
   onNoteClick: (note: NoteLookup, target: HTMLElement) => void,
   onInternalLinkClick: (sectionId: string, fragmentId?: string) => void,
-  activeWordIndex: number | undefined
+  onWordClick: ((wordIndex: number) => void) | undefined
 ) {
-  const activeStyle =
-    seg.wordIndex !== undefined && seg.wordIndex === activeWordIndex ? ACTIVE_WORD_STYLE : undefined;
+  const wp = wordProps(seg, onWordClick);
   const text = seg.text;
 
-  if (!seg.mark) return <span key={key} style={activeStyle}>{seg.text}</span>;
-  if (seg.mark.kind === "em") return <em key={key} style={activeStyle}>{seg.text}</em>;
-  if (seg.mark.kind === "strong") return <strong key={key} style={activeStyle}>{seg.text}</strong>;
-  if (seg.mark.kind === "underline") return <span key={key} style={{ ...activeStyle, textDecoration: "underline" }}>{text}</span>;
-  if (seg.mark.kind === "strike") return <span key={key} style={{ ...activeStyle, textDecoration: "line-through" }}>{text}</span>;
-  if (seg.mark.kind === "sub") return <sub key={key} style={activeStyle}>{text}</sub>;
-  if (seg.mark.kind === "sup") return <sup key={key} style={activeStyle}>{text}</sup>;
+  if (!seg.mark) return <span key={key} {...wp}>{seg.text}</span>;
+  if (seg.mark.kind === "em") return <em key={key} {...wp}>{seg.text}</em>;
+  if (seg.mark.kind === "strong") return <strong key={key} {...wp}>{seg.text}</strong>;
+  if (seg.mark.kind === "underline") return <span key={key} {...wp} style={{ textDecoration: "underline" }}>{text}</span>;
+  if (seg.mark.kind === "strike") return <span key={key} {...wp} style={{ textDecoration: "line-through" }}>{text}</span>;
+  if (seg.mark.kind === "sub") return <sub key={key} {...wp}>{text}</sub>;
+  if (seg.mark.kind === "sup") return <sup key={key} {...wp}>{text}</sup>;
   if (seg.mark.kind === "code") {
     return (
       <code
         key={key}
+        {...wp}
         style={{
-          ...activeStyle,
           fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
           background: "var(--reader-surface-hover)",
           borderRadius: 3,
@@ -150,7 +163,6 @@ function renderLeaf(
               onInternalLinkClick(sectionId, fragmentId);
             }}
             style={{
-              ...activeStyle,
               color: "var(--reader-accent)",
               textDecoration: "underline",
               // <button> defaults to display:inline-block with UA text-align:
@@ -176,7 +188,7 @@ function renderLeaf(
         <span
           key={key}
           title={seg.mark.href}
-          style={{ ...activeStyle, color: "var(--reader-accent)", textDecoration: "underline" }}
+          style={{ color: "var(--reader-accent)", textDecoration: "underline" }}
           className="cursor-not-allowed"
         >
           {text}
@@ -189,7 +201,7 @@ function renderLeaf(
         key={key}
         href={href}
         onClick={(e) => e.stopPropagation()}
-        style={{ ...activeStyle, color: "var(--reader-accent)", textDecoration: "underline" }}
+        style={{ color: "var(--reader-accent)", textDecoration: "underline" }}
       >
         {text}
       </a>
@@ -197,7 +209,7 @@ function renderLeaf(
   }
   if (seg.mark.kind === "note") {
     const note = seg.mark.noteId ? notesById.get(seg.mark.noteId) : undefined;
-    if (!note) return <span key={key} style={activeStyle}>{seg.text}</span>;
+    if (!note) return <span key={key}>{seg.text}</span>;
     return (
       <button
         key={key}
@@ -213,7 +225,7 @@ function renderLeaf(
       </button>
     );
   }
-  return <span key={key} style={activeStyle}>{text}</span>;
+  return <span key={key} {...wp}>{text}</span>;
 }
 
 /** The only signal that a marked span has entries attached — a highlight
@@ -269,9 +281,13 @@ type PassageTextProps = {
    * action instead (re-select the marked text and use the pill), so a
    * click here has exactly one job. */
   onNoteMarkerClick: (annotationId: string) => void;
-  /** Word index currently being narrated, for inline audio-sync highlighting
-   * in the reading view itself (reader-issues #7) — omit outside listen mode. */
-  activeWordIndex?: number;
+  /** Present only in listen mode — turns on word tokenization (tagging
+   * every word with a stable [data-word-index], for Reader.tsx's imperative
+   * om-narrating-word toggle to find) and tap-to-seek. Called with the
+   * clicked word's index; the caller already knows which passage this is.
+   * `undefined` outside listen mode, so plain reading attaches neither the
+   * data attribute nor a click handler to any word. */
+  onWordClick?: (wordIndex: number) => void;
   /** The one annotation (if any) the reader was just taken to from its own
    * quote card in the annotation feed or a deep link — gets the
    * .reader-jump-flash treatment (a one-shot pulse that settles into, and
@@ -291,9 +307,12 @@ type PassageTextProps = {
  * Wrapped in memo(): with the whole book mounted at once (reader-issues.md
  * — no notion of pages), tokenization now runs for every passage rather
  * than just the one being narrated or annotated. Reader.tsx passes stable
- * references for `passage`/`annotations` and stable callbacks, so on the
- * ~2.6/s re-renders during playback this skips re-tokenizing every passage
- * that isn't the one actually changing. */
+ * references for `passage`/`annotations`/`onWordClick` and stable
+ * callbacks, so this only re-tokenizes a passage when something about it
+ * actually changed — never on every playback tick, which is why the
+ * currently-narrated word itself is marked by Reader.tsx toggling a plain
+ * DOM class on the right [data-word-index] span instead of a prop threaded
+ * down here (see that effect's own comment). */
 export const PassageText = memo(function PassageText({
   passage,
   notesById,
@@ -301,11 +320,11 @@ export const PassageText = memo(function PassageText({
   onInternalLinkClick,
   annotations,
   onNoteMarkerClick,
-  activeWordIndex,
+  onWordClick,
   justJumpedAnnotationId,
 }: PassageTextProps) {
   const readerId = useSessionStore((s) => s.readerId);
-  const words = activeWordIndex !== undefined ? computeWordRanges(passage.text) : [];
+  const words = onWordClick ? computeWordRanges(passage.text) : [];
   // An annotation carries one range per passage it touches — resolve each
   // to its own local [start,end) here, since that's all buildSegments
   // needs to know about for this one passage.
@@ -340,7 +359,7 @@ export const PassageText = memo(function PassageText({
     <>
       {runs.map((run, i) => {
         const children = run.segs.map((seg, j) =>
-          renderLeaf(seg, j, notesById, onNoteClick, onInternalLinkClick, activeWordIndex)
+          renderLeaf(seg, j, notesById, onNoteClick, onInternalLinkClick, onWordClick)
         );
         if (!run.annotationId) return <span key={i}>{children}</span>;
 

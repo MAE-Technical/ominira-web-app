@@ -5,6 +5,13 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
+  // `ws` (lib/audio/engines/edge.ts) has optional native addons
+  // (bufferutil/utf-8-validate) for performance — left external so it's
+  // `require()`d from node_modules at request time like any other
+  // server-only dependency, rather than risking Turbopack's dev bundling
+  // mishandling it the way it did the isomorphic package this used to go
+  // through (see edge.ts's own doc comment).
+  serverExternalPackages: ["ws"],
   experimental: {
     // Next 15+ defaults dynamic routes' client-side Router Cache to 0 —
     // every single tap on a bottom-nav/sidebar link re-fetches that route's

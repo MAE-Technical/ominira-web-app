@@ -30,13 +30,12 @@ export default function NowPlayingBar() {
   const closePlayer = useAudioStore((s) => s.closePlayer);
   const setPlayerHeight = useAudioStore((s) => s.setPlayerHeight);
   const audioSection = useNarrationStore((s) => s.audioSection);
-  const audioSectionTrack = useNarrationStore((s) => s.audioSectionTrack);
-  const narratorOptions = useNarrationStore((s) => s.narratorOptions);
   const canSkipToPrevSection = useNarrationStore((s) => s.canSkipToPrevSection);
   const canSkipToNextSection = useNarrationStore((s) => s.canSkipToNextSection);
   const skipToPrevSection = useNarrationStore((s) => s.skipToPrevSection);
   const skipToNextSection = useNarrationStore((s) => s.skipToNextSection);
   const handleSeek = useNarrationStore((s) => s.handleSeek);
+  const isBuffering = useNarrationStore((s) => s.isBuffering);
   // Every route except the reader itself now has a persistent left sidebar
   // (app/components/shell/AppSidebar.tsx) at the same 860px breakpoint —
   // full-width here would run this bar underneath it, covering the
@@ -107,8 +106,7 @@ export default function NowPlayingBar() {
         bookTitle={book.metadata.title}
         chapterLabel={audioSection?.title ?? book.metadata.title}
         coverSrc={book.metadata.cover}
-        narrators={narratorOptions}
-        durationMs={audioSectionTrack?.durationMs ?? 0}
+        isBuffering={isBuffering}
         onSeek={handleSeek}
         onSkipPrev={skipToPrevSection}
         onSkipNext={skipToNextSection}

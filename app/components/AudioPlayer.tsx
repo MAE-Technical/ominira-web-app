@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Mic, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, X } from "lucide-react";
 import { useAudioStore } from "@/stores/audio-store";
 import Tooltip from "./reader/Tooltip";
 import { formatDuration } from "@/utils/text";
-import type { Narrator } from "@/lib/book/schema";
+import { AFRICAN_VOICES } from "@/lib/audio/voices";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
@@ -14,12 +14,21 @@ type Props = {
   bookTitle: string;
   chapterLabel: string;
   coverSrc: string;
-  /** Only the first entry is ever narrated (per product decision — one
-   * narration per book for now); kept as an array rather than a single
-   * value since `book.narrators`/`narratorTracks` stay array-shaped in the
-   * schema for when multi-narrator selection is re-enabled. */
-  narrators: Narrator[];
-  durationMs: number;
+  /** A real, exact duration — nothing sets this today (every book streams
+   * live narration; see NarrationEngine's own doc comment), but the prop
+   * stays here as where a future prerecorded, fixed-duration section would
+   * plug back in its real mm:ss scrubbable timeline. Omit (or pass 0) for
+   * the streaming case, which renders no timeline at all — there's no
+   * fixed duration to show for audio still being synthesized on demand,
+   * and an estimated one would be false precision that corrects itself
+   * under the reader mid-scrub. Seeking happens by tapping a passage/word
+   * in the text itself (karaoke-style), not by dragging a bar here. */
+  durationMs?: number;
+  /** True while the passage the player is targeting isn't playable yet
+   * (still synthesizing) — shows a spinner over the play button instead of
+   * the play/pause icon, the same "buffering" affordance any podcast app
+   * gives a track that hasn't loaded. */
+  isBuffering?: boolean;
   /** Routes through the caller instead of the store's seekTo directly — for
    * TTS-driven playback there's no real audio timeline to scrub, so Reader
    * resyncs the speech engine to the nearest passage on seek. This is the
@@ -103,12 +112,59 @@ function SpeedMenu({
   );
 }
 
+/** A voice's short display name — its own given name, without the "(Country)"
+ * suffix AFRICAN_VOICES' full label carries — for wherever space is tight
+ * (the trigger button itself; the menu still shows the full label). */
+function shortVoiceLabel(label: string): string {
+  return label.split(" (")[0];
+}
+
+function VoiceMenu({
+  voice,
+  onSelect,
+  onClose,
+}: {
+  voice: string;
+  onSelect: (voiceId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div onClick={onClose} className="fixed inset-0 z-19" />
+      <div className="absolute bottom-[calc(100%+14px)] left-1/2 -translate-x-1/2 min-w-40 p-2.5 rounded-lg bg-[var(--reader-surface)] border border-[var(--reader-border)] shadow-lg z-20">
+
+        <div className="text-[10px] font-bold tracking-wide uppercase text-[var(--reader-text-muted)] px-2.5 pt-0.5 pb-2">
+          Voice
+        </div>
+        <div className="flex flex-col gap-0.5">
+          {AFRICAN_VOICES.map((v) => {
+            const active = v.id === voice;
+            return (
+              <button
+                key={v.id}
+                onClick={() => onSelect(v.id)}
+                className={`flex items-center justify-between border-none cursor-pointer rounded-sm py-2 px-3.5 text-[13px] font-medium whitespace-nowrap ${
+                  active ? "bg-brand-500/10 text-brand-500 font-semibold" : "bg-transparent text-[var(--reader-text)]"
+                }`}
+              >
+                {v.label}
+                {active && <Check size={13} className="flex-none ml-2" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function AudioPlayer({
   variant = "full",
   bookTitle,
   chapterLabel,
   coverSrc,
-  durationMs,
+  durationMs = 0,
+  isBuffering = false,
   onSeek,
   onSkipPrev,
   onSkipNext,
@@ -123,8 +179,14 @@ export default function AudioPlayer({
   const speed = useAudioStore((s) => s.speed);
   const toggle = useAudioStore((s) => s.toggle);
   const setSpeed = useAudioStore((s) => s.setSpeed);
+  // Reader-wide preference, same footing as speed — read/written straight
+  // from audio-store here rather than threaded through as a prop, exactly
+  // how speed already works.
+  const voice = useAudioStore((s) => s.voice);
+  const setVoice = useAudioStore((s) => s.setVoice);
 
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false);
+  const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -138,6 +200,7 @@ export default function AudioPlayer({
   const time = Math.min(currentTimeMs / 1000, duration);
   const progress = duration > 0 ? time / duration : 0;
   const withHours = duration >= 3600;
+  const showsDuration = duration > 0;
 
   const onScrub = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -160,8 +223,22 @@ export default function AudioPlayer({
     </Tooltip>
   );
 
+  const currentVoiceLabel = AFRICAN_VOICES.find((v) => v.id === voice)?.label ?? AFRICAN_VOICES[0].label;
+  const voiceTrigger = (
+    <Tooltip label="Narrator voice" side="top">
+      <button
+        onClick={() => setVoiceMenuOpen((o) => !o)}
+        className="flex items-center gap-1 border-none cursor-pointer rounded-sm py-1.25 px-2.5 text-xs font-semibold bg-[var(--reader-surface-hover)] text-[var(--reader-text-muted)] flex-none whitespace-nowrap"
+      >
+        <Mic size={12} className="flex-none" />
+        {isMini ? null : shortVoiceLabel(currentVoiceLabel)}
+        <ChevronDown size={12} className="flex-none" />
+      </button>
+    </Tooltip>
+  );
+
   const skipPrevBtn = (
-    <Tooltip label="Previous chapter" side="top" align="start">
+    <Tooltip label="Previous" side="top" align="start">
       <button
         onClick={onSkipPrev}
         disabled={!canSkipPrev}
@@ -184,13 +261,23 @@ export default function AudioPlayer({
       </button>
     </Tooltip>
   );
+  // Buffering still toggles play intent on click (isBuffering just means
+  // "not playable yet", not "the button doesn't work") — it starts playing
+  // itself the moment the targeted passage finishes synthesizing, same as
+  // any podcast app's spinner-on-a-still-loading-episode.
   const playBtn = (
     <button
       onClick={toggle}
       aria-label={isPlaying ? "Pause" : "Play"}
       className={`${playSize} rounded-full bg-brand-500 border-none cursor-pointer flex items-center justify-center flex-none text-sand-25 shadow-sm`}
     >
-      {isPlaying ? <Pause size={isMini ? 15 : 19} /> : <Play size={isMini ? 15 : 19} />}
+      {isBuffering ? (
+        <Loader2 size={isMini ? 15 : 19} className="animate-spin" />
+      ) : isPlaying ? (
+        <Pause size={isMini ? 15 : 19} />
+      ) : (
+        <Play size={isMini ? 15 : 19} />
+      )}
     </button>
   );
   const forward15Btn = (
@@ -206,7 +293,7 @@ export default function AudioPlayer({
     </Tooltip>
   );
   const skipNextBtn = (
-    <Tooltip label="Next chapter" side="top">
+    <Tooltip label="Next" side="top">
       <button
         onClick={onSkipNext}
         disabled={!canSkipNext}
@@ -253,23 +340,30 @@ export default function AudioPlayer({
     <div
       className="w-full h-full box-border relative flex flex-col justify-center bg-[var(--reader-surface)] border-t border-b border-[var(--reader-border)] pb-[env(safe-area-inset-bottom)]"
     >
-      {/* Progress track */}
-      <div className={`flex items-center gap-2.5 ${isMini ? "px-4 pt-2" : isMobile ? "px-3.5 pt-2.5" : "px-6 pt-3"}`}>
-        <span className="text-[11px] font-medium text-[var(--reader-text-muted)] flex-none tabular-nums">
-          {formatDuration(time, withHours)}
-        </span>
-        <div onClick={onScrub} className="flex-1 h-4 flex items-center cursor-pointer">
-          <div className="w-full h-1 rounded-sm bg-[var(--reader-border)] overflow-hidden">
-            <div
-              className="h-full bg-brand-500 rounded-sm"
-              style={{ width: `${Math.round(progress * 100)}%` }}
-            />
+      {/* Progress track — only ever rendered for a real, exact duration
+          (a future prerecorded, fixed-duration section; see durationMs's
+          own doc comment). The current streaming case has no fixed
+          duration to show a timeline for, so it shows none at all rather
+          than a fake one — seeking happens by tapping a passage/word in
+          the text itself instead. */}
+      {showsDuration && (
+        <div className={`flex items-center gap-2.5 ${isMini ? "px-4 pt-2" : isMobile ? "px-3.5 pt-2.5" : "px-6 pt-3"}`}>
+          <span className="text-[11px] font-medium text-[var(--reader-text-muted)] flex-none tabular-nums">
+            {formatDuration(time, withHours)}
+          </span>
+          <div onClick={onScrub} className="flex-1 h-4 flex items-center cursor-pointer">
+            <div className="w-full h-1 rounded-sm bg-[var(--reader-border)] overflow-hidden">
+              <div
+                className="h-full bg-brand-500 rounded-sm"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
           </div>
+          <span className="text-[11px] font-medium text-[var(--reader-text-muted)] flex-none tabular-nums">
+            -{formatDuration(duration - time, withHours)}
+          </span>
         </div>
-        <span className="text-[11px] font-medium text-[var(--reader-text-muted)] flex-none tabular-nums">
-          -{formatDuration(duration - time, withHours)}
-        </span>
-      </div>
+      )}
 
       {isMobile ? (
         <>
@@ -279,36 +373,71 @@ export default function AudioPlayer({
           </div>
           <div className="flex items-center justify-between px-3.5 pb-2.5">
             {skipPrevBtn}
-            {back15Btn}
+            {showsDuration && back15Btn}
             {playBtn}
-            {forward15Btn}
+            {showsDuration && forward15Btn}
             {skipNextBtn}
           </div>
-          <div className="flex justify-center pb-3 relative">
-            {speedTrigger}
-            {speedMenuOpen && (
-              <SpeedMenu
-                speed={speed}
-                isMobile
-                onSelect={(s) => {
-                  setSpeed(s);
-                  setSpeedMenuOpen(false);
-                }}
-                onClose={() => setSpeedMenuOpen(false)}
-              />
-            )}
+          <div className="flex items-center justify-center gap-2 pb-3">
+            <div className="relative">
+              {voiceTrigger}
+              {voiceMenuOpen && (
+                <VoiceMenu
+                  voice={voice}
+                  onSelect={(v) => {
+                    setVoice(v);
+                    setVoiceMenuOpen(false);
+                  }}
+                  onClose={() => setVoiceMenuOpen(false)}
+                />
+              )}
+            </div>
+            <div className="relative">
+              {speedTrigger}
+              {speedMenuOpen && (
+                <SpeedMenu
+                  speed={speed}
+                  isMobile
+                  onSelect={(s) => {
+                    setSpeed(s);
+                    setSpeedMenuOpen(false);
+                  }}
+                  onClose={() => setSpeedMenuOpen(false)}
+                />
+              )}
+            </div>
           </div>
         </>
       ) : (
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 pb-3.5 pt-1">
+        // py-2.5 (not the old pt-1 pb-3.5) — that asymmetry was what threw
+        // this row's vertical centering off inside the bar's own
+        // justify-center: with no progress-track row above it (the
+        // streaming-narration default; see that row's own comment) it's
+        // usually the *only* child, so its own padding alone decided
+        // where the whole bar's content sat, and 4px top vs 14px bottom
+        // pushed everything visibly toward the top.
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 py-2.5">
           {coverAndMeta}
           <div className="flex items-center gap-3">
             {skipPrevBtn}
-            {back15Btn}
+            {showsDuration && back15Btn}
             {playBtn}
-            {forward15Btn}
+            {showsDuration && forward15Btn}
             {skipNextBtn}
             <div className="relative ml-1">
+              {voiceTrigger}
+              {voiceMenuOpen && (
+                <VoiceMenu
+                  voice={voice}
+                  onSelect={(v) => {
+                    setVoice(v);
+                    setVoiceMenuOpen(false);
+                  }}
+                  onClose={() => setVoiceMenuOpen(false)}
+                />
+              )}
+            </div>
+            <div className="relative">
               {speedTrigger}
               {speedMenuOpen && (
                 <SpeedMenu

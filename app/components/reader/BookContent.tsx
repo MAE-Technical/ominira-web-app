@@ -55,6 +55,19 @@ type BookContentProps = {
   onNoteMarkerClick: (passageId: string, annotationId: string) => void;
   /** Passed straight through to PassageText — see its own doc comment. */
   justJumpedAnnotationId: string | null;
+  /** Word-level tap-to-seek during listen mode — undefined outside it (see
+   * PassageText's own `onWordClick` doc comment). Bound here to each
+   * passage's own id before reaching PassageText, which only knows its own
+   * word indices, not which passage it's in. */
+  onWordClick?: (passageId: string, wordIndex: number) => void;
+  /** True while narration is actually playing — adds globals.css's
+   * om-listen-active class to the section container, which is what turns
+   * every [data-word-index] span's cursor to a pointer and gives it a
+   * hover wash (see that CSS rule's own comment). A plain prop, not
+   * imperative DOM like the active-word toggle itself: this only flips on
+   * play/pause, nowhere near the per-tick frequency that would defeat this
+   * component's memo(). */
+  isNarrationPlaying?: boolean;
 };
 
 type TableShape = NonNullable<Passage["table"]>;
@@ -99,6 +112,8 @@ const BookContent = memo(function BookContent({
   onTextSelect,
   onNoteMarkerClick,
   justJumpedAnnotationId,
+  onWordClick,
+  isNarrationPlaying,
 }: BookContentProps) {
   const firstSectionId = orderedSections[0]?.id;
   const section = orderedSections[activeIndex];
@@ -160,7 +175,7 @@ const BookContent = memo(function BookContent({
         onInternalLinkClick={onInternalLinkClick}
         annotations={annotations}
         onNoteMarkerClick={(annotationId) => onNoteMarkerClick(raw.id, annotationId)}
-        activeWordIndex={undefined}
+        onWordClick={onWordClick ? (wordIndex) => onWordClick(raw.id, wordIndex) : undefined}
         justJumpedAnnotationId={justJumpedAnnotationId}
       />
     );
@@ -447,7 +462,9 @@ const BookContent = memo(function BookContent({
         // without it, a long-press here had nothing telling it where
         // "selectable" stops, and it would balloon past the tapped word to
         // the whole visible screen.
-        className="reader-fade-in om-scroll h-full overflow-y-auto relative select-none"
+        className={`reader-fade-in om-scroll h-full overflow-y-auto relative select-none${
+          isNarrationPlaying ? " om-listen-active" : ""
+        }`}
         style={{ background: "var(--reader-bg)" }}
       >
         <div

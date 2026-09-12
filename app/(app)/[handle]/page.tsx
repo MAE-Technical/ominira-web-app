@@ -11,7 +11,7 @@ import ReaderProfileView from "@/app/components/profile/ReaderProfileView";
  * roster links here). A single dynamic segment at the app root necessarily
  * shadows any *literal* top-level path this app hasn't already claimed with
  * its own page.tsx (e.g. a bare `/admin`, which has none today — only
- * `/admin/audio` and `/admin/books` do) — every real route stays safe,
+ * `/admin/books` does) — every real route stays safe,
  * since Next.js always prefers a matching static segment over this dynamic
  * one at the same level; only an otherwise-unmatched single segment ever
  * reaches here.

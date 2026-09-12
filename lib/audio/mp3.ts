@@ -1,11 +1,11 @@
 /**
- * Kokoro's mp3 responses each carry their own ID3v2 tag (the ffmpeg/libav mux
- * Kokoro-FastAPI uses internally adds one to every clip). Left in, joining
+ * Both engines' mp3 responses carry their own ID3v2 tag (Kokoro-FastAPI's
+ * ffmpeg/libav mux adds one; Edge's service does too). Left in, joining
  * several chunk buffers would embed a non-audio ID3 block in the middle of
  * the frame stream — decoders resync past it, but it's an avoidable click.
  * Stripping each chunk's tag first keeps the joined file a clean run of
- * MPEG frames, so a section assembled from N passage-level chunks plays
- * back as one gapless track.
+ * MPEG frames, so audio assembled from N split chunks plays back as one
+ * gapless clip.
  */
 export function concatMp3(chunks: Buffer[]): Buffer {
   return Buffer.concat(chunks.map(stripId3v2));

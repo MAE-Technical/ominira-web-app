@@ -1,37 +1,45 @@
 // Client for a local Kokoro-FastAPI server (https://github.com/remsky/Kokoro-FastAPI),
 // e.g. `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest`.
+import type { EngineVoice, SynthesisEngine, SynthesisResult, SynthesizeOptions } from "./types";
 
 const BASE_URL = process.env.KOKORO_BASE_URL ?? "http://localhost:8880";
-const DEFAULT_VOICE = process.env.KOKORO_VOICE ?? "af_heart";
 
 export class KokoroError extends Error {}
+
+// Kokoro-82M's own voice ids — a curated subset (not the full pack) to match
+// the same handful of choices the edge engine offers in the reader's dropdown.
+export const VOICES: EngineVoice[] = [
+  { id: "af_heart", label: "Heart (US)" },
+  { id: "af_bella", label: "Bella (US)" },
+  { id: "af_nicole", label: "Nicole (US)" },
+  { id: "am_adam", label: "Adam (US)" },
+  { id: "am_michael", label: "Michael (US)" },
+  { id: "bf_emma", label: "Emma (UK)" },
+  { id: "bm_george", label: "George (UK)" },
+];
+const DEFAULT_VOICE = VOICES[0].id;
 
 type CaptionedSpeechResponse = {
   audio: string; // base64-encoded per response_format
   timestamps?: { word: string; start_time: number; end_time: number }[];
 };
 
-export type SynthesizedWord = { word: string; startMs: number; endMs: number };
-export type SynthesisResult = { audio: Buffer; durationMs: number; words: SynthesizedWord[] };
-
 /**
  * Calls /dev/captioned_speech rather than the plain OpenAI-compatible
  * /v1/audio/speech — same request shape, but the response also carries
  * word-level timestamps: the last entry's end_time doubles as the clip's own
  * duration (no ffprobe/ffmpeg dependency just to measure what we generated),
- * and the full list lets callers build SectionAudio.words for karaoke
- * highlighting. One call is one chunk of narration text — generate.ts calls
- * this per passage, not per section, to keep individual requests well clear
- * of Kokoro's processing-time limits on long text.
+ * and the full list is what SynthesisResult.words needs for karaoke
+ * highlighting.
  */
-export async function synthesizeChunk(text: string): Promise<SynthesisResult> {
+async function synthesizeChunk(text: string, options: SynthesizeOptions = {}): Promise<SynthesisResult> {
   const res = await fetch(`${BASE_URL}/dev/captioned_speech`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "kokoro",
       input: text,
-      voice: DEFAULT_VOICE,
+      voice: options.voice ?? DEFAULT_VOICE,
       response_format: "mp3",
       stream: false,
     }),
@@ -52,3 +60,10 @@ export async function synthesizeChunk(text: string): Promise<SynthesisResult> {
   const durationMs = words.at(-1)?.endMs ?? 0;
   return { audio, durationMs, words };
 }
+
+export const kokoroEngine: SynthesisEngine = {
+  id: "kokoro",
+  voices: VOICES,
+  defaultVoice: DEFAULT_VOICE,
+  synthesizeChunk,
+};

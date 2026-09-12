@@ -156,15 +156,17 @@ body {
    doesn't require touching any consumer.
 
    --reader-active-word-bg/text is the *currently narrated word* during
-   listen mode (PassageContent.tsx) — a cool steel-blue, deliberately nowhere
-   near the marker-yellow used for --reader-highlight, so "this is
-   the one word playing right now" (a solid, high-contrast chip that jumps
-   word to word) is never confused with "I highlighted this" (a soft
-   background wash the reader chose themselves). White text on the chip in
-   both themes, so it never blends into either page. There is no passage-
-   level "now playing" wash anymore (per product decision, note-redesign.md
-   round 2) — narration highlighting is word-level only; the rest of the
-   sentence stays plain. */
+   listen mode (PassageContent.tsx/Reader.tsx) — light theme uses a soft
+   apricot marker straight out of the brand family (brand-100 wash,
+   brand-700 ink), the "Highlighter Wash" concept: one word lit at a time,
+   nothing else in the sentence dimmed, faded, or grouped around it, and no
+   passage-level wash left standing underneath it. --reader-active-word-bg-
+   hover is the subtler brand-50 tint shown on any *other* word while
+   narration is active, signalling "tap this to seek" without competing
+   with the one word actually playing. Dark theme's own block below inverts
+   the same brand family into an oxblood mark instead of reusing these exact
+   values (concept 2a, "Highlighter Wash · dark theme") — see its own
+   comment. */
 [data-reader-theme="light"] {
   --reader-bg: #ffffff;
   /* Slightly off-white — pure white bg with pure white surfaces gave every
@@ -209,8 +211,9 @@ body {
   --reader-quote-text: #ffffff;
   --reader-quote-text-muted: rgba(255, 255, 255, 0.68);
   --reader-quote-subtle: rgba(255, 255, 255, 0.45);
-  --reader-active-word-bg: #3d6fa8;
-  --reader-active-word-text: #ffffff;
+  --reader-active-word-bg: var(--color-brand-100);
+  --reader-active-word-bg-hover: var(--color-brand-50);
+  --reader-active-word-text: var(--color-brand-700);
 }
 
 [data-reader-theme="dark"] {
@@ -242,8 +245,18 @@ body {
   --reader-quote-text: var(--reader-text);
   --reader-quote-text-muted: var(--reader-text-muted);
   --reader-quote-subtle: var(--reader-text-subtle);
-  --reader-active-word-bg: #4a7fbd;
-  --reader-active-word-text: #ffffff;
+  /* Back to concept 2a's own oxblood mark (brand-800 fill, brand-100 ink) —
+     that's the actual design for dark theme, not a stand-in. Only the hover
+     tint changed from the mockup's flat white: rgba(255,255,255,0.08) read
+     as an unrelated color dropped on top of the mark's own oxblood/rust
+     family, so this uses a translucent brand-500 instead — close in hue to
+     --reader-active-word-bg itself (a paler preview of the same mark family,
+     not a different one) rather than brand-800's own near-black tone, which
+     would barely register at any usable opacity against this page's already
+     near-black background. */
+  --reader-active-word-bg: var(--color-brand-800);
+  --reader-active-word-bg-hover: rgba(190, 64, 13, 0.25);
+  --reader-active-word-text: var(--color-brand-100);
 }
 
 /* The browser's native drag-selection wash, recolored to the same marker
@@ -356,6 +369,44 @@ body {
      does by default. */
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+}
+
+/* "Now narrating" word marker (Reader.tsx) — toggled by plain DOM
+   classList add/remove (not a React prop) on whichever [data-word-index]
+   span is currently playing, the same imperative pattern this file already
+   uses for jump-to-scroll (getSlideEl(...).querySelector(...)) and used to
+   use for the old passage-level wash this replaced. Imperative rather than
+   a React prop specifically because this changes far more often than any
+   ordinary render (every word, several times a second during playback) —
+   routing it through props would mean re-rendering PassageText for the
+   whole visible passage on every tick, which is exactly what that
+   component's own memo() is there to avoid.
+   Padding + a matching negative margin (not padding alone) so the
+   highlighter mark doesn't nudge neighboring words apart as it moves from
+   one word to the next — the mark visually extends past the glyphs without
+   the layout box actually growing. */
+.om-narrating-word {
+  background: var(--reader-active-word-bg);
+  color: var(--reader-active-word-text);
+  border-radius: 4px;
+  padding: 1px 3px;
+  margin: 0 -3px;
+  transition: background 0.1s ease;
+}
+
+/* The rest of the passage's words while narration is active (Reader.tsx
+   sets this on the section container for as long as isListen is true) —
+   cursor and a quiet hover wash are the only "this is tappable" cue, since
+   the running text otherwise looks exactly like plain reading prose. Never
+   applied to the word actually playing (:not(.om-narrating-word)): that one
+   already has its own, stronger mark above and shouldn't also pick up the
+   dimmer hover tint. */
+.om-listen-active [data-word-index] {
+  cursor: pointer;
+}
+.om-listen-active [data-word-index]:hover:not(.om-narrating-word) {
+  background: var(--reader-active-word-bg-hover);
+  border-radius: 4px;
 }
 
 /* Reader-as-overlay open/close (ReaderModal.tsx) — an intercepted-route

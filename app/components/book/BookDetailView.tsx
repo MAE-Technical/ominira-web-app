@@ -354,7 +354,10 @@ export default function BookDetailView({ material }: { material: MaterialDetail 
   const [tab, setTab] = useState<Tab>("outline");
   const [readersOpen, setReadersOpen] = useState(false);
 
-  const hasNarration = material.narratorCount > 0;
+  // Gates the "Audiobook" badge only — a claim about real prerecorded
+  // narration. The Listen CTA below isn't gated on this: NarrationEngine
+  // falls back to live, on-demand AI narration for any book without one.
+  const hasRecordedAudiobook = material.narratorCount > 0;
   // `position` is one shared resume record for both reading and listening
   // (see stores/reading-position-store.ts's Position type) — reading never
   // writes `audioTimeMs`, only NarrationEngine does (always, even at 0ms
@@ -407,7 +410,7 @@ export default function BookDetailView({ material }: { material: MaterialDetail 
           </h1>
           <div className="mt-2 text-sm font-medium text-[var(--reader-text-muted)]">{material.author}</div>
 
-          <MetaLine material={material} hasNarration={hasNarration} onOpenReaders={() => setReadersOpen(true)} />
+          <MetaLine material={material} hasNarration={hasRecordedAudiobook} onOpenReaders={() => setReadersOpen(true)} />
 
           {/* Google first, OpenLibrary as backup — material.description (first-party)
               is left out of this cascade for now, it isn't reliably populated. */}
@@ -467,23 +470,23 @@ export default function BookDetailView({ material }: { material: MaterialDetail 
               </div>
             )}
 
-            {hasNarration && (
-              // ?listen=1 rather than calling openBook(book) directly —
-              // this is a real navigation (ReaderLink), and audio-store's
-              // `book` field isn't persisted (only `speed` is), so
-              // setting it before the page unloads would just lose it.
-              // Reader.tsx picks the flag up on mount and calls openBook
-              // itself instead, the same handoff targetSectionId/
-              // targetPassageId already do for "jump to this chapter"/
-              // "open this note" links.
-              <ReaderLink
-                href={`/read/${material.slug}?listen=1`}
-                className="flex items-center cursor-pointer justify-center gap-2 rounded-sm border border-[var(--reader-border)] bg-transparent px-6 py-2.5 text-sm font-semibold text-[var(--reader-text)] no-underline shell:w-auto hover:bg-[var(--reader-surface)]"
-              >
-                <Play size={16} />
-                {hasListened ? "Continue playing" : "Listen (audiobook)"}
-              </ReaderLink>
-            )}
+            {/* ?listen=1 rather than calling openBook(book) directly — this
+                is a real navigation (ReaderLink), and audio-store's `book`
+                field isn't persisted (only `speed` is), so setting it
+                before the page unloads would just lose it. Reader.tsx
+                picks the flag up on mount and calls openBook itself
+                instead, the same handoff targetSectionId/targetPassageId
+                already do for "jump to this chapter"/"open this note"
+                links. Unconditional now — no book is without at least
+                live AI narration — but the label only claims a produced
+                "audiobook" when hasRecordedAudiobook actually backs that up. */}
+            <ReaderLink
+              href={`/read/${material.slug}?listen=1`}
+              className="flex items-center cursor-pointer justify-center gap-2 rounded-sm border border-[var(--reader-border)] bg-transparent px-6 py-2.5 text-sm font-semibold text-[var(--reader-text)] no-underline shell:w-auto hover:bg-[var(--reader-surface)]"
+            >
+              <Play size={16} />
+              {hasListened ? "Continue playing" : hasRecordedAudiobook ? "Listen (audiobook)" : "Listen"}
+            </ReaderLink>
           </div>
         </div>
       </div>

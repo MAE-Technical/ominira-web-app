@@ -8,7 +8,6 @@
     "start": "next start",
     "lint": "eslint",
     "schema:generate": "bun run scripts/generate-schema.ts",
-    "audio:generate": "bun run scripts/generate-audio.ts",
     "publish:book": "bun run scripts/publish-book.ts",
     "ingest:mae-principles": "bun run scripts/ingest-mae-principles.ts",
     "materials:manifests": "bun run scripts/generate-material-manifests.ts",
@@ -29,6 +28,7 @@
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "ws": "^8.21.3",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
@@ -40,6 +40,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "esbuild": "^0.28.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
