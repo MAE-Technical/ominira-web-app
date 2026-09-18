@@ -8,6 +8,7 @@ import CommunityFeedSortToggle from "./CommunityFeedSortToggle";
 import CommunityNoteCard from "./CommunityNoteCard";
 import HomeAuthBanner from "./HomeAuthBanner";
 import HomeInstallBanner from "./HomeInstallBanner";
+import HomePushPrompt from "./HomePushPrompt";
 
 /** Stand-in for a CommunityNoteCard while `GET /api/community/notes` is
  * still in flight — same rounded-card footprint (border, padding, roughly
@@ -38,6 +39,7 @@ export default function HomeCommunityFeed() {
 
       <HomeInstallBanner />
       <HomeAuthBanner />
+      <HomePushPrompt />
 
       <FeaturedThisWeek />
 

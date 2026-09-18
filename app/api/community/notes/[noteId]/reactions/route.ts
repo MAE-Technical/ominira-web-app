@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import { getAuthenticatedReader } from "@/lib/auth/session";
 import { notFound, unauthorized } from "@/lib/api/errors";
+import { notifyReader } from "@/lib/notifications/notify";
 
 export async function POST(request: Request, { params }: { params: Promise<{ noteId: string }> }) {
   const reader = await getAuthenticatedReader(request);
@@ -10,7 +11,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
   const { noteId } = await params;
   const admin = getSupabaseAdminClient();
 
-  const { data: note } = await admin.from("notes").select("id, reaction_count").eq("id", noteId).maybeSingle();
+  const { data: note } = await admin.from("notes").select("id, reaction_count, reader_id").eq("id", noteId).maybeSingle();
   if (!note) return notFound();
 
   const { data: existing } = await admin
@@ -24,6 +25,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
     await admin.from("note_reactions").delete().eq("note_id", noteId).eq("reader_id", reader.readerId);
   } else {
     await admin.from("note_reactions").insert({ note_id: noteId, reader_id: reader.readerId });
+    // Fire-and-forget — never let a push failure affect the reaction response.
+    // No self-notification when reacting to your own note.
+    if (note.reader_id !== reader.readerId) {
+      void notifyReader(note.reader_id, {
+        kind: "reaction",
+        title: "New reaction",
+        body: "Someone reacted to your note.",
+        url: "/notes",
+        tag: `note-reaction-${noteId}`,
+      });
+    }
   }
 
   // reaction_count updates itself via the DB trigger (models-spec.md) —

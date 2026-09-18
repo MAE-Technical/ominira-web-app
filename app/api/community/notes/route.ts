@@ -7,6 +7,7 @@ import { resolveMaterialRow } from "@/lib/materials/resolve";
 import { contentToColumns, hydrateNotes, type NoteRow } from "@/lib/community/notes";
 import { enrichFeedItems } from "@/lib/community/feed";
 import type { AnnotationRange, NoteContent } from "@/lib/api/types";
+import { notifyReader } from "@/lib/notifications/notify";
 
 type Sort = "recent" | "top" | "trending";
 type TopCursor = { reactionCount: number; createdAt: string; id: string };
@@ -127,6 +128,7 @@ export async function POST(request: Request) {
   const admin = getSupabaseAdminClient();
   let parentId: string | null = null;
   let replyingToId: string | null = null;
+  let replyTargetReaderId: string | null = null;
 
   if (body.parentId) {
     // Mirrors stores/library-store.ts's addNote resolution exactly: whichever
@@ -140,6 +142,7 @@ export async function POST(request: Request) {
     }
     parentId = target.parent_id ?? target.id;
     replyingToId = target.parent_id ? target.id : null;
+    replyTargetReaderId = target.reader_id;
   }
 
   const { data, error } = await admin
@@ -157,6 +160,19 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) return validationError("Could not create note.");
+
+  // Fire-and-forget — never let a push failure affect the create response.
+  // No self-notification when replying to your own note.
+  if (replyTargetReaderId && replyTargetReaderId !== reader.readerId) {
+    void notifyReader(replyTargetReaderId, {
+      kind: "reply",
+      title: "New reply",
+      body: "Someone replied to your note.",
+      url: "/notes",
+      tag: `note-reply-${replyingToId ?? parentId}`,
+    });
+  }
+
   const [note] = await hydrateNotes([data], reader.readerId);
   return NextResponse.json(note, { status: 201 });
 }

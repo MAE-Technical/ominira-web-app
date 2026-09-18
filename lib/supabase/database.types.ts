@@ -195,6 +195,76 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["note_reactions"]["Insert"]>;
         Relationships: [];
       };
+      push_subscriptions: {
+        Row: {
+          id: string;
+          reader_id: string | null;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          user_agent: string | null;
+          created_at: string;
+          last_seen_at: string;
+        };
+        Insert: {
+          id?: string;
+          reader_id?: string | null;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          user_agent?: string | null;
+          created_at?: string;
+          last_seen_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["push_subscriptions"]["Insert"]>;
+        Relationships: [];
+      };
+      push_broadcasts: {
+        Row: {
+          id: string;
+          title: string;
+          body: string;
+          url: string;
+          recipient_count: number;
+          failure_count: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          body: string;
+          url: string;
+          recipient_count: number;
+          failure_count?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["push_broadcasts"]["Insert"]>;
+        Relationships: [];
+      };
+      notifications: {
+        Row: {
+          id: string;
+          reader_id: string;
+          kind: "reaction" | "reply" | "broadcast";
+          title: string;
+          body: string;
+          url: string;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          reader_id: string;
+          kind: "reaction" | "reply" | "broadcast";
+          title: string;
+          body: string;
+          url: string;
+          read_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["notifications"]["Insert"]>;
+        Relationships: [];
+      };
     };
     // Required by supabase-js's GenericSchema shape even though this project has
     // neither — omitting them collapses the whole schema (and every table's row

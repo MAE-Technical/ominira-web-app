@@ -16,6 +16,8 @@ import { useLogout } from "@/lib/auth/useLogout";
 import { useContinueReading } from "@/lib/auth/useContinueReading";
 import { useNotesCount } from "@/lib/auth/useNotesCount";
 import { avatarColor, avatarInitial } from "@/lib/reader/authorDisplay";
+import { useWebPush } from "@/lib/push/useWebPush";
+import Switch from "@/app/components/shell/Switch";
 
 function handleFor(name: string): string {
   return `@${name.toLowerCase().replace(/\s+/g, ".")}`;
@@ -57,6 +59,44 @@ function AccountInstallCard() {
       </button>
 
       <InstallModal open={modalOpen} onClose={() => setModalOpen(false)} />
+    </div>
+  );
+}
+
+/** A single row toggling browser/PWA push (reactions, replies, announcements).
+ * Works before login too — see lib/push/useWebPush.ts's comment on why
+ * subscribing doesn't require a reader session. */
+function NotificationsRow() {
+  const { supported, permission, subscribe, unsubscribe } = useWebPush();
+  const [pending, setPending] = useState(false);
+
+  if (!supported) return null;
+
+  const enabled = permission === "granted";
+  const onToggle = async (next: boolean) => {
+    setPending(true);
+    try {
+      if (next) await subscribe();
+      else await unsubscribe();
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="mb-5 flex items-center justify-between">
+      <span className="text-[13px] font-medium text-[var(--reader-text)]">
+        Notifications
+        {permission === "denied" && (
+          <span className="ml-1.5 text-[var(--reader-text-subtle)]">(blocked in browser)</span>
+        )}
+      </span>
+      <Switch
+        checked={enabled}
+        onChange={onToggle}
+        disabled={pending || permission === "denied"}
+        ariaLabel="Notifications"
+      />
     </div>
   );
 }
@@ -146,9 +186,11 @@ export default function AccountView() {
           </div>
 
           <div className="mb-5 flex items-center justify-between">
-            <span className="text-[13px] font-medium text-[var(--reader-text)]">Theme</span>
+            <span className="text-[13px] font-medium text-[var(--reader-text)]">Dark mode</span>
             <ThemeToggle />
           </div>
+
+          <NotificationsRow />
 
           <div className="mb-5 text-center">
             <button
@@ -191,9 +233,11 @@ export default function AccountView() {
           </div>
 
           <div className="mb-5 flex items-center justify-between">
-            <span className="text-[13px] font-medium text-[var(--reader-text)]">Theme</span>
+            <span className="text-[13px] font-medium text-[var(--reader-text)]">Dark mode</span>
             <ThemeToggle />
           </div>
+
+          <NotificationsRow />
 
           <AccountInstallCard />
 

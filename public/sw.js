@@ -50,3 +50,31 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// Payload shape is lib/push/send.ts's PushPayload — { title, body, url, tag? }.
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  const payload = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      tag: payload.tag,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: payload.url },
+    })
+  );
+});
+
+// Focuses an existing tab on that URL if one's open, otherwise opens a new one.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url ?? "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const existing = clients.find((client) => new URL(client.url).pathname === url);
+      if (existing) return existing.focus();
+      return self.clients.openWindow(url);
+    })
+  );
+});
