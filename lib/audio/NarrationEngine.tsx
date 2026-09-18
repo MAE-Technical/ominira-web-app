@@ -534,36 +534,60 @@ export default function NarrationEngine() {
       navigator.mediaSession.metadata = null;
       return;
     }
-    // Book covers are portrait (2:3-ish), not square — a fabricated square
-    // `sizes` hint (e.g. "512x512") mismatches the real image and iOS's
-    // lock-screen artwork loader silently gives up on it, rendering nothing
-    // rather than falling back or scaling. Loading the image once to read
-    // its actual naturalWidth/naturalHeight and reporting *that* as `sizes`
-    // is what gets it to actually render.
-    const coverType = book.metadata.cover.match(/\.png(?:\?|$)/i)
-      ? "image/png"
-      : book.metadata.cover.match(/\.webp(?:\?|$)/i)
-        ? "image/webp"
-        : "image/jpeg";
+    // Podcast-app convention: the chapter is the "episode" (title), the
+    // book is the "show" (artist) — matches how Apple Podcasts/Spotify
+    // split a two-line lock-screen label, and puts the book title on
+    // screen right alongside the chapter rather than only the author.
+    const title = audioSection?.title ?? book.metadata.title;
+    const artist = book.metadata.title;
+    const album = book.metadata.author;
+    // Set immediately, artwork-less — so title/artist/album show up (and
+    // stay showing) even if the artwork fetch below is slow or fails
+    // outright, rather than every field waiting on it.
+    navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album });
+
+    // iOS fetches MediaMetadata artwork itself, in a separate OS process —
+    // a remote-URL src has repeatedly failed to render (blank/gray) even
+    // with correct sizes/type, most likely something about that second,
+    // invisible fetch (a redirect, a header, a CDN quirk) that the page's
+    // own successful load of the same URL never surfaces. Fetching the
+    // image here instead and handing iOS a local `blob:` URL removes that
+    // fetch entirely — nothing left for the OS to trip on — and reports
+    // the artwork's *real* Content-Type instead of a guess from the URL's
+    // extension (which silently mismatches for a proxied/converted image).
     let cancelled = false;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      if (cancelled || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-      navigator.mediaSession.metadata = new MediaMetadata({
-        // Podcast-app convention: the chapter is the "episode" (title), the
-        // book is the "show" (artist) — matches how Apple Podcasts/Spotify
-        // split a two-line lock-screen label, and puts the book title on
-        // screen right alongside the chapter rather than only the author.
-        title: audioSection?.title ?? book.metadata.title,
-        artist: book.metadata.title,
-        album: book.metadata.author,
-        artwork: [{ src: book.metadata.cover, sizes: `${img.naturalWidth}x${img.naturalHeight}`, type: coverType }],
-      });
-    };
-    img.src = book.metadata.cover;
+    let objectUrl: string | null = null;
+    (async () => {
+      let blobUrl: string;
+      let type: string;
+      try {
+        const res = await fetch(book.metadata.cover);
+        const blob = await res.blob();
+        type = blob.type || "image/jpeg";
+        blobUrl = URL.createObjectURL(blob);
+      } catch {
+        return; // Offline/CORS-blocked fetch — no artwork this round, title/artist/album above still stand.
+      }
+      if (cancelled) {
+        URL.revokeObjectURL(blobUrl);
+        return;
+      }
+      objectUrl = blobUrl;
+      const img = new Image();
+      img.onload = () => {
+        if (cancelled || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title,
+          artist,
+          album,
+          artwork: [{ src: blobUrl, sizes: `${img.naturalWidth}x${img.naturalHeight}`, type }],
+        });
+      };
+      img.src = blobUrl;
+    })();
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [book, audioSection]);
 
