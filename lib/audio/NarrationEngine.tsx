@@ -572,7 +572,11 @@ export default function NarrationEngine() {
       img.onload = () => {
         URL.revokeObjectURL(sourceUrl);
         if (cancelled) return;
-        const SIZE = 512;
+        // 128 specifically — Safari 16.1-16.3.x's widely-reported artwork
+        // bug fails on larger images (512 only became reliable in iOS
+        // 17.1+); 128 is what people on this exact iOS 16.x window found
+        // actually renders.
+        const SIZE = 128;
         const canvas = document.createElement("canvas");
         canvas.width = SIZE;
         canvas.height = SIZE;
