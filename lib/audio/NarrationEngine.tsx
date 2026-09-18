@@ -546,15 +546,37 @@ export default function NarrationEngine() {
     // outright, rather than every field waiting on it.
     navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album });
 
-    // WebKit's lock-screen artwork is well-documented (Safari 16.1+,
-    // still true as of iOS 18) as only reliably rendering a single SQUARE
-    // image — it uses just the first `artwork` entry regardless of how
-    // many are given, and a non-square image (our covers are ~2:3
-    // portrait) renders as a blank/grey box rather than being cropped or
-    // letterboxed automatically. Center-cropping onto a square canvas
-    // before handing it to MediaMetadata is the standard workaround.
+    // WebKit's lock-screen artwork is well-documented (Safari 16.1+) as
+    // only reliably rendering a SQUARE image — a non-square one (our
+    // covers are ~2:3 portrait) renders as a blank/grey box instead of
+    // being cropped or letterboxed automatically. Confirmed on-device
+    // (iOS 16.7.16): that same bug window also caps out at small (128px)
+    // artwork — anything bigger renders blank there, while 17.1+/18
+    // handles large (512px) artwork fine. Rendering both onto letterboxed
+    // squares (object-fit: contain, not cover — a hard center-crop was
+    // chopping off a cover's title/author text near its top/bottom edges)
+    // and listing both sizes lets a modern device pick the sharp one while
+    // this exact older bug window still gets a working, if softer, image.
     let cancelled = false;
-    let objectUrl: string | null = null;
+    const objectUrls: string[] = [];
+    const squareLetterboxBlob = (img: HTMLImageElement, size: number): Promise<Blob | null> =>
+      new Promise((resolve) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, size, size);
+        const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight);
+        const dw = img.naturalWidth * scale;
+        const dh = img.naturalHeight * scale;
+        ctx.drawImage(img, (size - dw) / 2, (size - dh) / 2, dw, dh);
+        canvas.toBlob(resolve, "image/jpeg", 0.92);
+      });
     (async () => {
       let sourceUrl: string;
       try {
@@ -569,40 +591,29 @@ export default function NarrationEngine() {
         return;
       }
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         URL.revokeObjectURL(sourceUrl);
         if (cancelled) return;
-        // 128 specifically — Safari 16.1-16.3.x's widely-reported artwork
-        // bug fails on larger images (512 only became reliable in iOS
-        // 17.1+); 128 is what people on this exact iOS 16.x window found
-        // actually renders.
-        const SIZE = 128;
-        const canvas = document.createElement("canvas");
-        canvas.width = SIZE;
-        canvas.height = SIZE;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        // Cover-fit center crop, same math as CSS object-fit: cover.
-        const scale = Math.max(SIZE / img.naturalWidth, SIZE / img.naturalHeight);
-        const dw = img.naturalWidth * scale;
-        const dh = img.naturalHeight * scale;
-        ctx.drawImage(img, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
-        canvas.toBlob((squareBlob) => {
-          if (cancelled || !squareBlob || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-          objectUrl = URL.createObjectURL(squareBlob);
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title,
-            artist,
-            album,
-            artwork: [{ src: objectUrl, sizes: `${SIZE}x${SIZE}`, type: "image/jpeg" }],
+        const [small, large] = await Promise.all([squareLetterboxBlob(img, 128), squareLetterboxBlob(img, 512)]);
+        if (cancelled || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+        const artwork = [
+          small && { blob: small, sizes: "128x128" },
+          large && { blob: large, sizes: "512x512" },
+        ]
+          .filter((entry): entry is { blob: Blob; sizes: string } => Boolean(entry))
+          .map(({ blob, sizes }) => {
+            const src = URL.createObjectURL(blob);
+            objectUrls.push(src);
+            return { src, sizes, type: "image/jpeg" };
           });
-        }, "image/jpeg", 0.9);
+        if (artwork.length === 0) return;
+        navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album, artwork });
       };
       img.src = sourceUrl;
     })();
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
     };
   }, [book, audioSection]);
 
