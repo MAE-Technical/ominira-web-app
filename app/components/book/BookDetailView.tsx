@@ -13,6 +13,7 @@ import { useBookCommunityNotes } from "@/lib/materials/useBookCommunityNotes";
 import BookCover from "@/app/components/shared/BookCover";
 import { ReadingNowMetaItem, ReadingRoomModal } from "@/app/components/shared/CurrentReaders";
 import { resolveBookCoverSrc } from "@/lib/materials/image";
+import PulseDot from "@/app/components/shared/PulseDot";
 import BookNoteCard from "./BookNoteCard";
 import ShareButton from "./ShareButton";
 import ReaderLink from "../ReaderLink";
@@ -153,11 +154,7 @@ function OutlineTab({ material, currentSectionId }: { material: MaterialDetail; 
               >
                 {section.label}
               </span>
-              {isCurrent && (
-                <span className="flex-none rounded-full bg-brand-500/10 px-2 py-0.5 text-[11px] font-semibold text-brand-500">
-                  Reading
-                </span>
-              )}
+              {isCurrent && <PulseDot />}
               <ChevronRight
                 size={14}
                 className="flex-none text-[var(--reader-text-subtle)] transition-colors group-hover:text-[var(--reader-text-muted)] group-hover:translate-x-0.5"

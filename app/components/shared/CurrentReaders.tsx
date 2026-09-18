@@ -6,6 +6,7 @@ import { BookOpen, ChevronRight, Headphones } from "lucide-react";
 import { avatarColor, avatarInitial, comradeName } from "@/lib/reader/authorDisplay";
 import { pseudonymToSlug } from "@/lib/reader/profileSlug";
 import { formatTimeAgo } from "@/lib/reader/timeAgo";
+import PulseDot from "./PulseDot";
 
 type Reader = { readerId: string; pseudonym: string; audioTimeMs: number | null; updatedAt: string };
 type Props = { readers: Reader[]; totalCount: number };
@@ -41,7 +42,7 @@ export function PresenceLine({ readers, totalCount }: Props) {
 
   return (
     <div className="mt-0.5 flex items-center gap-1.5">
-      <span className="h-1.5 w-1.5 flex-none animate-pulse rounded-full bg-brand-500" />
+      <PulseDot />
       <span className="text-[11px] font-medium text-[var(--reader-text-muted)]">
         {totalCount} reading now
       </span>
@@ -68,7 +69,7 @@ export function ReadingNowMetaItem({ readers, totalCount, onOpen }: TriggerProps
       aria-haspopup="dialog"
       className="inline-flex cursor-pointer items-center gap-0.5 border-none bg-transparent p-0 font-medium text-[var(--reader-text-muted)] hover:text-[var(--reader-text)]"
     >
-      <span className="mr-1 h-1.5 w-1.5 flex-none animate-pulse rounded-full bg-brand-500" />
+      <PulseDot className="mr-1" />
       {totalCount} reading now
       <ChevronRight size={13} className="flex-none" />
     </button>

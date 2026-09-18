@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import AudioPlayer from "./AudioPlayer";
 import { useAudioStore } from "@/stores/audio-store";
 import { useNarrationStore } from "@/stores/narration-store";
-import { useReaderStore } from "@/stores/reader-store";
 import { useReaderOverlayStore } from "@/stores/reader-overlay-store";
 import { useLayoutStore } from "@/stores/layout-store";
 
@@ -36,7 +35,15 @@ export default function NowPlayingBar() {
   // theme-scoped div — without setting the attribute again here, those
   // variables would all resolve to nothing and the player would render
   // with no background/border/text color at all.
-  const theme = useReaderStore((s) => s.theme);
+  //
+  // Always forced to "dark" (never the reader's own light/dark toggle) —
+  // AppBottomNav and this bar were rendering in near-identical surface
+  // colors under the light theme, and on mobile (where they sit flush
+  // against each other with no gap) that made them visually merge into one
+  // strip. Dark theme's tokens are already black-surface/white-text
+  // (globals.css), so pinning to it gives a real black bg + near-white
+  // controls regardless of which theme the rest of the app is in, and
+  // costs nothing extra when the app happens to already be in dark theme.
   const book = useAudioStore((s) => s.book);
   const closePlayer = useAudioStore((s) => s.closePlayer);
   const setPlayerHeight = useAudioStore((s) => s.setPlayerHeight);
@@ -81,7 +88,11 @@ export default function NowPlayingBar() {
   // page, sidebar or not".
   const readerActive = isReaderPath(pathname);
   const bottomNavHeight = useLayoutStore((s) => s.bottomNavHeight);
-  const bottomOffset = readerActive ? 0 : bottomNavHeight;
+  // +6px whenever AppBottomNav is actually on screen — a hairline gap so
+  // the two bars read as separate surfaces rather than a seam, now that
+  // both are dark enough (this bar forced to dark theme, see above) that
+  // touching edges alone no longer made that obvious.
+  const bottomOffset = readerActive ? 0 : bottomNavHeight + (bottomNavHeight > 0 ? 6 : 0);
 
   // The reader's own notes/annotation-feed panel (desktop "side" variant)
   // is a plain flex sibling with no elevation of its own — without pulling
@@ -107,7 +118,7 @@ export default function NowPlayingBar() {
   return (
     <div
       ref={containerRef}
-      data-reader-theme={theme}
+      data-reader-theme="dark"
       className={`fixed left-0 right-0 z-50 ${hasSidebar ? "shell:left-[var(--app-sidebar-w)]" : ""} ${
         clearsReaderPanel ? "shell:right-95" : ""
       }`}

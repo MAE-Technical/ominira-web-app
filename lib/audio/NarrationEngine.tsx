@@ -447,7 +447,14 @@ export default function NarrationEngine() {
     // silently drop the reader back to 1x, or back to un-pitch-corrected
     // speed.
     setPlaybackRate(audio, useAudioStore.getState().speed);
-    if (activeSrc && useAudioStore.getState().isPlaying) audio.play().catch(() => {});
+    // Reverts the store's play intent on rejection (e.g. iOS refusing an
+    // autoplay-policy-gated resume) — otherwise isPlaying stays stuck at
+    // true even though the element never actually started, showing a
+    // pause icon that misrepresents silence until the user taps pause and
+    // play again.
+    if (activeSrc && useAudioStore.getState().isPlaying) {
+      audio.play().catch(() => useAudioStore.getState().pause());
+    }
   }, [activeSrc]);
 
   useEffect(() => {
@@ -478,7 +485,11 @@ export default function NarrationEngine() {
   useEffect(() => {
     const audio = audioElRef.current;
     if (!audio || !isNarrating) return;
-    if (audioPlaying) audio.play().catch(() => {});
+    // Same revert-on-rejection as the src-swap effect above — without it,
+    // a rejected play() (iOS in particular) leaves the store reporting
+    // "playing" while the element stays silent, so the play/pause icon and
+    // the lock-screen state both lie until the user retries the gesture.
+    if (audioPlaying) audio.play().catch(() => useAudioStore.getState().pause());
     else audio.pause();
   }, [isNarrating, audioPlaying]);
 
@@ -523,6 +534,15 @@ export default function NarrationEngine() {
       navigator.mediaSession.metadata = null;
       return;
     }
+    // iOS's lock-screen artwork silently no-ops on a single untyped/
+    // unsized entry — it picks the closest `sizes` match and needs `type`
+    // to accept the image at all, so the same cover URL is repeated across
+    // the sizes iOS actually probes for rather than left as one bare src.
+    const coverType = book.metadata.cover.match(/\.png(?:\?|$)/i)
+      ? "image/png"
+      : book.metadata.cover.match(/\.webp(?:\?|$)/i)
+        ? "image/webp"
+        : "image/jpeg";
     navigator.mediaSession.metadata = new MediaMetadata({
       // Matches NowPlayingBar's own chapterLabel fallback exactly, so the
       // lock screen and the in-app bar never disagree about what to call
@@ -530,7 +550,11 @@ export default function NarrationEngine() {
       title: audioSection?.title ?? book.metadata.title,
       artist: book.metadata.author,
       album: book.metadata.title,
-      artwork: [{ src: book.metadata.cover }],
+      artwork: [96, 128, 192, 256, 384, 512].map((size) => ({
+        src: book.metadata.cover,
+        sizes: `${size}x${size}`,
+        type: coverType,
+      })),
     });
   }, [book, audioSection]);
 

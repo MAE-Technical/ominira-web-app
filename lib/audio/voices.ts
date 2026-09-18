@@ -24,7 +24,7 @@ export const AFRICAN_VOICES: AfricanVoice[] = [
   { id: "en-NG-AbeoNeural", label: "Abeodun (Nigeria)", name: "Abeodun", country: "Nigeria", traits: "Deep · Measured", avatar: "/images/avatars/abeodun.png" },
   { id: "en-KE-AsiliaNeural", label: "Asilia (Kenya)", name: "Asilia", country: "Kenya", traits: "Clear · Intimate", avatar: "/images/avatars/asilia.png" },
   { id: "en-KE-ChilembaNeural", label: "Chilemba (Kenya)", name: "Chilemba", country: "Kenya", traits: "Calm · Steady", avatar: "/images/avatars/chilemba.png" },
-  { id: "en-NG-EzinneNeural", label: "Ezinne (Nigeria)", name: "Ezinne", country: "Nigeria", traits: "Warm · Expressive", avatar: "/images/avatars/ezinne.png" },
+  { id: "en-NG-EzinneNeural", label: "Ezinne (Nigeria)", name: "Chidinma", country: "Nigeria", traits: "Warm · Expressive", avatar: "/images/avatars/ezinne.png" },
   { id: "en-ZA-LukeNeural", label: "Xuma (South Africa)", name: "Xuma", country: "South Africa", traits: "Rich · Calm", avatar: "/images/avatars/xuma.png" },
 ];
 

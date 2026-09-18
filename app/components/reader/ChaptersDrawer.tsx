@@ -5,6 +5,7 @@ import type { BookDocument } from "@/lib/book/schema";
 import { buildOutlineRows } from "@/lib/reader/outline";
 import { sectionLabel } from "@/lib/reader/sectionHeading";
 import PanelShell from "./notes/PanelShell";
+import PulseDot from "@/app/components/shared/PulseDot";
 
 type Props = {
   book: BookDocument;
@@ -134,6 +135,7 @@ export default function ChaptersDrawer({
                     }`
               }
             >
+              {isCurrent && !isGroup && <PulseDot className="mr-2" />}
               <span
                 className={
                   isGroup

@@ -55,8 +55,14 @@ export default function AppBottomNav() {
   return (
     <nav
       ref={navRef}
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      className="shell:hidden fixed left-0 right-0 bottom-0 z-40 flex items-stretch select-none no-callout border-t border-[var(--reader-border)] bg-[var(--reader-surface)]/85 backdrop-blur-xl backdrop-saturate-150"
+      // isolate + its own compositor layer (translateZ/will-change) keeps
+      // this bar's backdrop-blur from getting corrupted by other fixed-
+      // position layers (e.g. the notes panel's z-[70] sheet) repainting
+      // during scroll — iOS Safari otherwise briefly lets whatever's under
+      // that other layer (a card's cover image) show through this one's
+      // blur instead of this bar's own surface color.
+      style={{ paddingBottom: "env(safe-area-inset-bottom)", transform: "translateZ(0)", willChange: "transform" }}
+      className="shell:hidden fixed left-0 right-0 bottom-0 z-40 isolate flex items-stretch select-none no-callout border-t border-[var(--reader-border)] bg-[var(--reader-surface)]/85 backdrop-blur-xl backdrop-saturate-150"
     >
       {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
