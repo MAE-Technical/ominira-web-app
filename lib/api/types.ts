@@ -111,6 +111,8 @@ export type TocSection = {
   narratorIds?: string[];
 };
 
+export type ReaderAgeRange = "13_17" | "18_24" | "25_34" | "35_44" | "45_54" | "55_64" | "65_plus";
+
 export type ReaderProfile = {
   id: string;
   email: string;
@@ -120,6 +122,10 @@ export type ReaderProfile = {
   country: string | null;
   interests: string[];
   surveyReadMaterialIds: string[];
+  /** Optional — the survey lets a reader skip demographic questions entirely. */
+  ageRange: ReaderAgeRange | null;
+  /** Free text, capped at 40 chars — no fixed list of options (lib/auth/profile.ts). */
+  genderIdentity: string | null;
   onboardingStatus: "pending_survey" | "pending_welcome" | "active";
   joinedAt: string;
   updatedAt: string;

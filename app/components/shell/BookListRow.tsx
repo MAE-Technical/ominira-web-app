@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Headphones } from "lucide-react";
+import { Check, Headphones } from "lucide-react";
 import { useReadingPositionStore } from "@/stores/reading-position-store";
 import type { MaterialSummary } from "@/lib/api/types";
 import BookCover from "@/app/components/shared/BookCover";
 import { PresenceLine } from "@/app/components/shared/CurrentReaders";
-import { resolveBookThumbnailSrc } from "@/lib/materials/image";
+import { resolveBookCoverSrc, resolveBookThumbnailSrc } from "@/lib/materials/image";
 import ReaderLink from "@/app/components/ReaderLink";
 
 /**
@@ -39,6 +39,7 @@ import ReaderLink from "@/app/components/ReaderLink";
 export default function BookListRow({
   material,
   resumeTarget,
+  selection,
 }: {
   material: MaterialSummary;
   /** Reading page only (ReadingView) — every row there is already this
@@ -52,9 +53,16 @@ export default function BookListRow({
    * page's blurb/outline/CTA is still the right landing spot, most of them
    * not even started yet. */
   resumeTarget?: { sectionId: string; passageIndex: number; audioTimeMs?: number | null };
+  /** SurveyWizard's "which of these have you read?" step only — renders this
+   * row as a toggleable checkbox tile instead of a navigating link, and
+   * skips resumeTarget/progress/presence entirely (irrelevant to "have you
+   * ever read this", and this step runs before there's even an authenticated
+   * reader for reading-position-store to have anything for). Mutually
+   * exclusive with resumeTarget. */
+  selection?: { selected: boolean; onToggle: () => void };
 }) {
   const pct = Math.round(useReadingPositionStore((s) => s.progressPercentByMaterial[material.id] ?? 0));
-  const showProgress = pct > 0;
+  const showProgress = !selection && pct > 0;
   // `audioTimeMs` set on this row's own reader_activities entry means this
   // reader's last activity on the book was listening, not reading (see
   // BookDetailView's lastModeWasListen for the same read on the client-side
@@ -65,12 +73,22 @@ export default function BookListRow({
   const href = resumeTarget
     ? `/read/${material.slug}?section=${resumeTarget.sectionId}&passageIndex=${resumeTarget.passageIndex}${wasListening ? "&listen=1" : ""}`
     : `/book/${material.slug}`;
-  const className = "group flex min-w-0 gap-4 border-b border-[var(--reader-border)] py-4 no-underline";
+  const className = `group flex min-w-0 gap-4 border-b border-[var(--reader-border)] py-4 no-underline ${
+    selection ? `cursor-pointer rounded-xs px-2 text-left transition-colors ${selection.selected ? "bg-brand-50/40" : ""}` : ""
+  }`;
 
   const content = (
     <>
       <div className="relative h-28 w-20 flex-none overflow-hidden rounded-xs">
-        <BookCover src={resolveBookThumbnailSrc(material)} alt={material.title} className="h-full w-full" iconSize={22} />
+        {/* Selection mode (SurveyWizard) asks for the widest-variant cover,
+            not the compact-list thumbnail every other row here uses — this
+            tile is the main thing on the screen, not a dense list item. */}
+        <BookCover
+          src={selection ? resolveBookCoverSrc(material) : resolveBookThumbnailSrc(material)}
+          alt={material.title}
+          className="h-full w-full"
+          iconSize={22}
+        />
         <div className="absolute inset-0 bg-[rgba(190,64,13,0.16)] mix-blend-multiply" />
       </div>
 
@@ -96,10 +114,31 @@ export default function BookListRow({
             {wasListening && <Headphones size={12} className="flex-none text-[var(--reader-text-subtle)]" />}
           </div>
         )}
-        <PresenceLine readers={material.currentReaders} totalCount={material.currentReaderCount} />
+        {!selection && <PresenceLine readers={material.currentReaders} totalCount={material.currentReaderCount} />}
       </div>
+
+      {selection && (
+        <div
+          aria-hidden="true"
+          className={`flex h-6 w-6 flex-none items-center justify-center self-center rounded-full border-2 transition-colors ${
+            selection.selected
+              ? "border-brand-500 bg-brand-500"
+              : "border-[var(--reader-border)] bg-[var(--reader-surface)]"
+          }`}
+        >
+          {selection.selected && <Check size={14} strokeWidth={3} className="text-white" />}
+        </div>
+      )}
     </>
   );
+
+  if (selection) {
+    return (
+      <button type="button" onClick={selection.onToggle} className={className}>
+        {content}
+      </button>
+    );
+  }
 
   // ReaderLink (a plain <a>, never next/link's <Link>) once this is headed
   // into /read/[slug] — the (.)read/[slug] modal interception fires for ANY

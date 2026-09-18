@@ -18,6 +18,7 @@ export default function PillGroup<T extends string>({
   selected,
   onSelect,
   scroll = false,
+  size = "md",
 }: {
   options: PillOption<T>[];
   /** A single value for one-of-many pickers (the default everywhere else
@@ -29,6 +30,11 @@ export default function PillGroup<T extends string>({
    * needs for an open-ended list of categories — omit (the default) for a
    * small, fixed set of options that should just sit inline on one row. */
   scroll?: boolean;
+  /** "lg" for a standalone picker that's the main thing on the screen (e.g.
+   * SurveyWizard's interest/age-range steps) — omit (the default "md") for
+   * a pill row that's secondary chrome next to other content, matching every
+   * other call site's existing size. */
+  size?: "md" | "lg";
 }) {
   const selectedSet = Array.isArray(selected) ? new Set(selected) : null;
   return (
@@ -45,7 +51,9 @@ export default function PillGroup<T extends string>({
           <button
             key={opt.value}
             onClick={() => onSelect(opt.value)}
-            className={`flex-none whitespace-nowrap rounded-sm border px-3 py-1 text-xs font-semibold cursor-pointer overflow-hidden transition-colors ${
+            className={`flex-none whitespace-nowrap rounded-sm border font-bold cursor-pointer overflow-hidden transition-colors ${
+              size === "lg" ? "px-4 py-2 text-[12px]" : "px-3 py-1 text-xs"
+            } ${
               active
                 ? "border-brand-500 bg-brand-500 text-white"
                 : "border-[var(--reader-border)] bg-[var(--reader-surface)] text-[var(--reader-text-muted)] hover:bg-[var(--reader-surface-hover)]"

@@ -28,6 +28,8 @@ export type Database = {
           country: string | null;
           interests: Json;
           survey_read_material_ids: Json;
+          age_range: "13_17" | "18_24" | "25_34" | "35_44" | "45_54" | "55_64" | "65_plus" | null;
+          gender_identity: string | null;
           onboarding_status: "pending_survey" | "pending_welcome" | "active";
           joined_at: string;
           updated_at: string;
@@ -41,6 +43,8 @@ export type Database = {
           country?: string | null;
           interests?: Json;
           survey_read_material_ids?: Json;
+          age_range?: "13_17" | "18_24" | "25_34" | "35_44" | "45_54" | "55_64" | "65_plus" | null;
+          gender_identity?: string | null;
           onboarding_status?: "pending_survey" | "pending_welcome" | "active";
           joined_at?: string;
           updated_at?: string;

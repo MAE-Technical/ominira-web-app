@@ -6,13 +6,25 @@ import Wordmark from "./Wordmark";
 import AuthButton from "./AuthButton";
 import BackArrow from "./BackArrow";
 import PillGroup from "@/app/components/PillGroup";
+import TextField from "@/app/components/auth/TextField";
 import type { MaterialSummary } from "@/lib/api/types";
-import BookCover from "@/app/components/shared/BookCover";
-import { resolveBookThumbnailSrc } from "@/lib/materials/image";
+import BookListRow from "@/app/components/shell/BookListRow";
 import { useSurveySubmit } from "@/lib/auth/useSurveySubmit";
 import { onboardingRoute } from "@/lib/auth/onboardingRoute";
+import type { ReaderAgeRange } from "@/lib/api/types";
 
-const TOTAL_STEPS = 2;
+const TOTAL_STEPS = 3;
+const GENDER_IDENTITY_MAX_LENGTH = 40;
+
+const AGE_RANGE_OPTIONS: { value: ReaderAgeRange; label: string }[] = [
+  { value: "13_17", label: "13–17" },
+  { value: "18_24", label: "18–24" },
+  { value: "25_34", label: "25–34" },
+  { value: "35_44", label: "35–44" },
+  { value: "45_54", label: "45–54" },
+  { value: "55_64", label: "55–64" },
+  { value: "65_plus", label: "65+" },
+];
 
 type Props = {
   materials: MaterialSummary[];
@@ -24,6 +36,8 @@ export default function SurveyWizard({ materials, categories }: Props) {
   const [step, setStep] = useState(0);
   const [readMaterialIds, setReadMaterialIds] = useState<Set<string>>(new Set());
   const [interests, setInterests] = useState<Set<string>>(new Set());
+  const [ageRange, setAgeRange] = useState<ReaderAgeRange | null>(null);
+  const [genderIdentity, setGenderIdentity] = useState("");
   const survey = useSurveySubmit();
 
   const toggleRead = (materialId: string) =>
@@ -42,20 +56,25 @@ export default function SurveyWizard({ materials, categories }: Props) {
     });
 
   const goNext = () => {
-    if (step === 1) {
+    if (step === 2) {
       survey.mutate(
-        { interests: Array.from(interests), readMaterialIds: Array.from(readMaterialIds) },
+        {
+          interests: Array.from(interests),
+          readMaterialIds: Array.from(readMaterialIds),
+          ageRange,
+          genderIdentity: genderIdentity.trim() || null,
+        },
         { onSuccess: ({ reader }) => router.push(onboardingRoute(reader)) }
       );
     } else {
-      setStep(1);
+      setStep((s) => s + 1);
     }
   };
   const goBack = () => {
     if (step === 0) {
       router.back();
     } else {
-      setStep(0);
+      setStep((s) => s - 1);
     }
   };
 
@@ -83,40 +102,47 @@ export default function SurveyWizard({ materials, categories }: Props) {
               You can choose as many as you&rsquo;ve read or none if you haven&rsquo;t read any.
             </p>
 
-            <div className="om-scroll mt-6 max-h-[50vh] overflow-y-auto pr-1">
-              <div className="flex flex-col gap-3">
-                {materials.map((material) => {
-                  const checked = readMaterialIds.has(material.id);
-                  return (
-                    <label
-                      key={material.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-sm border p-3 transition-colors ${
-                        checked ? "border-brand-400 bg-brand-50/40" : "border-sand-300"
-                      }`}
-                    >
-                      <BookCover
-                        src={resolveBookThumbnailSrc(material)}
-                        alt=""
-                        className="h-14 w-10 flex-none rounded-sm"
-                        imageClassName="object-cover"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-serif text-[15px] font-semibold text-[var(--reader-text)]">
-                          {material.title}
-                        </div>
-                        <div className="truncate text-xs text-[var(--reader-text-muted)]">{material.author}</div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleRead(material.id)}
-                        className="h-5 w-5 flex-none accent-brand-500"
-                      />
-                    </label>
-                  );
-                })}
+            <div className="om-scroll mt-6 max-h-[60vh] overflow-y-auto pr-1">
+              {/* Same 2-column grid as LibraryView's own catalogue listing —
+                  this is deliberately the library's own book row, made
+                  selectable, not a bespoke checklist look. */}
+              <div className="grid grid-cols-1 gap-x-6 shell:grid-cols-2">
+                {materials.map((material) => (
+                  <BookListRow
+                    key={material.id}
+                    material={material}
+                    selection={{
+                      selected: readMaterialIds.has(material.id),
+                      onToggle: () => toggleRead(material.id),
+                    }}
+                  />
+                ))}
               </div>
             </div>
+            <div className="mt-8 flex justify-center">
+              <AuthButton className="shell:w-60 shell:px-10" onClick={goNext}>
+                Continue
+              </AuthButton>
+            </div>
+          </div>
+        ) : step === 1 ? (
+          <div>
+            <h1 className="font-serif text-3xl leading-tight font-semibold text-[var(--reader-text)]">
+              What are you interested in?
+            </h1>
+            <p className="mt-3 font-literata text-[14px] text-[var(--reader-text-muted)]">
+              Select the categories you&rsquo;re most interested in.
+            </p>
+
+            <div className="mt-6">
+              <PillGroup
+                options={categories.map((category) => ({ value: category, label: category }))}
+                selected={Array.from(interests)}
+                onSelect={toggleInterest}
+                size="lg"
+              />
+            </div>
+
             <div className="mt-8 flex justify-center">
               <AuthButton className="shell:w-60 shell:px-10" onClick={goNext}>
                 Continue
@@ -126,24 +152,58 @@ export default function SurveyWizard({ materials, categories }: Props) {
         ) : (
           <div>
             <h1 className="font-serif text-3xl leading-tight font-semibold text-[var(--reader-text)]">
-              What are you interested in reading?
+              Tell us your age and gender?
             </h1>
             <p className="mt-3 font-literata text-[14px] text-[var(--reader-text-muted)]">
-              Select the categories you&rsquo;re most interested in.
+              Optional and anonymous. Skip anything you&rsquo;d rather not say.
             </p>
 
             <div className="mt-6">
-              <PillGroup options={categories.map((category) => ({ value: category, label: category }))} selected={Array.from(interests)} onSelect={toggleInterest} />
+              <div className="text-xs font-semibold tracking-[0.05em] text-[var(--reader-text-muted)] uppercase">
+                Age range <span className="font-normal normal-case text-[var(--reader-text-subtle)]">(optional)</span>
+              </div>
+              <div className="mt-2">
+                <PillGroup
+                  options={AGE_RANGE_OPTIONS}
+                  selected={ageRange ?? ""}
+                  onSelect={(value) => setAgeRange((prev) => (prev === value ? null : (value as ReaderAgeRange)))}
+                  size="lg"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <TextField
+                label="What do you identify as? (optional)"
+                placeholder="In your own words, or leave blank"
+                value={genderIdentity}
+                onChange={(e) => setGenderIdentity(e.target.value)}
+                maxLength={GENDER_IDENTITY_MAX_LENGTH}
+                hint={`${genderIdentity.length}/${GENDER_IDENTITY_MAX_LENGTH}`}
+              />
             </div>
 
             {survey.error && (
               <p className="mt-4 text-center text-[13px] font-medium text-red-500">{survey.error.message}</p>
             )}
 
-            <div className="mt-6 flex justify-center">
+            <div className="mt-8 flex flex-col items-center gap-3">
               <AuthButton className="shell:w-60 shell:px-10" onClick={goNext} disabled={survey.isPending}>
                 {survey.isPending ? "Saving…" : "Continue"}
               </AuthButton>
+              {(ageRange || genderIdentity) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgeRange(null);
+                    setGenderIdentity("");
+                  }}
+                  disabled={survey.isPending}
+                  className="cursor-pointer border-none bg-transparent p-0 text-[13px] font-medium text-[var(--reader-text-muted)] underline decoration-dotted underline-offset-4 hover:text-[var(--reader-text)]"
+                >
+                  Clear and skip this
+                </button>
+              )}
             </div>
           </div>
         )}

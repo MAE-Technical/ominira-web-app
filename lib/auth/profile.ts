@@ -15,6 +15,8 @@ export function toReaderProfile(row: ReaderRow): ReaderProfile {
     country: row.country,
     interests: (row.interests as string[] | null) ?? [],
     surveyReadMaterialIds: (row.survey_read_material_ids as string[] | null) ?? [],
+    ageRange: row.age_range,
+    genderIdentity: row.gender_identity,
     onboardingStatus: row.onboarding_status,
     joinedAt: row.joined_at,
     updatedAt: row.updated_at,

@@ -21,9 +21,9 @@ export const AFRICAN_VOICES: AfricanVoice[] = [
   { id: "en-ZA-LeahNeural", label: "Leah (South Africa)", name: "Leah", country: "South Africa", traits: "Warm · Grounded", avatar: "/images/avatars/leah.png" },
   { id: "en-TZ-ElimuNeural", label: "Elimu (Tanzania)", name: "Elimu", country: "Tanzania", traits: "Clear · Confident", avatar: "/images/avatars/elimu.png" },
   { id: "en-TZ-ImaniNeural", label: "Imani (Tanzania)", name: "Imani", country: "Tanzania", traits: "Gentle · Encouraging", avatar: "/images/avatars/imani.png" },
-  { id: "en-NG-AbeoNeural", label: "Abeodun (Nigeria)", name: "Abeodun", country: "Nigeria", traits: "Deep · Measured", avatar: "/images/avatars/abeodun.png" },
+  { id: "en-NG-AbeoNeural", label: "Abeodun (Nigeria)", name: "Abiodun", country: "Nigeria", traits: "Deep · Measured", avatar: "/images/avatars/abeodun.png" },
   { id: "en-KE-AsiliaNeural", label: "Asilia (Kenya)", name: "Asilia", country: "Kenya", traits: "Clear · Intimate", avatar: "/images/avatars/asilia.png" },
-  { id: "en-KE-ChilembaNeural", label: "Chilemba (Kenya)", name: "Chilemba", country: "Kenya", traits: "Calm · Steady", avatar: "/images/avatars/chilemba.png" },
+  { id: "en-KE-ChilembaNeural", label: "Chilemba (Kenya)", name: "Sadiku", country: "Kenya", traits: "Calm · Steady", avatar: "/images/avatars/chilemba.png" },
   { id: "en-NG-EzinneNeural", label: "Ezinne (Nigeria)", name: "Chidinma", country: "Nigeria", traits: "Warm · Expressive", avatar: "/images/avatars/ezinne.png" },
   { id: "en-ZA-LukeNeural", label: "Xuma (South Africa)", name: "Xuma", country: "South Africa", traits: "Rich · Calm", avatar: "/images/avatars/xuma.png" },
 ];
