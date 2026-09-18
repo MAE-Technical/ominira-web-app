@@ -1,29 +1,14 @@
-import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Reader from "@/app/components/reader/Reader";
-import { getBookDocumentFromMaterial, MaterialNotFoundError } from "@/lib/materials/toBookDocument";
-import { getMaterialDetail } from "@/lib/materials/detail";
-import { PLATFORM_NAME } from "@/lib/config/platform";
+import { readerPageMetadata, loadReaderPageBook } from "@/lib/reader/readerPageData";
 
-// Deliberately uses the cheap DB-only getMaterialDetail rather than
-// getBookDocumentFromMaterial (which pulls the full Section[] tree,
-// including a Storage read for every passage) — a <title>/description tag
-// only ever needs metadata, never the book's actual text.
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  let material;
-  try {
-    material = await getMaterialDetail(slug);
-  } catch {
-    return { title: "Book not found" };
-  }
-  const { title, author, description } = material;
-  const desc = description || `${title} by ${author} — read or listen on ${PLATFORM_NAME}.`;
-  return { title, description: desc };
+  return readerPageMetadata(slug);
 }
 
 export default async function ReadBookPage({
@@ -43,25 +28,18 @@ export default async function ReadBookPage({
   // this reader's real reader_activities row — see useResumeScroll's own
   // doc comment for why the URL, not this device's local mirror, is what
   // that button hands off.
-  // ?listen=1 — set by the book-detail page's own Listen button, which now
-  // reaches this page via a real navigation (see its own hardNavigate
-  // comment) rather than the router.push+openBook() it used when this was
-  // a soft one — this is how it hands that intent off instead.
+  // ?listen=1 — set by the book-detail page's own Listen button (via
+  // ReaderLink, which actually lands on app/reader/[slug] today — see that
+  // route's own doc comment) rather than the router.push+openBook() it used
+  // when this was a soft one — this is how it hands that intent off
+  // instead. This route (app/read/[slug]) keeps the same searchParams shape
+  // purely so a shared/bookmarked /read/[slug]?listen=1 link still works.
   searchParams: Promise<{ section?: string; passage?: string; passageIndex?: string; note?: string; listen?: string }>;
 }) {
   const { slug } = await params;
   const { section, passage, passageIndex, note, listen } = await searchParams;
 
-  let book, materialId, eagerSectionIds;
-  try {
-    ({ book, materialId, eagerSectionIds } = await getBookDocumentFromMaterial(slug, { eagerSectionId: section }));
-  } catch (err) {
-    if (err instanceof MaterialNotFoundError) {
-      notFound();
-    }
-    // Schema/parse errors and anything unexpected surface through error.tsx
-    throw err;
-  }
+  const { book, materialId, eagerSectionIds } = await loadReaderPageBook(slug, section);
   return (
     <Reader
       book={book}

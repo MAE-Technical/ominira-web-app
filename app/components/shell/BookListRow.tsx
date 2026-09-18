@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Headphones } from "lucide-react";
 import { useReadingPositionStore } from "@/stores/reading-position-store";
 import type { MaterialSummary } from "@/lib/api/types";
 import BookCover from "@/app/components/shared/BookCover";
@@ -50,12 +51,19 @@ export default function BookListRow({
    * Library catalogue) — those rows are for *browsing*, where the detail
    * page's blurb/outline/CTA is still the right landing spot, most of them
    * not even started yet. */
-  resumeTarget?: { sectionId: string; passageIndex: number };
+  resumeTarget?: { sectionId: string; passageIndex: number; audioTimeMs?: number | null };
 }) {
   const pct = Math.round(useReadingPositionStore((s) => s.progressPercentByMaterial[material.id] ?? 0));
   const showProgress = pct > 0;
+  // `audioTimeMs` set on this row's own reader_activities entry means this
+  // reader's last activity on the book was listening, not reading (see
+  // BookDetailView's lastModeWasListen for the same read on the client-side
+  // mirror) — carried through as `listen=1` so the row's click genuinely
+  // resumes the same way "Continue listening" on the book-detail page
+  // would, instead of always dropping a listening reader back into text.
+  const wasListening = resumeTarget?.audioTimeMs != null;
   const href = resumeTarget
-    ? `/read/${material.slug}?section=${resumeTarget.sectionId}&passageIndex=${resumeTarget.passageIndex}`
+    ? `/read/${material.slug}?section=${resumeTarget.sectionId}&passageIndex=${resumeTarget.passageIndex}${wasListening ? "&listen=1" : ""}`
     : `/book/${material.slug}`;
   const className = "group flex min-w-0 gap-4 border-b border-[var(--reader-border)] py-4 no-underline";
 
@@ -81,6 +89,11 @@ export default function BookListRow({
             <span className="h-1 max-w-[160px] flex-1 overflow-hidden rounded-full bg-[var(--reader-border)]">
               <span className="block h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
             </span>
+            {/* One shared bar either way (see wasListening above) — this icon
+                is the only thing on the row that says which door clicking it
+                reopens, without needing a second, listen-specific progress
+                readout next to the reading one. */}
+            {wasListening && <Headphones size={12} className="flex-none text-[var(--reader-text-subtle)]" />}
           </div>
         )}
         <PresenceLine readers={material.currentReaders} totalCount={material.currentReaderCount} />

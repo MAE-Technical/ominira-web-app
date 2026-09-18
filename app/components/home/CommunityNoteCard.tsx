@@ -29,7 +29,7 @@ export default function CommunityNoteCard({ item }: { item: CommunityFeedItem })
   const expanded = expandedIds.has(item.note.id);
 
   return (
-    <div className="rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] p-5">
+    <div className="rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] px-3 py-4 sm:p-5">
       <NoteThreadCard
         header={<NoteBookHeader item={item} />}
         quote={item.excerpt}

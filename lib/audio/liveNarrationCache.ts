@@ -99,8 +99,20 @@ function keyOf(bookSlug: string, passageId: string, chunkIndex: number, voice: s
   return `${bookSlug}#${passageId}#${chunkIndex}#${voice}`;
 }
 
+// Snapshotted with Array.from before iterating — a listener (narrationQueue's
+// own `fill`, in practice) that synchronously unsubscribes and resubscribes
+// itself to this *same* key while being called here (its ordinary
+// clearWatch-then-subscribeClip cycle, whenever the target it's watching
+// hasn't actually settled yet) mutates `listeners.get(key)` mid-iteration.
+// A live `for...of` over the Set itself keeps visiting that re-added entry
+// forever — a real, observed infinite synchronous loop (confirmed via a V8
+// --prof capture showing >100M consecutive calls into this exact function,
+// with zero further network activity and the tab fully hung) — since the
+// Set spec has a re-inserted value re-enter a still-open iterator. Iterating
+// a plain array copy instead means later mutations to the live Set can never
+// affect this call's own walk.
 function notify(key: string) {
-  for (const l of listeners.get(key) ?? []) l();
+  for (const l of Array.from(listeners.get(key) ?? [])) l();
 }
 
 function touch(key: string) {

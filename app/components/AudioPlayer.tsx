@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Loader2, Mic, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, X } from "lucide-react";
 import { useAudioStore } from "@/stores/audio-store";
 import Tooltip from "./reader/Tooltip";
 import { formatDuration } from "@/utils/text";
 import { AFRICAN_VOICES } from "@/lib/audio/voices";
+import VoiceChangeModal from "./VoiceChangeModal";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
@@ -87,7 +88,7 @@ function SpeedMenu({
       ) : (
         <div className="absolute bottom-[calc(100%+14px)] left-1/2 -translate-x-1/2 min-w-34 p-2.5 rounded-lg bg-[var(--reader-surface)] border border-[var(--reader-border)] shadow-lg z-20">
           <div className="text-[10px] font-bold tracking-wide uppercase text-[var(--reader-text-muted)] px-2.5 pt-0.5 pb-2">
-            Speed
+            Playback Speed
           </div>
           <div className="flex flex-col gap-0.5">
             {SPEEDS.map((s) => {
@@ -108,52 +109,6 @@ function SpeedMenu({
           </div>
         </div>
       )}
-    </>
-  );
-}
-
-/** A voice's short display name — its own given name, without the "(Country)"
- * suffix AFRICAN_VOICES' full label carries — for wherever space is tight
- * (the trigger button itself; the menu still shows the full label). */
-function shortVoiceLabel(label: string): string {
-  return label.split(" (")[0];
-}
-
-function VoiceMenu({
-  voice,
-  onSelect,
-  onClose,
-}: {
-  voice: string;
-  onSelect: (voiceId: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <>
-      <div onClick={onClose} className="fixed inset-0 z-19" />
-      <div className="absolute bottom-[calc(100%+14px)] left-1/2 -translate-x-1/2 min-w-40 p-2.5 rounded-lg bg-[var(--reader-surface)] border border-[var(--reader-border)] shadow-lg z-20">
-
-        <div className="text-[10px] font-bold tracking-wide uppercase text-[var(--reader-text-muted)] px-2.5 pt-0.5 pb-2">
-          Voice
-        </div>
-        <div className="flex flex-col gap-0.5">
-          {AFRICAN_VOICES.map((v) => {
-            const active = v.id === voice;
-            return (
-              <button
-                key={v.id}
-                onClick={() => onSelect(v.id)}
-                className={`flex items-center justify-between border-none cursor-pointer rounded-sm py-2 px-3.5 text-[13px] font-medium whitespace-nowrap ${
-                  active ? "bg-brand-500/10 text-brand-500 font-semibold" : "bg-transparent text-[var(--reader-text)]"
-                }`}
-              >
-                {v.label}
-                {active && <Check size={13} className="flex-none ml-2" />}
-              </button>
-            );
-          })}
-        </div>
-      </div>
     </>
   );
 }
@@ -223,16 +178,28 @@ export default function AudioPlayer({
     </Tooltip>
   );
 
-  const currentVoiceLabel = AFRICAN_VOICES.find((v) => v.id === voice)?.label ?? AFRICAN_VOICES[0].label;
-  const voiceTrigger = (
+  const activeVoice = AFRICAN_VOICES.find((v) => v.id === voice) ?? AFRICAN_VOICES[0];
+
+  // Narrator identity strip — avatar, given name, and voice traits, doubling
+  // as the "change voice" trigger (opens VoiceChangeModal). Shown in both
+  // the desktop and mobile full-player layouts (not the mini bar, which has
+  // no room for more than an icon).
+  const narratorStrip = (
     <Tooltip label="Narrator voice" side="top">
       <button
-        onClick={() => setVoiceMenuOpen((o) => !o)}
-        className="flex items-center gap-1 border-none cursor-pointer rounded-sm py-1.25 px-2.5 text-xs font-semibold bg-[var(--reader-surface-hover)] text-[var(--reader-text-muted)] flex-none whitespace-nowrap"
+        onClick={() => setVoiceMenuOpen(true)}
+        className="flex items-center gap-2 min-w-0 border-none bg-transparent p-0 cursor-pointer"
       >
-        <Mic size={12} className="flex-none" />
-        {isMini ? null : shortVoiceLabel(currentVoiceLabel)}
-        <ChevronDown size={12} className="flex-none" />
+        <img src={activeVoice.avatar} alt={activeVoice.name} className="h-11 w-11 flex-none rounded-full object-cover" />
+        <div className="min-w-0 leading-tight text-left">
+          <div className="text-xs font-semibold text-[var(--reader-text)] whitespace-nowrap overflow-hidden text-ellipsis">
+            {activeVoice.name}
+          </div>
+          <div className="text-[10.5px] font-medium text-[var(--reader-text-muted)] whitespace-nowrap overflow-hidden text-ellipsis">
+            Narrating · {activeVoice.traits}
+          </div>
+        </div>
+        <ChevronDown size={12} className="flex-none text-[var(--reader-text-muted)]" />
       </button>
     </Tooltip>
   );
@@ -367,31 +334,19 @@ export default function AudioPlayer({
 
       {isMobile ? (
         <>
-          <div className="flex items-center gap-2.5 px-3.5 pt-2.5 pb-3">
+          <div className="flex items-center gap-2.5 px-3.5 pt-4 pb-3">
             {coverAndMeta}
             {closeBtn}
           </div>
-          <div className="flex items-center justify-between px-3.5 pb-2.5">
+          <div className="flex items-center justify-center gap-5 px-3.5 pb-3.5">
             {skipPrevBtn}
-            {showsDuration && back15Btn}
+            {back15Btn}
             {playBtn}
-            {showsDuration && forward15Btn}
+            {forward15Btn}
             {skipNextBtn}
           </div>
-          <div className="flex items-center justify-center gap-2 pb-3">
-            <div className="relative">
-              {voiceTrigger}
-              {voiceMenuOpen && (
-                <VoiceMenu
-                  voice={voice}
-                  onSelect={(v) => {
-                    setVoice(v);
-                    setVoiceMenuOpen(false);
-                  }}
-                  onClose={() => setVoiceMenuOpen(false)}
-                />
-              )}
-            </div>
+          <div className="flex items-center justify-center gap-6 pb-4">
+            <div className="relative">{narratorStrip}</div>
             <div className="relative">
               {speedTrigger}
               {speedMenuOpen && (
@@ -416,27 +371,17 @@ export default function AudioPlayer({
         // usually the *only* child, so its own padding alone decided
         // where the whole bar's content sat, and 4px top vs 14px bottom
         // pushed everything visibly toward the top.
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 py-2.5">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-8 px-6 py-3">
           {coverAndMeta}
-          <div className="flex items-center gap-3">
-            {skipPrevBtn}
-            {showsDuration && back15Btn}
-            {playBtn}
-            {showsDuration && forward15Btn}
-            {skipNextBtn}
-            <div className="relative ml-1">
-              {voiceTrigger}
-              {voiceMenuOpen && (
-                <VoiceMenu
-                  voice={voice}
-                  onSelect={(v) => {
-                    setVoice(v);
-                    setVoiceMenuOpen(false);
-                  }}
-                  onClose={() => setVoiceMenuOpen(false)}
-                />
-              )}
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-3.5">
+              {skipPrevBtn}
+              {back15Btn}
+              {playBtn}
+              {forward15Btn}
+              {skipNextBtn}
             </div>
+            {narratorStrip}
             <div className="relative">
               {speedTrigger}
               {speedMenuOpen && (
@@ -454,6 +399,17 @@ export default function AudioPlayer({
           </div>
           <div className="flex items-center justify-end">{closeBtn}</div>
         </div>
+      )}
+
+      {voiceMenuOpen && (
+        <VoiceChangeModal
+          voice={voice}
+          onSelect={(v) => {
+            setVoice(v);
+            setVoiceMenuOpen(false);
+          }}
+          onClose={() => setVoiceMenuOpen(false)}
+        />
       )}
     </div>
   );

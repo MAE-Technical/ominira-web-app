@@ -137,7 +137,7 @@ export default function NoteThreadCard({
       </div>
 
       {expanded && (
-        <div className="ml-1 flex flex-col gap-4 border-l-2 border-[var(--reader-border)] pl-4">
+        <div className="ml-1 flex flex-col gap-4 border-l-2 border-[var(--reader-border)] pl-2.5 sm:pl-4">
           {replies.map((reply) => {
             const replyingToName = reply.replyingToId
               ? replies.find((r) => r.id === reply.replyingToId)?.author.pseudonym

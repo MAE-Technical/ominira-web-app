@@ -59,7 +59,7 @@ export default function ReadingView() {
             <BookListRow
               key={item.material.id}
               material={item.material}
-              resumeTarget={{ sectionId: item.sectionId, passageIndex: item.passageIndex }}
+              resumeTarget={{ sectionId: item.sectionId, passageIndex: item.passageIndex, audioTimeMs: item.audioTimeMs }}
             />
           ))}
         </div>

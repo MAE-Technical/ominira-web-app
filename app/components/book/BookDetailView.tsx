@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronRight, Headphones, Play } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Headphones, Play } from "lucide-react";
 import type { MaterialDetail } from "@/lib/materials/detail";
 import { buildTocOutlineRows } from "@/lib/reader/tocOutline";
 import { useReadingPositionStore } from "@/stores/reading-position-store";
@@ -17,6 +17,7 @@ import BookNoteCard from "./BookNoteCard";
 import ShareButton from "./ShareButton";
 import ReaderLink from "../ReaderLink";
 import UnderlineTabs from "../UnderlineTabs";
+import Tooltip from "../reader/Tooltip";
 
 type Tab = "outline" | "notes";
 const TAB_OPTIONS: { value: Tab; label: string }[] = [
@@ -359,11 +360,15 @@ export default function BookDetailView({ material }: { material: MaterialDetail 
   // falls back to live, on-demand AI narration for any book without one.
   const hasRecordedAudiobook = material.narratorCount > 0;
   // `position` is one shared resume record for both reading and listening
-  // (see stores/reading-position-store.ts's Position type) — reading never
-  // writes `audioTimeMs`, only NarrationEngine does (always, even at 0ms
-  // when playback starts), so its presence is what actually distinguishes
-  // "has listened before" from "has only ever read this book."
-  const hasListened = position?.audioTimeMs !== undefined;
+  // (see stores/reading-position-store.ts's Position type), and setPosition
+  // always writes the *whole* record — reading's own writes (useReadingProgress)
+  // never include `audioTimeMs`, only NarrationEngine's do (always, even at
+  // 0ms when playback starts), so whichever mode wrote last is the one whose
+  // shape survives. That makes `audioTimeMs`'s presence double as "which mode
+  // was this reader last in," not just "has this book ever been listened to" —
+  // exactly the signal the two CTAs below need to stop reading as two
+  // unrelated "have I started" states over one shared bookmark.
+  const lastModeWasListen = position?.audioTimeMs !== undefined;
   const router = useRouter();
 
   return (
@@ -435,27 +440,48 @@ export default function BookDetailView({ material }: { material: MaterialDetail 
             </div>
           )}
           {positionReady && pct > 0 && (
-            <div className="mt-4 flex items-center justify-center gap-3">
-              {/* --reader-surface is literally the same value as --reader-bg
-                  in both themes (see globals.css) — invisible as a track
-                  color now that this hero sits directly on the page
-                  background rather than its own tinted panel.
-                  --reader-surface-hover is the token actually built to read
-                  as a filled element against a flat bg in either theme. */}
-              <div className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--reader-surface-hover)]">
-                <div className="h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
+            <div className="mt-4 flex flex-col items-center gap-1.5">
+              <div className="flex w-full items-center justify-center gap-3">
+                {/* --reader-surface is literally the same value as --reader-bg
+                    in both themes (see globals.css) — invisible as a track
+                    color now that this hero sits directly on the page
+                    background rather than its own tinted panel.
+                    --reader-surface-hover is the token actually built to read
+                    as a filled element against a flat bg in either theme. */}
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--reader-surface-hover)]">
+                  <div className="h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="flex-none text-xs font-semibold text-[var(--reader-text-muted)]">{pct}% complete</span>
               </div>
-              <span className="flex-none text-xs font-semibold text-[var(--reader-text-muted)]">{pct}% complete</span>
+              {/* One shared bar, one shared bookmark (see lastModeWasListen's
+                  own comment) — this is the one place that says so out loud,
+                  so "left off listening" doesn't read as a second, competing
+                  progress state next to the Read/Listen buttons below it. */}
+              <span className="text-[11px] font-medium text-[var(--reader-text-subtle)]">
+                Left off {lastModeWasListen ? "listening" : "reading"}
+              </span>
             </div>
           )}
 
-          <div className="mt-5 flex flex-col gap-3 shell:flex-row shell:justify-center">
+          {/* One primary CTA, not two competing "continue" buttons — it
+              follows whichever mode this reader was last in (or Read, before
+              any position exists), and the small square icon button next to
+              it is purely a mode *switch*, not a second equally-weighted
+              action. Same pattern Audible/Kindle/Spotify audiobooks use for
+              a book that has both a text and an audio thread: one resume
+              action, one low-emphasis way to jump to the other thread. */}
+          <div className="mt-5 flex items-center justify-center gap-2">
             {positionReady ? (
               <ReaderLink
-                href={resumeHref}
-                className="rounded-sm bg-brand-500 px-6 py-2.5 text-center text-sm font-semibold text-white no-underline shell:w-auto hover:bg-brand-600"
+                href={lastModeWasListen ? `/read/${material.slug}?listen=1` : resumeHref}
+                className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-brand-500 px-6 py-2.5 text-center text-sm font-semibold text-white no-underline shell:flex-none hover:bg-brand-600"
               >
-                {pct > 0 ? "Resume reading" : "Start reading"}
+                {lastModeWasListen && <Play size={16} />}
+                {lastModeWasListen
+                  ? "Continue listening"
+                  : pct > 0
+                    ? "Continue reading"
+                    : "Start reading"}
               </ReaderLink>
             ) : (
               // Same footprint as the real CTA, deliberately non-navigable —
@@ -464,9 +490,9 @@ export default function BookDetailView({ material }: { material: MaterialDetail 
               // inaccurate URL (see positionReady's own comment above).
               <div
                 aria-hidden="true"
-                className="animate-pulse rounded-sm bg-[var(--reader-surface-hover)] px-6 py-2.5 text-center text-sm font-semibold text-transparent shell:w-auto"
+                className="flex-1 animate-pulse rounded-sm bg-[var(--reader-surface-hover)] px-6 py-2.5 text-center text-sm font-semibold text-transparent shell:flex-none"
               >
-                Resume reading
+                Start reading
               </div>
             )}
 
@@ -478,15 +504,20 @@ export default function BookDetailView({ material }: { material: MaterialDetail 
                 instead, the same handoff targetSectionId/targetPassageId
                 already do for "jump to this chapter"/"open this note"
                 links. Unconditional now — no book is without at least
-                live AI narration — but the label only claims a produced
-                "audiobook" when hasRecordedAudiobook actually backs that up. */}
-            <ReaderLink
-              href={`/read/${material.slug}?listen=1`}
-              className="flex items-center cursor-pointer justify-center gap-2 rounded-sm border border-[var(--reader-border)] bg-transparent px-6 py-2.5 text-sm font-semibold text-[var(--reader-text)] no-underline shell:w-auto hover:bg-[var(--reader-surface)]"
-            >
-              <Play size={16} />
-              {hasListened ? "Continue playing" : hasRecordedAudiobook ? "Listen (audiobook)" : "Listen"}
-            </ReaderLink>
+                live AI narration. Icon-only, deliberately lower-emphasis
+                than the primary CTA: this is "switch mode," not a second
+                thing to do — the label moves into Tooltip (this project's
+                own shared reader-icon-button tooltip, see its doc comment)
+                instead of a visible second string competing with the CTA. */}
+            <Tooltip label={lastModeWasListen ? "Switch to reading" : hasRecordedAudiobook ? "Listen (audiobook)" : "Listen"}>
+              <ReaderLink
+                href={lastModeWasListen ? resumeHref : `/read/${material.slug}?listen=1`}
+                aria-label={lastModeWasListen ? "Switch to reading" : hasRecordedAudiobook ? "Listen (audiobook)" : "Listen"}
+                className="flex flex-none cursor-pointer items-center justify-center rounded-sm border border-[var(--reader-border)] bg-transparent p-2.5 text-[var(--reader-text)] no-underline hover:bg-[var(--reader-surface)]"
+              >
+                {lastModeWasListen ? <BookOpen size={18} /> : <Headphones size={18} />}
+              </ReaderLink>
+            </Tooltip>
           </div>
         </div>
       </div>

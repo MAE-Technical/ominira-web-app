@@ -1,13 +1,24 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import AudioPlayer from "./AudioPlayer";
 import { useAudioStore } from "@/stores/audio-store";
 import { useNarrationStore } from "@/stores/narration-store";
 import { useReaderStore } from "@/stores/reader-store";
 import { useReaderOverlayStore } from "@/stores/reader-overlay-store";
 import { useLayoutStore } from "@/stores/layout-store";
+
+// Matches both reader routes (app/read/[slug], the canonical/shareable URL,
+// and app/reader/[slug], the soft-navigable one ReaderLink actually lands
+// on — see that component's own doc comment) — deliberately with the
+// trailing slash: a bare `startsWith("/read")` also matches `/reading`
+// (app/(app)/reading/page.tsx, the "Continue reading" library page), which
+// would wrongly hide this bar's sidebar offset and bottom-nav clearance
+// while just browsing the library.
+function isReaderPath(pathname: string): boolean {
+  return pathname.startsWith("/read/") || pathname.startsWith("/reader/");
+}
 
 /**
  * The one persistent "now playing" bar — mounted once in the root layout
@@ -53,8 +64,9 @@ export default function NowPlayingBar() {
   // listening while the reader overlay was open — silently eating clicks
   // on whatever nav item it happened to cover.
   const pathname = usePathname();
+  const router = useRouter();
   const overlayOpen = useReaderOverlayStore((s) => s.open);
-  const hasSidebar = !pathname.startsWith("/read") || overlayOpen;
+  const hasSidebar = !isReaderPath(pathname) || overlayOpen;
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Floats above AppBottomNav (the mobile tab bar) rather than the other
@@ -67,7 +79,7 @@ export default function NowPlayingBar() {
   // /read/[slug] (see the hasSidebar comment above), so pathname alone
   // reliably tells "the reader itself is on screen" apart from "an ordinary
   // page, sidebar or not".
-  const readerActive = pathname.startsWith("/read");
+  const readerActive = isReaderPath(pathname);
   const bottomNavHeight = useLayoutStore((s) => s.bottomNavHeight);
   const bottomOffset = readerActive ? 0 : bottomNavHeight;
 
@@ -112,13 +124,14 @@ export default function NowPlayingBar() {
         onSkipNext={skipToNextSection}
         canSkipPrev={canSkipToPrevSection}
         canSkipNext={canSkipToNextSection}
-        // A real navigation, not router.push — see ReaderLink's own doc
-        // comment. This bar can be tapped from any page (not just home),
-        // so a soft push here would get intercepted into ReaderModal, still
-        // leaving whatever page it was tapped from (its sidebar included)
-        // visible underneath.
+        // A soft push straight at /reader/[slug] (not /read/[slug]) — same
+        // reasoning as ReaderLink's own doc comment: that route falls
+        // outside @modal's interception convention, so this bar can be
+        // tapped from any page without getting hijacked into ReaderModal,
+        // and without the hard reload a /read/[slug] navigation used to
+        // need to dodge that.
         onTitleClick={() => {
-          window.location.href = `/read/${book.slug}`;
+          router.push(`/reader/${book.slug}`);
         }}
         onClose={closePlayer}
       />

@@ -561,12 +561,17 @@ export default function Reader({
   // audio-store's currentTimeMs resets to 0 synchronously (NarrationEngine's
   // stopCurrentAudio), but narration-store's currentPlayingPassageId/
   // currentWords only catch up a render later (a separate effect, reacting
-  // to the new `target`). For that one tick this effect would otherwise see
-  // currentTimeMs=0 paired with the *previous* passage's still-cached words
-  // and compute a wrong index off that mismatched pair entirely. Every
-  // KaraokeWord already carries its own passageId (liveNarrationCache
-  // stamps it on), so this just holds the last real highlight until the two
-  // stores agree again.
+  // to the new `target`) — and currentWords specifically stays on the
+  // *previous* passage until its own words finish loading from the network,
+  // which can take noticeably longer than a render tick. Every KaraokeWord
+  // already carries its own passageId (liveNarrationCache stamps it on), so
+  // this detects the mismatch and actively clears the marker rather than
+  // leaving it lit on the old passage: playback has already moved on (the
+  // real <audio> element's currentTime reset to 0 the instant the switch
+  // happened), so a highlight left sitting on the previous paragraph is a
+  // stale answer, not a safe one — it reads as "the narration highlight
+  // didn't keep up." No highlight for the brief gap until the new passage's
+  // words arrive is the honest state; it reappears the instant they do.
   //
   // Even when the key matches, this still re-applies the class if the
   // element it's supposedly already on isn't actually connected/marked
@@ -586,7 +591,12 @@ export default function Reader({
       narratingWordKeyRef.current = "";
       return;
     }
-    if (currentNarrationWords.length === 0 || currentNarrationWords[0].passageId !== currentPlayingPassageId) return;
+    if (currentNarrationWords.length === 0 || currentNarrationWords[0].passageId !== currentPlayingPassageId) {
+      narratingWordElRef.current?.classList.remove("om-narrating-word");
+      narratingWordElRef.current = null;
+      narratingWordKeyRef.current = "";
+      return;
+    }
     const idx = activeWordIndex(currentNarrationWords, audioCurrentTimeMs);
     const key = `${currentPlayingPassageId}:${idx}`;
     const alreadyCorrect =

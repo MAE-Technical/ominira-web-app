@@ -4,26 +4,43 @@ import { resolveSpineTarget } from "@/lib/reader/sections";
 import { readLocalPositionSync, useReadingPositionStore, type Position } from "@/stores/reading-position-store";
 
 /**
- * Resolves which spine index the reader should actually be on — this
- * device's own last-known position (`readLocalPositionSync`, synchronous,
- * no store hydration to wait on) unless `targetSectionId` (`?section=`, a
- * chapter link) overrides it, resolved through `resolveSpineTarget` since it
- * can legitimately name a pure navigation label with no spine slot of its
- * own. Returns `null` (not 0) when neither source names a resolvable
- * section — a first-time reader, an incognito profile, or a target pointing
- * at a section this book's own `spine` doesn't contain — so callers can
- * tell "nothing to resume" apart from "resume to the first section",
- * which never needs a `goTo` call at all (that's where the carousel's own
- * default state already sits).
+ * Resolves the exact {sectionId, passageIndex} the reader should actually
+ * land on — this device's own last-known position (`readLocalPositionSync`,
+ * synchronous, no store hydration to wait on) unless `targetSectionId`
+ * (`?section=`, a chapter link) overrides it, resolved through
+ * `resolveSpineTarget` since it can legitimately name a pure navigation
+ * label with no spine slot of its own. Returns `null` when neither source
+ * names a resolvable section — a first-time reader, an incognito profile,
+ * or a target pointing at a section this book's own `spine` doesn't contain
+ * — so callers can tell "nothing to resume" apart from "resume to the first
+ * section", which never needs a `goTo` call at all (that's where the
+ * carousel's own default state already sits).
+ *
+ * Called exactly once per mount (see `resumeTargetRef` below) rather than
+ * separately by each of useResumeScroll's three steps — `readLocalPositionSync`
+ * reads *live* localStorage, and this device's own saved position keeps
+ * moving in real time while a book is playing (NarrationEngine's own
+ * position-persist effect writes it on every passage/section advance, even
+ * while the reader itself isn't mounted). Re-reading it independently in a
+ * later step used to mean step 1 could `goTo` the section this returned at
+ * mount, while step 2 — reading it fresh a tick later — got back a
+ * *different*, since-advanced section and waited forever for `activeSectionId`
+ * to match a target `goTo` was never actually asked to reach. A single
+ * frozen read is what step 2's own doc comment already claimed ("the two
+ * agree on exactly what resume meant here") — this is what actually makes
+ * that true.
  */
-function resolveInitialSectionId(
+function resolveInitialTarget(
   book: BookDocument,
   materialId: string,
-  targetSectionId: string | undefined
-): string | null {
-  return targetSectionId
-    ? resolveSpineTarget(targetSectionId, book.sections, book.spine)
-    : (readLocalPositionSync(materialId)?.sectionId ?? null);
+  targetSectionId: string | undefined,
+  targetPassageIndex: number | undefined
+): { sectionId: string; passageIndex: number } | null {
+  if (targetSectionId) {
+    const sectionId = resolveSpineTarget(targetSectionId, book.sections, book.spine);
+    return sectionId ? { sectionId, passageIndex: targetPassageIndex ?? 0 } : null;
+  }
+  return readLocalPositionSync(materialId) ?? null;
 }
 
 /**
@@ -112,39 +129,38 @@ export function useResumeScroll({
     });
   };
 
+  // Frozen once, on mount — see resolveInitialTarget's own doc comment on
+  // why a single shared read (not each step re-reading live localStorage
+  // independently) is what actually keeps steps 1 and 2 pointed at the same
+  // target while narration keeps advancing this device's saved position in
+  // the background.
+  const resumeTargetRef = useRef<{ sectionId: string; passageIndex: number } | null>(null);
+
   // Step 1 — see this hook's own doc comment.
   const hasAppliedInitialSectionRef = useRef(false);
   useLayoutEffect(() => {
     if (hasAppliedInitialSectionRef.current) return;
     hasAppliedInitialSectionRef.current = true;
-    const sectionId = resolveInitialSectionId(book, materialId, targetSectionId);
-    if (!sectionId) return;
-    const index = orderedSections.findIndex((s) => s.id === sectionId);
+    const resolved = resolveInitialTarget(book, materialId, targetSectionId, targetPassageIndex);
+    resumeTargetRef.current = resolved;
+    if (!resolved) return;
+    const index = orderedSections.findIndex((s) => s.id === resolved.sectionId);
     if (index > 0) goTo(index, { animate: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount only
   }, []);
 
   // Step 2 — waits for `activeSectionId` to actually be the resolved
   // target (step 1's goTo, once its state update has landed) before
-  // scrolling within it. Uses the same synchronous sources step 1 did
-  // (not the store's own getPosition, which may still be mid-hydration at
-  // this point) so the two agree on exactly what "resume" meant here.
+  // scrolling within it. Reads step 1's own frozen resumeTargetRef rather
+  // than resolving again, so the two steps are guaranteed to agree on
+  // exactly what "resume" meant here.
   const usedPositionRef = useRef<{ sectionId: string; passageIndex: number } | null>(null);
   const hasScrolledInitialRef = useRef(false);
   const [initialScrollDone, setInitialScrollDone] = useState(false);
   useEffect(() => {
     if (hasScrolledInitialRef.current || !activeSectionId) return;
 
-    const stored = targetSectionId
-      ? (() => {
-          const resolved = resolveSpineTarget(targetSectionId, book.sections, book.spine);
-          // targetPassageIndex (Resume reading's own ?passageIndex=) takes
-          // this straight to the reader's real saved passage; a plain
-          // ?section= chapter link (ToC, search) has none, so it still
-          // lands on the section's first passage same as before.
-          return resolved ? { sectionId: resolved, passageIndex: targetPassageIndex ?? 0 } : null;
-        })()
-      : (readLocalPositionSync(materialId) ?? null);
+    const stored = resumeTargetRef.current;
 
     // Nothing to resume at all, or it names a section that isn't (or isn't
     // any longer) actually in this book's spine — step 1 has nothing to
