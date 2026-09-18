@@ -546,44 +546,55 @@ export default function NarrationEngine() {
     // outright, rather than every field waiting on it.
     navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album });
 
-    // iOS fetches MediaMetadata artwork itself, in a separate OS process —
-    // a remote-URL src has repeatedly failed to render (blank/gray) even
-    // with correct sizes/type, most likely something about that second,
-    // invisible fetch (a redirect, a header, a CDN quirk) that the page's
-    // own successful load of the same URL never surfaces. Fetching the
-    // image here instead and handing iOS a local `blob:` URL removes that
-    // fetch entirely — nothing left for the OS to trip on — and reports
-    // the artwork's *real* Content-Type instead of a guess from the URL's
-    // extension (which silently mismatches for a proxied/converted image).
+    // WebKit's lock-screen artwork is well-documented (Safari 16.1+,
+    // still true as of iOS 18) as only reliably rendering a single SQUARE
+    // image — it uses just the first `artwork` entry regardless of how
+    // many are given, and a non-square image (our covers are ~2:3
+    // portrait) renders as a blank/grey box rather than being cropped or
+    // letterboxed automatically. Center-cropping onto a square canvas
+    // before handing it to MediaMetadata is the standard workaround.
     let cancelled = false;
     let objectUrl: string | null = null;
     (async () => {
-      let blobUrl: string;
-      let type: string;
+      let sourceUrl: string;
       try {
         const res = await fetch(book.metadata.cover);
         const blob = await res.blob();
-        type = blob.type || "image/jpeg";
-        blobUrl = URL.createObjectURL(blob);
+        sourceUrl = URL.createObjectURL(blob);
       } catch {
         return; // Offline/CORS-blocked fetch — no artwork this round, title/artist/album above still stand.
       }
       if (cancelled) {
-        URL.revokeObjectURL(blobUrl);
+        URL.revokeObjectURL(sourceUrl);
         return;
       }
-      objectUrl = blobUrl;
       const img = new Image();
       img.onload = () => {
-        if (cancelled || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title,
-          artist,
-          album,
-          artwork: [{ src: blobUrl, sizes: `${img.naturalWidth}x${img.naturalHeight}`, type }],
-        });
+        URL.revokeObjectURL(sourceUrl);
+        if (cancelled) return;
+        const SIZE = 512;
+        const canvas = document.createElement("canvas");
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        // Cover-fit center crop, same math as CSS object-fit: cover.
+        const scale = Math.max(SIZE / img.naturalWidth, SIZE / img.naturalHeight);
+        const dw = img.naturalWidth * scale;
+        const dh = img.naturalHeight * scale;
+        ctx.drawImage(img, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
+        canvas.toBlob((squareBlob) => {
+          if (cancelled || !squareBlob || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+          objectUrl = URL.createObjectURL(squareBlob);
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title,
+            artist,
+            album,
+            artwork: [{ src: objectUrl, sizes: `${SIZE}x${SIZE}`, type: "image/jpeg" }],
+          });
+        }, "image/jpeg", 0.9);
       };
-      img.src = blobUrl;
+      img.src = sourceUrl;
     })();
     return () => {
       cancelled = true;
