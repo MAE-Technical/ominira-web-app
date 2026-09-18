@@ -12,15 +12,50 @@ import type { AnnotationRange, Note, NoteContent, NoteVisibility } from "@/lib/a
 /** A write can also change two views this material's own note list doesn't
  * cover: the book details page's community-notes tab (every sort variant —
  * see notesFeedPrefix) and every sort of the global home feed (a public
- * top-level note may newly qualify, disqualify, or just reorder). Those two
- * stay invalidate-and-refetch rather than optimistically patched — a
- * client-side guess at re-sorting/re-qualifying would get it wrong often
- * enough not to bother, and neither is what the reader who just wrote this
- * note is looking at. This material's own note list (materialKeys.notes) is
- * patched directly instead — see each mutation below. */
+ * top-level note may newly qualify, disqualify, or just reorder). For
+ * create/edit/delete those two stay invalidate-and-refetch rather than
+ * optimistically patched — a client-side guess at re-sorting/re-qualifying
+ * would get it wrong often enough not to bother, and neither is what the
+ * reader who just wrote this note is looking at. This material's own note
+ * list (materialKeys.notes) is patched directly instead — see each mutation
+ * below. A reaction toggle is the one write that also patches these two
+ * feeds directly (see patchReactionInFeeds below) — flipping a boolean and
+ * ±1 on a count already-visible in that exact spot carries none of the
+ * re-sort/re-qualify risk a new/edited/deleted note does, and the feed *is*
+ * where a reader reacts from most often. */
 function invalidateFanoutQueries(queryClient: QueryClient, materialId: string) {
   queryClient.invalidateQueries({ queryKey: materialKeys.notesFeedPrefix(materialId) });
   queryClient.invalidateQueries({ queryKey: communityKeys.feedPrefix });
+}
+
+type ReactableFeedItem = { note: Note; replies: Note[] };
+type ReactableFeedPage = { items: ReactableFeedItem[]; nextCursor: string | null };
+
+function flipReaction(note: Note): Note {
+  return { ...note, reactedByMe: !note.reactedByMe, reactionCount: note.reactionCount + (note.reactedByMe ? -1 : 1) };
+}
+
+/** Patches `noteId` (root or reply) wherever it appears across every home
+ * feed sort and every book-notes-tab sort for `materialId` — the two views
+ * useCreateNote/useUpdateNote/useDeleteNote leave to a refetch (see
+ * invalidateFanoutQueries above). Home feed items ship replies inline
+ * (lib/community/feed.ts), so a reaction on a reply needs the same
+ * find-in-either-note-or-replies check useToggleReaction already does for
+ * materialKeys.notes. */
+function patchReactionInFeeds(queryClient: QueryClient, materialId: string, noteId: string) {
+  const patchPage = (old: ReactableFeedPage | undefined) =>
+    old && {
+      ...old,
+      items: old.items.map((item) =>
+        item.note.id === noteId
+          ? { ...item, note: flipReaction(item.note) }
+          : item.replies.some((r) => r.id === noteId)
+            ? { ...item, replies: item.replies.map((r) => (r.id === noteId ? flipReaction(r) : r)) }
+            : item
+      ),
+    };
+  queryClient.setQueriesData<ReactableFeedPage>({ queryKey: communityKeys.feedPrefix }, patchPage);
+  queryClient.setQueriesData<ReactableFeedPage>({ queryKey: materialKeys.notesFeedPrefix(materialId) }, patchPage);
 }
 
 export type CreateNoteInput = {
@@ -135,7 +170,12 @@ export function useDeleteNote(materialId: string) {
 }
 
 /** `POST /api/community/notes/{noteId}/reactions` — toggle, not add-only.
- * Flips the local row immediately; a failure flips it back. */
+ * Flips the local row immediately, in every view showing it (this
+ * material's own note list, the home feed, and the book-notes tab — see
+ * patchReactionInFeeds' doc comment for why reactions get this while
+ * create/edit/delete don't); a failure flips materialKeys.notes back and
+ * refetches the two feeds to discard whatever the optimistic patch did
+ * there rather than trying to hand-compute the exact inverse in each one. */
 export function useToggleReaction(materialId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -146,18 +186,16 @@ export function useToggleReaction(materialId: string) {
     onMutate: async (noteId) => {
       const key = materialKeys.notes(materialId);
       await queryClient.cancelQueries({ queryKey: key });
+      await queryClient.cancelQueries({ queryKey: communityKeys.feedPrefix });
+      await queryClient.cancelQueries({ queryKey: materialKeys.notesFeedPrefix(materialId) });
       const previous = queryClient.getQueryData<Note[]>(key);
-      queryClient.setQueryData<Note[]>(key, (old = []) =>
-        old.map((n) =>
-          n.id === noteId
-            ? { ...n, reactedByMe: !n.reactedByMe, reactionCount: n.reactionCount + (n.reactedByMe ? -1 : 1) }
-            : n
-        )
-      );
+      queryClient.setQueryData<Note[]>(key, (old = []) => old.map((n) => (n.id === noteId ? flipReaction(n) : n)));
+      patchReactionInFeeds(queryClient, materialId, noteId);
       return { previous };
     },
     onError: (_err, _noteId, context) => {
       if (context) queryClient.setQueryData(materialKeys.notes(materialId), context.previous);
+      invalidateFanoutQueries(queryClient, materialId);
     },
     onSuccess: (result, noteId) => {
       queryClient.setQueryData<Note[]>(materialKeys.notes(materialId), (old = []) =>
