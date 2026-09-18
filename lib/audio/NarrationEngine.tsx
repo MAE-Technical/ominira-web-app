@@ -534,28 +534,37 @@ export default function NarrationEngine() {
       navigator.mediaSession.metadata = null;
       return;
     }
-    // iOS's lock-screen artwork silently no-ops on a single untyped/
-    // unsized entry — it picks the closest `sizes` match and needs `type`
-    // to accept the image at all, so the same cover URL is repeated across
-    // the sizes iOS actually probes for rather than left as one bare src.
+    // Book covers are portrait (2:3-ish), not square — a fabricated square
+    // `sizes` hint (e.g. "512x512") mismatches the real image and iOS's
+    // lock-screen artwork loader silently gives up on it, rendering nothing
+    // rather than falling back or scaling. Loading the image once to read
+    // its actual naturalWidth/naturalHeight and reporting *that* as `sizes`
+    // is what gets it to actually render.
     const coverType = book.metadata.cover.match(/\.png(?:\?|$)/i)
       ? "image/png"
       : book.metadata.cover.match(/\.webp(?:\?|$)/i)
         ? "image/webp"
         : "image/jpeg";
-    navigator.mediaSession.metadata = new MediaMetadata({
-      // Matches NowPlayingBar's own chapterLabel fallback exactly, so the
-      // lock screen and the in-app bar never disagree about what to call
-      // the current track.
-      title: audioSection?.title ?? book.metadata.title,
-      artist: book.metadata.author,
-      album: book.metadata.title,
-      artwork: [96, 128, 192, 256, 384, 512].map((size) => ({
-        src: book.metadata.cover,
-        sizes: `${size}x${size}`,
-        type: coverType,
-      })),
-    });
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (cancelled || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+      navigator.mediaSession.metadata = new MediaMetadata({
+        // Podcast-app convention: the chapter is the "episode" (title), the
+        // book is the "show" (artist) — matches how Apple Podcasts/Spotify
+        // split a two-line lock-screen label, and puts the book title on
+        // screen right alongside the chapter rather than only the author.
+        title: audioSection?.title ?? book.metadata.title,
+        artist: book.metadata.title,
+        album: book.metadata.author,
+        artwork: [{ src: book.metadata.cover, sizes: `${img.naturalWidth}x${img.naturalHeight}`, type: coverType }],
+      });
+    };
+    img.src = book.metadata.cover;
+    return () => {
+      cancelled = true;
+    };
   }, [book, audioSection]);
 
   useEffect(() => {

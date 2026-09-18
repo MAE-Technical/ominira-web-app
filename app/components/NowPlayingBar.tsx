@@ -88,11 +88,7 @@ export default function NowPlayingBar() {
   // page, sidebar or not".
   const readerActive = isReaderPath(pathname);
   const bottomNavHeight = useLayoutStore((s) => s.bottomNavHeight);
-  // +6px whenever AppBottomNav is actually on screen — a hairline gap so
-  // the two bars read as separate surfaces rather than a seam, now that
-  // both are dark enough (this bar forced to dark theme, see above) that
-  // touching edges alone no longer made that obvious.
-  const bottomOffset = readerActive ? 0 : bottomNavHeight + (bottomNavHeight > 0 ? 6 : 0);
+  const bottomOffset = readerActive ? 0 : bottomNavHeight;
 
   // The reader's own notes/annotation-feed panel (desktop "side" variant)
   // is a plain flex sibling with no elevation of its own — without pulling

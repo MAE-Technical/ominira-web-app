@@ -2,6 +2,7 @@
 
 import { Check, Mic, X } from "lucide-react";
 import { AFRICAN_VOICES } from "@/lib/audio/voices";
+import { useReaderStore } from "@/stores/reader-store";
 
 type Props = {
   voice: string;
@@ -15,8 +16,15 @@ type Props = {
  * mobile — rather than the old dropdown-menu picker this replaces.
  */
 export default function VoiceChangeModal({ voice, onSelect, onClose }: Props) {
+  // NowPlayingBar (this modal's ancestor, not portaled) forces its own
+  // subtree to data-reader-theme="dark" so the player bar reads as its own
+  // distinct surface from the mobile tab bar — but that would otherwise
+  // drag this modal along with it. Re-pinning to the app's actual theme
+  // here keeps the modal itself consistent with everything else on screen.
+  const theme = useReaderStore((s) => s.theme);
   return (
     <div
+      data-reader-theme={theme}
       onClick={onClose}
       className="fixed inset-0 z-50 box-border flex items-center justify-center bg-black/45 p-6 sm:items-center"
     >
