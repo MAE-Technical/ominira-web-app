@@ -80,7 +80,7 @@ export default function NotificationsView() {
         </div>
       ) : (
         <>
-          <div className="overflow-hidden rounded-md border border-[var(--reader-border)]">
+          <div className="overflow-hidden rounded-sm border border-[var(--reader-border)]">
             {items.map((item, i) => (
               <div key={item.id} className={i > 0 ? "border-t border-[var(--reader-border)]" : ""}>
                 <NotificationRow item={item} />
