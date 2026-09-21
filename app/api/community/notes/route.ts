@@ -182,10 +182,12 @@ export async function POST(request: Request) {
       const actorName = actor?.pseudonym ?? "A comrade";
       await notifyReader(replyTargetReaderId, {
         kind: "reply",
-        title: `💬 ${actorName} added a reply to your note`,
-        body: `Open it in ${material.title}.`,
+        title: `💬 ${actorName} replied to your note`,
+        body: `Tap to view in ${material.title}`,
         url,
         tag: `note-reply-${replyRootNoteId}`,
+        icon: "/icons/icon-192-black.png",
+        badge: "/icons/badge-96-black.png",
       });
     })();
   }

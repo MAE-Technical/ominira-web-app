@@ -8,6 +8,10 @@ export type PushPayload = {
   // Same tag collapses multiple notifications into one — e.g. five reactions
   // on the same note in a minute shouldn't stack five system notifications.
   tag?: string;
+  // Optional overrides for icon/badge — defaults to the black-background
+  // Ominira mark in sw.js if omitted.
+  icon?: string;
+  badge?: string;
 };
 
 type SubscriptionRow = { id: string; endpoint: string; p256dh: string; auth: string };

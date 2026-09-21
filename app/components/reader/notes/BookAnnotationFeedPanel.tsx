@@ -125,6 +125,7 @@ export default function BookAnnotationFeedPanel({
   getPassageText,
   panelType,
   onClose,
+  targetNoteId,
 }: {
   materialId: string;
   items: FeedItem[];
@@ -141,18 +142,55 @@ export default function BookAnnotationFeedPanel({
   getPassageText: (passageId: string) => string;
   panelType?: "side" | "sheet";
   onClose: () => void;
+  /** Deep-link from push notification for a general note — scrolls to and
+   * flashes that note instead of the default active-section positioning. */
+  targetNoteId?: string;
 }) {
   const createNote = useCreateNote(materialId);
   const [generalComposerError, setGeneralComposerError] = useState<string | null>(null);
   const runs = useMemo(() => groupFeedItemsByCategory(items), [items]);
-  // Fires once per "the panel just opened" — this component only mounts
-  // while open (see Reader.tsx's `{noteFeed.open && <BookAnnotationFeedPanel/>}`),
-  // so a plain mount-effect is exactly "once per open," no extra ref guard needed.
+  // Positioning: fires once per "panel just opened" but also waits for items
+  // to arrive when deep-linking to a specific general note. The panel mounts
+  // synchronously with `noteFeed.open=true`, but `items` may still be
+  // fetching from useAnnotations — so we retry until the target is found or
+  // we fall back to the default active-section scroll.
   const hasPositionedRef = useRef(false);
   useEffect(() => {
     if (hasPositionedRef.current) return;
+    // Deep-link to a specific note takes precedence over position-based scroll.
+    if (targetNoteId) {
+      const target = items.find((item) => feedItemElementId(item) === `feed-item-${targetNoteId}`);
+      if (target) {
+        hasPositionedRef.current = true;
+        requestAnimationFrame(() => {
+          const el = document.getElementById(feedItemElementId(target));
+          el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (el) {
+            el.classList.add("reader-jump-flash");
+            setTimeout(() => el.classList.remove("reader-jump-flash"), 2400);
+          }
+        });
+        return;
+      }
+      // If items are still loading and empty, wait for them — don't mark as
+      // positioned yet. Once items populate, this effect re-runs and finds it.
+      if (items.length === 0) return;
+      // Item not found after load — try direct DOM fallback for robustness.
+      hasPositionedRef.current = true;
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`feed-item-${targetNoteId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("reader-jump-flash");
+          setTimeout(() => el.classList.remove("reader-jump-flash"), 2400);
+        }
+      });
+      return;
+    }
+    // No deep link — need at least some items before choosing default target.
+    if (items.length === 0) return;
     hasPositionedRef.current = true;
-    // The first item whose passage is in the reader's current chapter —
+    // Default: first item whose passage is in the reader's current chapter —
     // `items` may be sorted by activity/engagement now rather than book
     // order, so this is a search, not just "the first group" the way it
     // was when chapters were their own sections.
@@ -161,8 +199,7 @@ export default function BookAnnotationFeedPanel({
     requestAnimationFrame(() => {
       document.getElementById(feedItemElementId(target))?.scrollIntoView({ behavior: "auto", block: "start" });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately once-on-mount, not on every activeSectionId/items change (see doc comment above).
-  }, []);
+  }, [items, targetNoteId, activeSectionId]);
 
   return (
     <PanelShell

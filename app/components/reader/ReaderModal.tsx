@@ -51,6 +51,7 @@ export default function ReaderModal({
   targetSectionId,
   targetPassageId,
   targetNoteId,
+  targetGeneralNoteId,
 }: {
   book: BookDocument;
   materialId: string;
@@ -61,6 +62,7 @@ export default function ReaderModal({
   targetSectionId?: string;
   targetPassageId?: string;
   targetNoteId?: string;
+  targetGeneralNoteId?: string;
 }) {
   const router = useRouter();
   const [closing, setClosing] = useState(false);
@@ -142,6 +144,7 @@ export default function ReaderModal({
           targetSectionId={targetSectionId}
           targetPassageId={targetPassageId}
           targetNoteId={targetNoteId}
+          targetGeneralNoteId={targetGeneralNoteId}
           onClose={close}
         />
       </div>

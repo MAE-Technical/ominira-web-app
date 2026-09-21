@@ -32,10 +32,17 @@ export default async function ReaderPage({
   params: Promise<{ slug: string }>;
   // Same meaning as app/read/[slug]/page.tsx's own searchParams — see that
   // file's doc comments for what each one is set by.
-  searchParams: Promise<{ section?: string; passage?: string; passageIndex?: string; note?: string; listen?: string }>;
+  searchParams: Promise<{
+    section?: string;
+    passage?: string;
+    passageIndex?: string;
+    note?: string;
+    noteId?: string;
+    listen?: string;
+  }>;
 }) {
   const { slug } = await params;
-  const { section, passage, passageIndex, note, listen } = await searchParams;
+  const { section, passage, passageIndex, note, noteId, listen } = await searchParams;
 
   const { book, materialId, eagerSectionIds } = await loadReaderPageBook(slug, section);
   return (
@@ -47,6 +54,7 @@ export default async function ReaderPage({
       targetPassageId={passage}
       targetPassageIndex={passageIndex !== undefined && !Number.isNaN(Number(passageIndex)) ? Number(passageIndex) : undefined}
       targetNoteId={note}
+      targetGeneralNoteId={noteId}
       autoListen={listen === "1"}
     />
   );

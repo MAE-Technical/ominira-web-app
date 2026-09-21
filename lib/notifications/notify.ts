@@ -11,6 +11,8 @@ export type NotifyPayload = {
   // minute) — the in-app row always gets its own entry regardless, since a
   // reader's notification feed should show each event, not just each push.
   tag?: string;
+  icon?: string;
+  badge?: string;
 };
 
 // The one place a reader-targeted event becomes both an in-app row and a

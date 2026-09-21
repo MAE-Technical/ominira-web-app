@@ -1,4 +1,4 @@
-const CACHE_NAME = "ominira-shell-v5";
+const CACHE_NAME = "ominira-shell-v6";
 // Launch artwork is part of the PWA shell, not page content: it needs to be
 // available before a network request can complete on a cold app start. Cache
 // both themes because the reader preference is restored client-side.
@@ -7,6 +7,9 @@ const APP_SHELL = [
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
+  "/icons/icon-192-black.png",
+  "/icons/icon-512-black.png",
+  "/icons/badge-96-black.png",
   "/images/splash/light-accent.svg",
   "/images/splash/light-illustration-new.svg",
   "/images/splash/dark-accent.svg",
@@ -51,7 +54,7 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-// Payload shape is lib/push/send.ts's PushPayload — { title, body, url, tag? }.
+// Payload shape is lib/push/send.ts's PushPayload — { title, body, url, tag?, icon?, badge? }.
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   const payload = event.data.json();
@@ -59,21 +62,29 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(payload.title, {
       body: payload.body,
       tag: payload.tag,
-      // The installed PWA mark is deliberately used for both surfaces: it
-      // keeps Ominira identifiable in an OS notification tray even when the
-      // notification's own title/body contain the interaction emoji.
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
+      // Black-background PWA mark keeps Ominira identifiable in the OS tray
+      // even when the title/body carry the interaction emoji (✊🏾 / 💬).
+      icon: payload.icon || "/icons/icon-192-black.png",
+      badge: payload.badge || "/icons/badge-96-black.png",
       data: { url: payload.url },
+      vibrate: [100, 50, 100],
+      timestamp: Date.now(),
+      renotify: false,
+      requireInteraction: false,
+      silent: false,
+      actions: [{ action: "open", title: "Open" }],
     })
   );
 });
 
 // Focuses the exact destination when it is already open. If the reader is
 // open to another place in the same book, navigate that tab first — merely
-// focusing it would leave the reader at the wrong note/highlight.
+// focusing it would leave the reader at the wrong note/highlight. Handles
+// both the main notification click and the "Open" action button identically.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  // Action buttons and body clicks both navigate to the same deep link.
+  // Unknown actions (if any) still fall through to the main URL.
   const url = new URL(event.notification.data?.url ?? "/", self.location.origin);
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {

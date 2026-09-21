@@ -52,6 +52,7 @@ export default function Reader({
   targetPassageId,
   targetPassageIndex,
   targetNoteId,
+  targetGeneralNoteId,
   autoListen,
   onClose,
 }: {
@@ -84,6 +85,11 @@ export default function Reader({
    * specific annotation's thread once the reader has landed, the same as
    * clicking its inline marker would (see the deep-link effect below). */
   targetNoteId?: string;
+  /** ?noteId=<uuid> — push notification deep link for general (unanchored)
+   * notes that have no passage to scroll to. Opens the book-wide feed panel
+   * and scrolls to that general note, mirroring how anchored notes open the
+   * per-passage thread and flash the highlight. */
+  targetGeneralNoteId?: string;
   /** ?listen=1 — the book-detail page's own Listen button hands this
    * intent off through the URL rather than calling openBook itself,
    * because getting here now means a real navigation (see its own
@@ -847,6 +853,29 @@ export default function Reader({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately fires once, when isReady first becomes true with both target props present; openNoteMarker/onNoteMarkerClick/getSlideEl/setChromeHidden close over stable-enough identity for this one-shot purpose.
   }, [isReady, targetSectionId, targetPassageId, targetNoteId]);
 
+  // General (unanchored) note deep link from push notifications — has no
+  // passage to scroll to, so it opens the book-wide feed panel instead of
+  // the per-passage thread. Mirrors the anchored deep-link effect above but
+  // targets the feed. Fires once, only when isReady and the general note id
+  // is present and no anchored deep link is also active.
+  const hasOpenedGeneralNoteRef = useRef(false);
+  useEffect(() => {
+    if (hasOpenedGeneralNoteRef.current) return;
+    if (!isReady || !targetGeneralNoteId) return;
+    if (targetNoteId) return; // anchored link takes precedence
+    hasOpenedGeneralNoteRef.current = true;
+    // Close per-passage thread if open — the two panels share the same slot.
+    if (notesPanel) closeNotesPanel();
+    // Ensure the notes tab is visible — general notes never appear under
+    // "Your highlights".
+    noteFeed.setFilter("notes");
+    noteFeed.openFeed();
+    // Header should stay visible for an externally-triggered deep link —
+    // same reasoning as keepHeaderVisible for anchored notes.
+    setChromeHidden(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot deep-link effect
+  }, [isReady, targetGeneralNoteId, targetNoteId]);
+
   const onNoteClick = useCallback((note: NoteLookup, target: HTMLElement) => {
     const rect = target.getBoundingClientRect();
     setNoteOpen({
@@ -1186,6 +1215,7 @@ export default function Reader({
                 getPassageText={getPassageText}
                 panelType={isMobile ? "sheet" : "side"}
                 onClose={noteFeed.close}
+                targetNoteId={targetGeneralNoteId}
               />
             )}
             {notesPanel && (

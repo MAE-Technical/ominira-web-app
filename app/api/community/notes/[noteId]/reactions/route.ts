@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
       void (async () => {
         const [{ data: actor }, { data: material }] = await Promise.all([
           admin.from("readers").select("pseudonym").eq("id", reader.readerId).maybeSingle(),
-          admin.from("materials").select("slug").eq("id", note.material_id!).maybeSingle(),
+          admin.from("materials").select("slug, title").eq("id", note.material_id!).maybeSingle(),
         ]);
         if (!material) return;
         const rootNoteId = note.parent_id ?? note.id;
@@ -49,10 +49,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
         const actorName = actor?.pseudonym ?? "A comrade";
         await notifyReader(note.reader_id, {
           kind: "reaction",
-          title: `❤️ ${actorName} reacted to your note`,
-          body: `Open it in ${material.slug}.`,
+          title: `✊🏾 ${actorName} reacted to your note`,
+          body: `Tap to view in ${material.title ?? material.slug}`,
           url,
           tag: `note-reaction-${noteId}`,
+          icon: "/icons/icon-192-black.png",
+          badge: "/icons/badge-96-black.png",
         });
       })();
     }
