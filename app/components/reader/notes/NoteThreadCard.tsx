@@ -41,6 +41,7 @@ export default function NoteThreadCard({
   note,
   replies,
   expanded,
+  initialShowAll,
   onToggleExpand,
   ui,
   actions,
@@ -66,6 +67,9 @@ export default function NoteThreadCard({
   /** This note's own replies, already chronological. */
   replies: Note[];
   expanded: boolean;
+  /** When deep-linked from a notification, show all replies immediately
+   * instead of collapsed to 2. */
+  initialShowAll?: boolean;
   onToggleExpand: () => void;
   ui: ThreadUIState;
   actions: ThreadActions;
@@ -77,7 +81,7 @@ export default function NoteThreadCard({
   // compose. Track the root Reply control itself so a signed-out prompt is
   // only shown after that deliberate action.
   const [hasRequestedRootReply, setHasRequestedRootReply] = useState(false);
-  const [showAllReplies, setShowAllReplies] = useState(false);
+  const [showAllReplies, setShowAllReplies] = useState(initialShowAll ?? false);
   const visibleReplies = showAllReplies ? replies : replies.slice(0, COLLAPSED_REPLY_COUNT);
   const hiddenReplyCount = Math.max(0, replies.length - visibleReplies.length);
 

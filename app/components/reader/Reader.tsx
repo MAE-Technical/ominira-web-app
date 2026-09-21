@@ -53,6 +53,7 @@ export default function Reader({
   targetPassageIndex,
   targetNoteId,
   targetGeneralNoteId,
+  targetThreadId,
   autoListen,
   onClose,
 }: {
@@ -90,6 +91,11 @@ export default function Reader({
    * and scrolls to that general note, mirroring how anchored notes open the
    * per-passage thread and flash the highlight. */
   targetGeneralNoteId?: string;
+  /** ?thread=<uuid> — notification deep link for the specific thread (root
+   * note) whose replies should be auto-expanded and fully shown. For anchored
+   * notes this is separate from targetNoteId (which is the annotation id);
+   * for general notes it duplicates targetGeneralNoteId. */
+  targetThreadId?: string;
   /** ?listen=1 — the book-detail page's own Listen button hands this
    * intent off through the URL rather than calling openBook itself,
    * because getting here now means a real navigation (see its own
@@ -807,10 +813,10 @@ export default function Reader({
   const openNoteMarker = (
     passageId: string,
     annotationId: string,
-    opts?: { keepHeaderVisible?: boolean; expandAll?: boolean }
+    opts?: { keepHeaderVisible?: boolean; expandAll?: boolean; targetThreadId?: string }
   ) => {
     noteFeed.close();
-    onNoteMarkerClick(passageId, annotationId, { expandAll: opts?.expandAll });
+    onNoteMarkerClick(passageId, annotationId, { expandAll: opts?.expandAll, targetThreadId: opts?.targetThreadId });
     setNotesPanelKeepsHeader(Boolean(opts?.keepHeaderVisible));
   };
 
@@ -838,7 +844,11 @@ export default function Reader({
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
     setJustJumpedAnnotationId(targetNoteId);
-    openNoteMarker(targetPassageId, targetNoteId, { keepHeaderVisible: true, expandAll: true });
+    openNoteMarker(targetPassageId, targetNoteId, {
+      keepHeaderVisible: true,
+      expandAll: true,
+      targetThreadId: targetThreadId,
+    });
     // The centering scroll above is a *programmatic* jump, but
     // useSectionCarousel's own scroll listener (lib/reader/useSectionCarousel.ts)
     // can't tell that apart from the reader scrolling themselves — a downward
@@ -1216,6 +1226,7 @@ export default function Reader({
                 panelType={isMobile ? "sheet" : "side"}
                 onClose={noteFeed.close}
                 targetNoteId={targetGeneralNoteId}
+                targetThreadId={targetThreadId ?? targetGeneralNoteId}
               />
             )}
             {notesPanel && (
@@ -1234,6 +1245,7 @@ export default function Reader({
                 pendingRanges={notesPanel.ranges}
                 editingNoteId={notesPanel.editingNoteId}
                 expandAll={notesPanel.expandAll}
+                targetThreadId={notesPanel.targetThreadId}
                 panelType={isMobile ? "sheet" : "side"}
                 onClose={closeNotesPanel}
                 onShare={setShareQuote}

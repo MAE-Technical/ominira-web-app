@@ -184,7 +184,7 @@ export async function POST(request: Request) {
       await notifyReader(replyTargetReaderId, {
         kind: "reply",
         title: `💬 ${actorName} replied to your note`,
-        body: `Tap to view on Ominira — ${material.title}`,
+        body: `Tap to view in ${material.title}`,
         url,
         tag: `note-reply-${replyRootNoteId}`,
         icon: "/icons/icon-192.png",

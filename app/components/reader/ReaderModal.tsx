@@ -52,6 +52,7 @@ export default function ReaderModal({
   targetPassageId,
   targetNoteId,
   targetGeneralNoteId,
+  targetThreadId,
 }: {
   book: BookDocument;
   materialId: string;
@@ -63,13 +64,20 @@ export default function ReaderModal({
   targetPassageId?: string;
   targetNoteId?: string;
   targetGeneralNoteId?: string;
+  targetThreadId?: string;
 }) {
   const router = useRouter();
   const [closing, setClosing] = useState(false);
 
   const close = useCallback(() => {
     setClosing(true);
-    setTimeout(() => router.back(), EXIT_ANIMATION_MS);
+    setTimeout(() => {
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+      } else {
+        router.push("/");
+      }
+    }, EXIT_ANIMATION_MS);
   }, [router]);
 
   // Escape closes the modal — standard takeover-modal convention, and
@@ -145,6 +153,7 @@ export default function ReaderModal({
           targetPassageId={targetPassageId}
           targetNoteId={targetNoteId}
           targetGeneralNoteId={targetGeneralNoteId}
+          targetThreadId={targetThreadId}
           onClose={close}
         />
       </div>

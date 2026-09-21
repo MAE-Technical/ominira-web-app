@@ -72,7 +72,11 @@ export default function SurveyWizard({ materials, categories }: Props) {
   };
   const goBack = () => {
     if (step === 0) {
-      router.back();
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+      } else {
+        router.push("/");
+      }
     } else {
       setStep((s) => s - 1);
     }

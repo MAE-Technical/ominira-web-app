@@ -43,11 +43,12 @@ export default async function ReadBookPage({
     passageIndex?: string;
     note?: string;
     noteId?: string;
+    thread?: string;
     listen?: string;
   }>;
 }) {
   const { slug } = await params;
-  const { section, passage, passageIndex, note, noteId, listen } = await searchParams;
+  const { section, passage, passageIndex, note, noteId, thread, listen } = await searchParams;
 
   const { book, materialId, eagerSectionIds } = await loadReaderPageBook(slug, section);
   return (
@@ -60,6 +61,7 @@ export default async function ReadBookPage({
       targetPassageIndex={passageIndex !== undefined && !Number.isNaN(Number(passageIndex)) ? Number(passageIndex) : undefined}
       targetNoteId={note}
       targetGeneralNoteId={noteId}
+      targetThreadId={thread}
       autoListen={listen === "1"}
     />
   );

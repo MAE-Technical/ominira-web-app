@@ -40,6 +40,10 @@ export type NotesPanelState = {
   /** Every top-level note's replies start expanded rather than collapsed —
    * see onNoteMarkerClick's own comment for when this is set. */
   expandAll?: boolean;
+  /** When deep-linked from a notification, the specific thread (root note
+   * id) whose replies should be fully expanded (show all) rather than
+   * collapsed to 2. */
+  targetThreadId?: string;
 };
 
 /**
@@ -191,8 +195,8 @@ export function useTextAnnotations(materialId: string) {
   // it. Same "opt-in via the call site, not a second function" reasoning as
   // openNoteMarker's own keepHeaderVisible.
   const onNoteMarkerClick = useCallback(
-    (passageId: string, annotationId: string, opts?: { expandAll?: boolean }) => {
-      setNotesPanel({ passageId, annotationId, expandAll: opts?.expandAll });
+    (passageId: string, annotationId: string, opts?: { expandAll?: boolean; targetThreadId?: string }) => {
+      setNotesPanel({ passageId, annotationId, expandAll: opts?.expandAll, targetThreadId: opts?.targetThreadId });
     },
     []
   );

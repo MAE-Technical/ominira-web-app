@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
         await notifyReader(note.reader_id, {
           kind: "reaction",
           title: `✊🏾 ${actorName} reacted to your note`,
-          body: `Tap to view on Ominira — ${material.title ?? material.slug}`,
+          body: `Tap to view in ${material.title ?? material.slug}`,
           url,
           tag: `note-reaction-${noteId}`,
           icon: "/icons/icon-192.png",

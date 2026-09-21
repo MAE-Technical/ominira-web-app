@@ -34,5 +34,6 @@ export async function noteInteractionUrl({
     section: sectionId,
     passage: range.passageId,
     note: rangesKey(ranges),
+    thread: rootNoteId,
   }).toString()}`;
 }

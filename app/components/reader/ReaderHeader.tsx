@@ -76,6 +76,14 @@ export default function ReaderHeader({
   const theme = useReaderStore((s) => s.theme);
   const setTheme = useReaderStore((s) => s.setTheme);
 
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  };
+
   return (
     <div
       style={{ height: topBarHeightPx, paddingLeft: railInsetPx, paddingRight: railInsetPx }}
@@ -107,7 +115,7 @@ export default function ReaderHeader({
         ) : (
           <Tooltip label="Back" side="bottom" align="start">
             <button
-              onClick={() => router.back()}
+              onClick={handleBack}
               aria-label="Back"
               className="w-9 h-9 rounded-md border border-[var(--reader-border)] bg-[var(--reader-surface)] flex items-center justify-center text-[var(--reader-text)] no-underline flex-none"
             >

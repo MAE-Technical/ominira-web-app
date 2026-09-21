@@ -126,6 +126,7 @@ export default function BookAnnotationFeedPanel({
   panelType,
   onClose,
   targetNoteId,
+  targetThreadId,
 }: {
   materialId: string;
   items: FeedItem[];
@@ -145,6 +146,10 @@ export default function BookAnnotationFeedPanel({
   /** Deep-link from push notification for a general note — scrolls to and
    * flashes that note instead of the default active-section positioning. */
   targetNoteId?: string;
+  /** Specific thread (root note id) whose replies should be fully shown
+   * when deep-linked from a notification. Duplicates targetNoteId for
+   * general notes, separate for anchored highlights. */
+  targetThreadId?: string;
 }) {
   const createNote = useCreateNote(materialId);
   const [generalComposerError, setGeneralComposerError] = useState<string | null>(null);
@@ -294,9 +299,15 @@ export default function BookAnnotationFeedPanel({
                         entry={item.entry}
                         getPassageText={getPassageText}
                         onJump={onJump}
+                        targetThreadId={targetThreadId}
                       />
                     ) : (
-                      <GeneralNoteThread materialId={materialId} note={item.note} allNotes={notes} />
+                      <GeneralNoteThread
+                        materialId={materialId}
+                        note={item.note}
+                        allNotes={notes}
+                        initialShowAll={targetNoteId === item.note.id || targetThreadId === item.note.id}
+                      />
                     )}
                   </div>
                 ))}

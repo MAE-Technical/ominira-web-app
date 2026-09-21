@@ -23,10 +23,12 @@ export default function GeneralNoteThread({
   materialId,
   note,
   allNotes,
+  initialShowAll,
 }: {
   materialId: string;
   note: Note;
   allNotes: Note[];
+  initialShowAll?: boolean;
 }) {
   const { ui, actions, expandedIds, toggleExpanded } = useThreadInteraction({
     materialId,
@@ -43,6 +45,7 @@ export default function GeneralNoteThread({
       note={note}
       replies={repliesFor(allNotes, note.id)}
       expanded={expandedIds.has(note.id)}
+      initialShowAll={initialShowAll}
       onToggleExpand={() => toggleExpanded(note.id)}
       ui={ui}
       actions={actions}

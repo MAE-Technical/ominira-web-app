@@ -373,7 +373,7 @@ export default function BookDetailView({ material }: { material: MaterialDetail 
       <div className="flex items-center gap-3 py-3.5">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
           aria-label="Back"
           className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-[var(--reader-border)] text-[var(--reader-text)] cursor-pointer transition-colors hover:bg-[var(--reader-surface-hover)]"
         >

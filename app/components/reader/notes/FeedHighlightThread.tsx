@@ -25,11 +25,13 @@ export default function FeedHighlightThread({
   entry,
   getPassageText,
   onJump,
+  targetThreadId,
 }: {
   materialId: string;
   entry: FeedEntry;
   getPassageText: (passageId: string) => string;
   onJump: (entry: FeedEntry) => void;
+  targetThreadId?: string;
 }) {
   const createNote = useCreateNote(materialId);
   const { annotation } = entry;
@@ -59,6 +61,7 @@ export default function FeedHighlightThread({
               note={note}
               replies={repliesFor(annotation.notes, note.id)}
               expanded={expandedIds.has(note.id)}
+              initialShowAll={targetThreadId === note.id}
               onToggleExpand={() => toggleExpanded(note.id)}
               ui={ui}
               actions={actions}

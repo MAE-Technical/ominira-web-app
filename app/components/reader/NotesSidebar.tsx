@@ -37,6 +37,9 @@ type Props = {
   /** Every top-level note's replies start expanded rather than collapsed —
    * see useTextAnnotations' onNoteMarkerClick for when this is set. */
   expandAll?: boolean;
+  /** When deep-linked from a notification, the specific thread (root note
+   * id) whose replies should be fully expanded (show all). */
+  targetThreadId?: string;
   panelType?: "side" | "sheet";
   onClose: () => void;
   /** Opens the share-image modal for this thread's quoted passage — Reader
@@ -56,6 +59,7 @@ function EditPanel({
   pendingRanges,
   editingNoteId,
   expandAll,
+  targetThreadId,
   panelType,
   onClose,
   onShare,
@@ -196,6 +200,7 @@ function EditPanel({
                   note={note}
                   replies={repliesFor(allNotes, note.id)}
                   expanded={expandedIds.has(note.id)}
+                  initialShowAll={targetThreadId === note.id}
                   onToggleExpand={() => toggleExpanded(note.id)}
                   ui={ui}
                   actions={actions}

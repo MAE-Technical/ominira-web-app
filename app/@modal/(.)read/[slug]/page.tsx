@@ -41,10 +41,10 @@ export default async function ReadBookModalPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ section?: string; passage?: string; note?: string; noteId?: string }>;
+  searchParams: Promise<{ section?: string; passage?: string; note?: string; noteId?: string; thread?: string }>;
 }) {
   const { slug } = await params;
-  const { section, passage, note, noteId } = await searchParams;
+  const { section, passage, note, noteId, thread } = await searchParams;
 
   let book, materialId, eagerSectionIds;
   try {
@@ -64,6 +64,7 @@ export default async function ReadBookModalPage({
       targetPassageId={passage}
       targetNoteId={note}
       targetGeneralNoteId={noteId}
+      targetThreadId={thread}
     />
   );
 }

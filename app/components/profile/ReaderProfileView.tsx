@@ -183,7 +183,7 @@ export default function ReaderProfileView({ slug }: { slug: string }) {
       <div className="flex items-center gap-3 py-3.5">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
           aria-label="Back"
           className="flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-md border border-[var(--reader-border)] bg-transparent text-[var(--reader-text)] transition-colors hover:bg-[var(--reader-surface-hover)]"
         >
