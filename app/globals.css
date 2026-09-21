@@ -464,8 +464,22 @@ body {
   border-radius: 3px;
   padding: 1px 2px;
   margin: 0 -2px;
-  font-weight: 650;
+  /* font-weight intentionally stays at the paragraph's own weight — 650
+     widens glyphs and shifts line wraps on every word change, which reads
+     as paragraph jitter on both mobile and desktop; the bg + text color
+     already carries the "active" signal, with a paint-only embolden below
+     that doesn't affect layout. */
+  font-weight: inherit;
+  /* Paint-only embolden: thickens glyphs without changing inline box
+     metrics, so no reflow/line-break churn as the mark moves. text-shadow
+     is layout-free (paint only) and universally supported; the prefixed
+     stroke is a crisper fallback where available. */
+  text-shadow: 0 0 0.3px currentColor;
+  -webkit-text-stroke: 0.18px currentColor;
+  paint-order: stroke fill;
   transition: background-color 0.1s ease, color 0.1s ease;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 
