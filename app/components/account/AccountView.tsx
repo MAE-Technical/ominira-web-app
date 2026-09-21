@@ -204,11 +204,11 @@ export default function AccountView() {
           </div>
 
           <div className="border-t border-[var(--reader-border)] pt-3.5 text-center">
-            <p className="mx-auto mb-0 max-w-[260px] text-xs font-medium leading-relaxed text-[var(--reader-text-subtle)]">
+            {/* <p className="mx-auto mb-0 max-w-[260px] text-xs font-medium leading-relaxed text-[var(--reader-text-subtle)]">
               A curated library of Pan-African and revolutionary political thought — free to browse.
-            </p>
+            </p> */}
             <p className="mt-2 mb-0 text-xs font-medium text-[var(--reader-text-muted)]">
-              Raise your Pan-African consciousness.
+              Arise for Freedom.
             </p>
             <p className="mt-1 mb-0 text-xs font-medium text-[var(--reader-text-subtle)]">Ominira · v{APP_VERSION}</p>
           </div>
@@ -243,7 +243,7 @@ export default function AccountView() {
 
           <div className="border-t border-[var(--reader-border)] pt-3.5 text-center">
             <p className="m-0 text-xs font-medium text-[var(--reader-text-muted)]">
-            Raise your Pan-African consciousness.
+            Arise for Freedom.
             </p>
             <p className="mt-1 mb-0 text-xs font-medium text-[var(--reader-text-subtle)]">Ominira · v{APP_VERSION}</p>
           </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = "ominira-shell-v7";
+const CACHE_NAME = "ominira-shell-v8";
 // Launch artwork is part of the PWA shell, not page content: it needs to be
 // available before a network request can complete on a cold app start. Cache
 // both themes because the reader preference is restored client-side.
@@ -7,9 +7,7 @@ const APP_SHELL = [
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
-  "/icons/icon-192-black.png",
-  "/icons/icon-512-black.png",
-  "/icons/badge-96-black.png",
+  "/icons/icon-512-maskable.png",
   "/images/splash/light-accent.svg",
   "/images/splash/light-illustration-new.svg",
   "/images/splash/dark-accent.svg",
@@ -62,10 +60,9 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(payload.title, {
       body: payload.body,
       tag: payload.tag,
-      // Black-background PWA mark keeps Ominira identifiable in the OS tray
-      // even when the title/body carry the interaction emoji (✊🏾 / 💬).
-      icon: payload.icon || "/icons/icon-192-black.png",
-      badge: payload.badge || "/icons/badge-96-black.png",
+      // Original Ominira mark (reverted from black-background variant).
+      icon: payload.icon || "/icons/icon-192.png",
+      badge: payload.badge || "/icons/icon-192.png",
       data: { url: payload.url },
       vibrate: [100, 50, 100],
       timestamp: Date.now(),

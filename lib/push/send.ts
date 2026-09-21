@@ -8,8 +8,8 @@ export type PushPayload = {
   // Same tag collapses multiple notifications into one — e.g. five reactions
   // on the same note in a minute shouldn't stack five system notifications.
   tag?: string;
-  // Optional overrides for icon/badge — defaults to the black-background
-  // Ominira mark in sw.js if omitted.
+  // Optional overrides for icon/badge — defaults to the Ominira mark
+  // in sw.js if omitted.
   icon?: string;
   badge?: string;
 };

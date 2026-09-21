@@ -9,6 +9,7 @@ import { enrichFeedItems } from "@/lib/community/feed";
 import type { AnnotationRange, NoteContent } from "@/lib/api/types";
 import { notifyReader } from "@/lib/notifications/notify";
 import { noteInteractionUrl } from "@/lib/notifications/noteTarget";
+import { comradeName } from "@/lib/reader/authorDisplay";
 
 type Sort = "recent" | "top" | "trending";
 type TopCursor = { reactionCount: number; createdAt: string; id: string };
@@ -179,15 +180,15 @@ export async function POST(request: Request) {
         ranges: body.ranges ?? [],
         rootNoteId: replyRootNoteId!,
       });
-      const actorName = actor?.pseudonym ?? "A comrade";
+      const actorName = actor?.pseudonym ? comradeName(actor.pseudonym) : "A comrade";
       await notifyReader(replyTargetReaderId, {
         kind: "reply",
         title: `💬 ${actorName} replied to your note`,
-        body: `Tap to view in ${material.title}`,
+        body: `Tap to view on Ominira — ${material.title}`,
         url,
         tag: `note-reply-${replyRootNoteId}`,
-        icon: "/icons/icon-192-black.png",
-        badge: "/icons/badge-96-black.png",
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
       });
     })();
   }

@@ -1,7 +1,7 @@
 {
   "name": "Ominira",
   "short_name": "Ominira",
-  "description": "Raise your Pan-African consciousness. A reading and listening companion for Pan-African and revolutionary political literature — read, listen, and annotate with the movement.",
+  "description": "An Online Pan-African Library Dedicated to Revolutionary Thought. Arise for Freedom.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -14,19 +14,19 @@
   "categories": ["books", "education", "social"],
   "icons": [
     {
-      "src": "/icons/icon-192-black.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512-black.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512-black.png",
+      "src": "/icons/icon-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

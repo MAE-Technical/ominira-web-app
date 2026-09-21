@@ -4,6 +4,7 @@ import { getAuthenticatedReader } from "@/lib/auth/session";
 import { notFound, unauthorized } from "@/lib/api/errors";
 import { notifyReader } from "@/lib/notifications/notify";
 import { noteInteractionUrl } from "@/lib/notifications/noteTarget";
+import { comradeName } from "@/lib/reader/authorDisplay";
 import type { AnnotationRange } from "@/lib/api/types";
 
 export async function POST(request: Request, { params }: { params: Promise<{ noteId: string }> }) {
@@ -46,15 +47,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
           ranges: (note.ranges as unknown as AnnotationRange[] | null) ?? [],
           rootNoteId,
         });
-        const actorName = actor?.pseudonym ?? "A comrade";
+        const actorName = actor?.pseudonym ? comradeName(actor.pseudonym) : "A comrade";
         await notifyReader(note.reader_id, {
           kind: "reaction",
           title: `✊🏾 ${actorName} reacted to your note`,
-          body: `Tap to view in ${material.title ?? material.slug}`,
+          body: `Tap to view on Ominira — ${material.title ?? material.slug}`,
           url,
           tag: `note-reaction-${noteId}`,
-          icon: "/icons/icon-192-black.png",
-          badge: "/icons/badge-96-black.png",
+          icon: "/icons/icon-192.png",
+          badge: "/icons/icon-192.png",
         });
       })();
     }
