@@ -4,6 +4,7 @@ import { getAuthenticatedReader } from "@/lib/auth/session";
 import { notFound, unauthorized } from "@/lib/api/errors";
 import { notifyReader } from "@/lib/notifications/notify";
 import { noteInteractionUrl } from "@/lib/notifications/noteTarget";
+import type { AnnotationRange } from "@/lib/api/types";
 
 export async function POST(request: Request, { params }: { params: Promise<{ noteId: string }> }) {
   const reader = await getAuthenticatedReader(request);
@@ -42,7 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
         const rootNoteId = note.parent_id ?? note.id;
         const url = await noteInteractionUrl({
           materialSlug: material.slug,
-          ranges: note.ranges,
+          ranges: (note.ranges as unknown as AnnotationRange[] | null) ?? [],
           rootNoteId,
         });
         const actorName = actor?.pseudonym ?? "A comrade";

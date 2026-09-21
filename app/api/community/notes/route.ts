@@ -176,7 +176,7 @@ export async function POST(request: Request) {
       const { data: actor } = await admin.from("readers").select("pseudonym").eq("id", reader.readerId).maybeSingle();
       const url = await noteInteractionUrl({
         materialSlug: material.slug,
-        ranges: body.ranges,
+        ranges: body.ranges ?? [],
         rootNoteId: replyRootNoteId!,
       });
       const actorName = actor?.pseudonym ?? "A comrade";
