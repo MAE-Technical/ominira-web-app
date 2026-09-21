@@ -483,6 +483,14 @@ body {
 }
 
 
+/* When listen mode is active each word carries [data-word-index] and the
+   paragraph carries .om-narration-passage — together they signal a seek
+   affordance, critical on mobile where the per-paragraph play button is
+   hidden. Purely a cursor hint; the click handling lives in BookContent. */
+.om-narration-passage [data-word-index] {
+  cursor: pointer;
+}
+
 /* Reader-as-overlay open/close (ReaderModal.tsx) — an intercepted-route
    modal that swapped in/out instantly read as indistinguishable from a
    plain page navigation, which is exactly the "doesn't feel like an

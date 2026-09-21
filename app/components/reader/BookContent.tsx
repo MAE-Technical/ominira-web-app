@@ -60,8 +60,10 @@ type BookContentProps = {
    * mode. The active paragraph's control also toggles pause/play. */
   onPassagePlayback?: (sectionId: string, passageId: string) => void;
   currentPlayingPassageId?: string;
-  /** Keeps stable word markers in the DOM for the karaoke underline, but
-   * intentionally does not make individual words interactive. */
+  /** Keeps stable word markers in the DOM for the karaoke underline; when
+   * present (listen mode) each word is also an affordance to seek/jump
+   * narration — critical on mobile where the per-paragraph play control is
+   * hidden (see globals.css). */
   trackNarrationWords?: boolean;
   /** Whether the active paragraph control represents pause rather than
    * play. This only flips on play/pause, nowhere near the per-word timing
@@ -147,6 +149,22 @@ const BookContent = memo(function BookContent({
       ? ` om-narration-passage${isCurrentPassage ? " om-narrating-passage" : ""}${revealedPassageId === raw.id ? " om-passage-control-revealed" : ""}`
       : "";
     const revealOnTouch = canPlayPassage ? () => setRevealedPassageId(raw.id) : undefined;
+    // On mobile the per-paragraph play button is hidden (globals.css), so the
+    // karaoke words themselves become the seek affordance when listening.
+    // Delegated at the passage container: any descendant [data-word-index]
+    // click seeks to this passage. Guards against hijacking a fresh
+    // drag-selection and against note/highlight/annotation clicks that
+    // already stopPropagation at the inner span.
+    const handleWordClick = (e: React.MouseEvent) => {
+      if (!trackNarrationWords || !onPassagePlayback || !canPlayPassage) return;
+      const target = e.target as HTMLElement;
+      const wordEl = target.closest("[data-word-index]");
+      if (!wordEl) return;
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+      e.stopPropagation();
+      onPassagePlayback(section.id, raw.id);
+    };
     const narrationControl = canPlayPassage ? (
       <button
         type="button"
@@ -355,6 +373,7 @@ const BookContent = memo(function BookContent({
             className={`m-0 border-l-2 border-[var(--reader-border)] pl-4${narrationClass}`}
             style={sharedStyle}
             onTouchStart={revealOnTouch}
+            onClick={handleWordClick}
           >
             {narrationControl}{passageText}
           </blockquote>
@@ -371,6 +390,7 @@ const BookContent = memo(function BookContent({
           data-passage-type={raw.type}
           className={`m-0${narrationClass}`}
           onTouchStart={revealOnTouch}
+          onClick={handleWordClick}
           style={{
             ...sharedStyle,
             marginTop,
@@ -391,6 +411,7 @@ const BookContent = memo(function BookContent({
         data-passage-type={raw.type}
         className={`m-0 font-serif rounded-xs select-text no-callout${narrationClass}`}
         onTouchStart={revealOnTouch}
+        onClick={handleWordClick}
         // sharedStyle deliberately carries no margin — every other passage
         // type (code, blockquote, table, list item, ...) applies
         // marginTop/marginBottom itself on whatever element it renders.
