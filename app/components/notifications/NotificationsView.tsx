@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Heart, MessageCircle, Megaphone, Bell } from "lucide-react";
+import { Bell } from "lucide-react";
 import SearchableAppPage from "@/app/components/shell/SearchableAppPage";
 import Loader from "@/app/components/Loader";
 import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
@@ -11,28 +11,17 @@ import { useMarkNotificationsRead } from "@/lib/notifications/useMarkNotificatio
 import { apiFetch } from "@/lib/api/client";
 import { formatTimeAgo } from "@/lib/reader/timeAgo";
 
-const ICON_BY_KIND = { reaction: Heart, reply: MessageCircle, broadcast: Megaphone } as const;
-
 function NotificationRow({ item }: { item: NotificationItem }) {
-  const Icon = ICON_BY_KIND[item.kind];
   return (
     <Link
       href={item.url}
-      className={`flex items-start gap-3 px-3.5 py-3 no-underline ${
-        item.read ? "" : "bg-[var(--reader-surface-hover)]"
-      }`}
+      className={`block px-3.5 py-3 no-underline ${item.read ? "" : "bg-[var(--reader-surface-hover)]"}`}
     >
-      <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full border border-[var(--reader-border)] text-[var(--reader-text-muted)]">
-        <Icon size={14} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="m-0 text-sm font-semibold text-[var(--reader-text)]">{item.title}</p>
-        <p className="mt-0.5 mb-0 text-[13px] text-[var(--reader-text-muted)]">{item.body}</p>
-        <p className="mt-1 mb-0 text-xs font-medium text-[var(--reader-text-subtle)]">
-          {formatTimeAgo(new Date(item.createdAt).getTime())}
-        </p>
-      </div>
-      {!item.read && <span className="mt-1.5 h-2 w-2 flex-none rounded-full bg-[var(--reader-accent)]" />}
+      <p className="m-0 text-sm font-semibold text-[var(--reader-text)]">{item.title}</p>
+      <p className="mt-0.5 mb-0 text-[13px] text-[var(--reader-text-muted)]">{item.body}</p>
+      <p className="mt-1 mb-0 text-xs font-medium text-[var(--reader-text-subtle)]">
+        {formatTimeAgo(new Date(item.createdAt).getTime())}
+      </p>
     </Link>
   );
 }

@@ -128,7 +128,7 @@ export default function AppSidebar() {
           card above instead, alongside HomeAuthBanner on mobile, whenever
           !isAuthenticated. */}
       {isAuthenticated && reader && (
-        <div className="flex-none px-4 pb-6 pt-3.5 border-t border-[var(--reader-border)] flex items-center gap-2.5">
+        <div className="flex-none px-4 pb-6 flex items-center gap-2.5">
           <span
             style={{ background: avatarColor(reader.pseudonym) }}
             className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full text-[11px] font-semibold text-white"
