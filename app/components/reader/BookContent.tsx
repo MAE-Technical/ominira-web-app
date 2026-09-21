@@ -150,7 +150,7 @@ const BookContent = memo(function BookContent({
     const narrationControl = canPlayPassage ? (
       <button
         type="button"
-        className="om-passage-play no-callout"
+        className="om-passage-play no-callout hidden shell:inline-flex"
         // Inline values deliberately win over generic button/icon styles:
         // this control is neutral reader chrome, never a brand-accent CTA.
         style={{ color: "var(--reader-text)", borderColor: "var(--reader-border)" }}

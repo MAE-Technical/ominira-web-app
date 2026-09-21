@@ -928,10 +928,10 @@ export default function Reader({
   // fixed overlay that can reappear over the content at any moment on
   // upward scroll, so the scroll area always reserves their space instead
   // of the content reflowing underneath them when they're hidden.
-  // A consistent 40px inset reserves a real left gutter for paragraph
-  // narration controls on every viewport, without adding spacing to any
-  // individual paragraph.
-  const contentPad = "px-10";
+  // Desktop reserves a 40px gutter for the paragraph play control; on
+  // mobile the control is hidden (globals.css) so paragraphs use the full
+  // width with a tighter inset.
+  const contentPad = "px-4 shell:px-10";
   const contentTopPad = topBarHeightPx + (isMobile ? 28 : 48);
   // Reserves room for the docked ChapterNavFooter — a floating overlay
   // (like the header) that only surfaces once the reader reaches the

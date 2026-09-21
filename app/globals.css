@@ -427,14 +427,20 @@ body {
   box-shadow: 0 0 0 5px var(--reader-active-passage-bg);
 }
 
-@media (hover: none), (pointer: coarse) {
-  .om-passage-play {
-    /* The shared 40px content inset leaves the same real gutter on touch
-       devices as desktop, so the button remains beside—not above—the line. */
-    top: 0.35em;
-    left: -2.4rem;
-    width: 1.9rem;
-    height: 1.9rem;
+@media (max-width: 859.98px) {
+  .om-passage-play,
+  .om-narration-passage:hover .om-passage-play,
+  .om-narration-passage:focus-within .om-passage-play,
+  .om-passage-control-revealed .om-passage-play,
+  .om-narrating-passage .om-passage-play {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    clip-path: inset(100%) !important;
   }
 }
 
