@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { PLATFORM_NAME } from "@/lib/config/platform";
 import { useReaderStore } from "@/stores/reader-store";
+import SplashArtwork from "./SplashArtwork";
 
 const SPLASH_DURATION_MS = 2000;
 const SPLASH_SESSION_KEY = "ominira:pwa-launch-splash-shown";
@@ -79,13 +80,11 @@ export default function AppSplashScreen() {
 
   if (!visible || pathname !== "/home") return null;
 
-  const dark = theme === "dark";
   const quote = SPLASH_QUOTES[quoteIndex];
 
   return (
     <div
-      className="fixed inset-0 z-[100] grid place-items-center overflow-hidden transition-opacity duration-200"
-      style={{ background: dark ? "#1d1c1b" : "#ffffff" }}
+      className="fixed inset-0 z-[100] grid place-items-center overflow-hidden bg-[var(--reader-bg)] transition-opacity duration-200"
       aria-label={`${PLATFORM_NAME} is loading`}
       role="status"
     >
@@ -109,15 +108,14 @@ export default function AppSplashScreen() {
           <p>{quote.text}</p>
           <p className="mt-5">{quote.attribution}</p>
         </div>
-        <Image
-          src={`/images/splash/${assetTheme}-illustration-new.svg`}
-          alt=""
-          width={340}
-          height={347}
-          unoptimized
-          priority
-          className="mt-auto w-full max-w-[400px] self-center"
-        />
+        {/* Reuses the same theme-aware artwork component as the login QuotePanel
+            (app/auth/login/page.tsx) — single source of illustration selection
+            so splash and auth cannot drift onto different dark/light assets, and
+            the container uses bg-[var(--reader-bg)] (#ffffff / #000000) exactly
+            like login's QuotePanel does, fixing the earlier hardcoded
+            #1d1c1b divergence that kept showing stale/cream art after theme
+            switches. */}
+        <SplashArtwork showAccent={false} className="mt-auto max-w-[400px] self-center" />
       </div>
     </div>
   );

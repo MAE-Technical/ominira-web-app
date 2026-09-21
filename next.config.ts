@@ -12,6 +12,21 @@ const nextConfig: NextConfig = {
   // mishandling it the way it did the isomorphic package this used to go
   // through (see edge.ts's own doc comment).
   serverExternalPackages: ["ws"],
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      {
+        source: "/manifest.json",
+        headers: [{ key: "Cache-Control", value: "public, max-age=0, must-revalidate" }],
+      },
+    ];
+  },
   experimental: {
     // Next 15+ defaults dynamic routes' client-side Router Cache to 0 —
     // every single tap on a bottom-nav/sidebar link re-fetches that route's

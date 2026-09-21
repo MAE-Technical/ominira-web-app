@@ -1,4 +1,4 @@
-const CACHE_NAME = "ominira-shell-v6";
+const CACHE_NAME = "ominira-shell-v7";
 // Launch artwork is part of the PWA shell, not page content: it needs to be
 // available before a network request can complete on a cold app start. Cache
 // both themes because the reader preference is restored client-side.
