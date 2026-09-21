@@ -107,7 +107,7 @@ async function listByEngagement(
 
   const ids = materialRows.map((row) => row.id);
   const { data: noteRows } = await admin
-    .from("notes")
+    .from("posts")
     .select("material_id, reaction_count")
     .eq("visibility", "public")
     .in("material_id", ids);
@@ -116,8 +116,11 @@ async function listByEngagement(
   // note exists at all" signal) plus however many reactions it's drawn —
   // "notes + notes-reactions" per the product ask. Private notes never
   // count, same visibility rule the notes endpoints themselves enforce.
+  // material_id is nullable on posts in general, but the `.in("material_id",
+  // ids)` filter above guarantees every row back here has one.
   const engagement = new Map<string, number>();
   for (const note of noteRows ?? []) {
+    if (!note.material_id) continue;
     engagement.set(note.material_id, (engagement.get(note.material_id) ?? 0) + 1 + note.reaction_count);
   }
 

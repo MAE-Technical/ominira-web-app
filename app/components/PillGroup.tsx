@@ -52,7 +52,7 @@ export default function PillGroup<T extends string>({
             key={opt.value}
             onClick={() => onSelect(opt.value)}
             className={`flex-none whitespace-nowrap rounded-sm border font-bold cursor-pointer overflow-hidden transition-colors ${
-              size === "lg" ? "px-4 py-2 text-[12px]" : "px-3 py-1 text-xs"
+              size === "lg" ? "px-4 py-2 text-[12px]" : "px-3 py-1.5 text-xs"
             } ${
               active
                 ? "border-brand-500 bg-brand-500 text-white"

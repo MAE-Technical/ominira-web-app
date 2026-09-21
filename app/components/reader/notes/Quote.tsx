@@ -37,7 +37,7 @@ export default function Quote({ text, onJump }: { text: string; onJump?: () => v
   return (
     <QuoteCard onClick={onJump}>
       <div className="flex flex-col gap-1.5">
-        <p className="m-0 font-serif text-[15px] leading-[1.6] text-[var(--reader-quote-text)]">
+        <p className="m-0 font-serif text-[15px] leading-[1.6] text-[var(--color-app-text)]">
           {expanded ? text : shown}
         </p>
         {isTruncated && (
@@ -48,7 +48,7 @@ export default function Quote({ text, onJump }: { text: string; onJump?: () => v
               e.stopPropagation();
               setExpanded((v) => !v);
             }}
-            className="w-fit cursor-pointer border-none bg-transparent p-0 text-[12px] font-medium text-[var(--reader-quote-text-muted)] hover:text-[var(--reader-quote-text)]"
+            className="w-fit cursor-pointer border-none bg-transparent p-0 text-[12px] font-medium text-[var(--color-app-text-secondary)] hover:text-[var(--color-app-text)]"
           >
             {expanded ? "See less" : "See more"}
           </button>

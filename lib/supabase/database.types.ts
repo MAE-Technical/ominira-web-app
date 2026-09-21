@@ -195,6 +195,105 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["note_reactions"]["Insert"]>;
         Relationships: [];
       };
+      topics: {
+        Row: {
+          id: string;
+          slug: string;
+          name: string;
+          description: string | null;
+          cover_url: string | null;
+          source: "curated" | "user_created" | "legacy_migration";
+          created_by: string | null;
+          status: "active" | "pending" | "archived";
+          follower_count: number;
+          post_count: number;
+        } & Timestamps;
+        Insert: {
+          id?: string;
+          slug: string;
+          name: string;
+          description?: string | null;
+          cover_url?: string | null;
+          source?: "curated" | "user_created" | "legacy_migration";
+          created_by?: string | null;
+          status?: "active" | "pending" | "archived";
+          follower_count?: number;
+          post_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["topics"]["Insert"]>;
+        Relationships: [];
+      };
+      material_topics: {
+        Row: { material_id: string; topic_id: string; created_at: string };
+        Insert: { material_id: string; topic_id: string; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["material_topics"]["Insert"]>;
+        Relationships: [];
+      };
+      // followable_type is constrained to 'topic' today (follows_topic_only,
+      // migrations/20260919_topics_and_posts.sql) even though the column
+      // already allows 'reader' for a future member-to-member follow graph.
+      follows: {
+        Row: {
+          id: string;
+          follower_id: string;
+          followable_type: "topic" | "reader";
+          followable_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          follower_id: string;
+          followable_type: "topic" | "reader";
+          followable_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["follows"]["Insert"]>;
+        Relationships: [];
+      };
+      posts: {
+        Row: {
+          id: string;
+          reader_id: string;
+          topic_id: string;
+          material_id: string | null;
+          ranges: Json | null;
+          parent_id: string | null;
+          replying_to_id: string | null;
+          thread_type: "note" | "discussion";
+          kind: "citation" | "text" | "link" | "video" | "book_share" | "voice";
+          content: Json;
+          visibility: "public" | "private";
+          reaction_count: number;
+          reply_count: number;
+        } & Timestamps;
+        Insert: {
+          id?: string;
+          reader_id: string;
+          topic_id: string;
+          material_id?: string | null;
+          ranges?: Json | null;
+          parent_id?: string | null;
+          replying_to_id?: string | null;
+          thread_type?: "note" | "discussion";
+          kind: "citation" | "text" | "link" | "video" | "book_share" | "voice";
+          content: Json;
+          visibility?: "public" | "private";
+          reaction_count?: number;
+          reply_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["posts"]["Insert"]>;
+        Relationships: [];
+      };
+      post_reactions: {
+        Row: { post_id: string; reader_id: string; created_at: string };
+        Insert: { post_id: string; reader_id: string; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["post_reactions"]["Insert"]>;
+        Relationships: [];
+      };
       push_subscriptions: {
         Row: {
           id: string;
@@ -245,21 +344,29 @@ export type Database = {
         Row: {
           id: string;
           reader_id: string;
-          kind: "reaction" | "reply" | "broadcast";
+          kind: "reaction" | "reply" | "broadcast" | "digest";
           title: string;
           body: string;
           url: string;
           read_at: string | null;
+          // topic_id/digest_count/latest_post_id: migrations/20260919_topics_and_posts.sql.
+          // digest_count/latest_post_id only meaningful for kind = 'digest'.
+          topic_id: string | null;
+          digest_count: number;
+          latest_post_id: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           reader_id: string;
-          kind: "reaction" | "reply" | "broadcast";
+          kind: "reaction" | "reply" | "broadcast" | "digest";
           title: string;
           body: string;
           url: string;
           read_at?: string | null;
+          topic_id?: string | null;
+          digest_count?: number;
+          latest_post_id?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["notifications"]["Insert"]>;

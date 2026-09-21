@@ -39,7 +39,7 @@ type NarrationState = {
   isBuffering: boolean;
   /** Bumped by NarrationEngine every time narration moves because the
    * reader explicitly asked it to (a chapter-skip button, the chapters
-   * drawer, clicking a passage/word) — as opposed to the 'ended' handler
+   * drawer or clicking a paragraph) — as opposed to the 'ended' handler
    * quietly advancing to the next passage on its own. This is the one
    * signal Reader.tsx's own carousel-follow effect uses to decide whether
    * to move the visual carousel: an explicit jump always follows,
@@ -64,7 +64,6 @@ type NarrationState = {
    * ChaptersDrawer's own row clicks use this while in listen mode, the
    * same primitive skipToPrev/NextSection are themselves built on. */
   jumpToSection: (sectionId: string) => void;
-  handleWordClick: (passageId: string, wordIndex: number) => void;
   handleSeek: (ms: number) => void;
 };
 
@@ -82,6 +81,5 @@ export const useNarrationStore = create<NarrationState>(() => ({
   skipToPrevSection: () => {},
   skipToNextSection: () => {},
   jumpToSection: () => {},
-  handleWordClick: () => {},
   handleSeek: () => {},
 }));

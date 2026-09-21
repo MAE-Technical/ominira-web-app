@@ -114,10 +114,10 @@ export async function getReaderProfilePage(slug: string, viewerId: string | unde
     // is cheaper than round-tripping through a DB-side aggregate for it.
     // Doubles as both stats below: `.length` is the Notes count,
     // reaction_count summed is Reactions received.
-    admin.from("notes").select("id, reaction_count").eq("reader_id", readerRow.id).eq("visibility", "public"),
+    admin.from("posts").select("id, reaction_count").eq("reader_id", readerRow.id).eq("visibility", "public"),
     listReaderActivities(readerRow.id),
     admin
-      .from("notes")
+      .from("posts")
       .select("*")
       .eq("reader_id", readerRow.id)
       .is("parent_id", null)

@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, type ReactElement } from "react";
+import { memo, type ReactElement, useState } from "react";
+import { Pause, Play } from "lucide-react";
 import { ImagePassageBlock, MarkedText, PassageText, type NoteLookup } from "./PassageContent";
 import type { BookDocument, Passage, Section, TableCell } from "@/lib/book/schema";
 import type { Annotation } from "@/stores/library-store";
@@ -55,18 +56,16 @@ type BookContentProps = {
   onNoteMarkerClick: (passageId: string, annotationId: string) => void;
   /** Passed straight through to PassageText — see its own doc comment. */
   justJumpedAnnotationId: string | null;
-  /** Word-level tap-to-seek during listen mode — undefined outside it (see
-   * PassageText's own `onWordClick` doc comment). Bound here to each
-   * passage's own id before reaching PassageText, which only knows its own
-   * word indices, not which passage it's in. */
-  onWordClick?: (passageId: string, wordIndex: number) => void;
-  /** True while narration is actually playing — adds globals.css's
-   * om-listen-active class to the section container, which is what turns
-   * every [data-word-index] span's cursor to a pointer and gives it a
-   * hover wash (see that CSS rule's own comment). A plain prop, not
-   * imperative DOM like the active-word toggle itself: this only flips on
-   * play/pause, nowhere near the per-tick frequency that would defeat this
-   * component's memo(). */
+  /** Starts narration at a specific paragraph, including from normal read
+   * mode. The active paragraph's control also toggles pause/play. */
+  onPassagePlayback?: (sectionId: string, passageId: string) => void;
+  currentPlayingPassageId?: string;
+  /** Keeps stable word markers in the DOM for the karaoke underline, but
+   * intentionally does not make individual words interactive. */
+  trackNarrationWords?: boolean;
+  /** Whether the active paragraph control represents pause rather than
+   * play. This only flips on play/pause, nowhere near the per-word timing
+   * frequency that would defeat this component's memoization. */
   isNarrationPlaying?: boolean;
 };
 
@@ -112,11 +111,14 @@ const BookContent = memo(function BookContent({
   onTextSelect,
   onNoteMarkerClick,
   justJumpedAnnotationId,
-  onWordClick,
+  onPassagePlayback,
+  currentPlayingPassageId,
+  trackNarrationWords,
   isNarrationPlaying,
 }: BookContentProps) {
   const firstSectionId = orderedSections[0]?.id;
   const section = orderedSections[activeIndex];
+  const [revealedPassageId, setRevealedPassageId] = useState<string | null>(null);
 
   if (!section) {
     return <div className="flex-1 min-h-0 relative overflow-hidden" />;
@@ -139,6 +141,29 @@ const BookContent = memo(function BookContent({
     const textAlign = raw.align ?? (isHeading && isPartDivider ? "center" : isFrontCoverImage ? "center" : "left");
     const marginTop = isHeading ? (isPartDivider ? 40 : 24) : isCode ? 20 : isBlockquote ? 18 : isTable ? 24 : 0;
     const marginBottom = `${((16 * lineHeight) / 1.7).toFixed(0)}px`;
+    const canPlayPassage = Boolean(onPassagePlayback && raw.text.trim() && !isHeading && !isImage && !isTable);
+    const isCurrentPassage = currentPlayingPassageId === raw.id;
+    const narrationClass = canPlayPassage
+      ? ` om-narration-passage${isCurrentPassage ? " om-narrating-passage" : ""}${revealedPassageId === raw.id ? " om-passage-control-revealed" : ""}`
+      : "";
+    const revealOnTouch = canPlayPassage ? () => setRevealedPassageId(raw.id) : undefined;
+    const narrationControl = canPlayPassage ? (
+      <button
+        type="button"
+        className="om-passage-play no-callout"
+        // Inline values deliberately win over generic button/icon styles:
+        // this control is neutral reader chrome, never a brand-accent CTA.
+        style={{ color: "var(--reader-text)", borderColor: "var(--reader-border)" }}
+        aria-label={isCurrentPassage && isNarrationPlaying ? "Pause narration" : "Play from this paragraph"}
+        title={isCurrentPassage && isNarrationPlaying ? "Pause narration" : "Play from this paragraph"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onPassagePlayback!(section.id, raw.id);
+        }}
+      >
+        {isCurrentPassage && isNarrationPlaying ? <Pause aria-hidden="true" size={14} strokeWidth={1.6} fill="currentColor" /> : <Play aria-hidden="true" size={14} strokeWidth={1.6} fill="currentColor" />}
+      </button>
+    ) : null;
 
     if (isImage) {
       // ImagePassageBlock's own <figure> is shrink-wrapped specifically so
@@ -175,7 +200,7 @@ const BookContent = memo(function BookContent({
         onInternalLinkClick={onInternalLinkClick}
         annotations={annotations}
         onNoteMarkerClick={(annotationId) => onNoteMarkerClick(raw.id, annotationId)}
-        onWordClick={onWordClick ? (wordIndex) => onWordClick(raw.id, wordIndex) : undefined}
+        trackNarrationWords={trackNarrationWords}
         justJumpedAnnotationId={justJumpedAnnotationId}
       />
     );
@@ -327,10 +352,11 @@ const BookContent = memo(function BookContent({
           style={{ marginTop, marginBottom }}
         >
           <blockquote
-            className="m-0 border-l-2 border-[var(--reader-border)] pl-4"
+            className={`m-0 border-l-2 border-[var(--reader-border)] pl-4${narrationClass}`}
             style={sharedStyle}
+            onTouchStart={revealOnTouch}
           >
-            {passageText}
+            {narrationControl}{passageText}
           </blockquote>
         </div>
       );
@@ -343,7 +369,8 @@ const BookContent = memo(function BookContent({
           key={raw.id}
           data-passage-id={raw.id}
           data-passage-type={raw.type}
-          className="m-0"
+          className={`m-0${narrationClass}`}
+          onTouchStart={revealOnTouch}
           style={{
             ...sharedStyle,
             marginTop,
@@ -352,7 +379,7 @@ const BookContent = memo(function BookContent({
             listStylePosition: "outside",
           }}
         >
-          {passageText}
+          {narrationControl}{passageText}
         </li>
       );
     }
@@ -362,7 +389,8 @@ const BookContent = memo(function BookContent({
         key={raw.id}
         data-passage-id={raw.id}
         data-passage-type={raw.type}
-        className="m-0 font-serif rounded-xs select-text no-callout"
+        className={`m-0 font-serif rounded-xs select-text no-callout${narrationClass}`}
+        onTouchStart={revealOnTouch}
         // sharedStyle deliberately carries no margin — every other passage
         // type (code, blockquote, table, list item, ...) applies
         // marginTop/marginBottom itself on whatever element it renders.
@@ -372,7 +400,7 @@ const BookContent = memo(function BookContent({
         // consecutive paragraphs rendered with zero space between them.
         style={{ ...sharedStyle, marginTop, marginBottom }}
       >
-        {passageText}
+        {narrationControl}{passageText}
       </p>
     );
   };

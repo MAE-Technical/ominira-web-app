@@ -120,10 +120,10 @@ function HighlightsList({ items }: { items: ReaderProfilePage["highlights"] }) {
       {items.map((highlight) => (
         <QuoteCard key={highlight.id}>
           <div className="flex flex-col gap-1.5">
-            <p className="m-0 font-serif text-[15px] leading-[1.6] text-[var(--reader-quote-text)]">
+            <p className="m-0 font-serif text-[15px] leading-[1.6] text-[var(--color-app-text)]">
               {highlight.excerpt}
             </p>
-            <span className="text-xs font-medium text-[var(--reader-quote-text-muted)]">{highlight.material.title}</span>
+            <span className="text-xs font-medium text-[var(--color-app-text-secondary)]">{highlight.material.title}</span>
           </div>
         </QuoteCard>
       ))}

@@ -1,7 +1,9 @@
 "use client";
 
+import { rangesKey } from "@/stores/library-store";
 import type { CommunityFeedItem } from "@/lib/community/useCommunityFeed";
 import { useThreadInteraction } from "@/lib/reader/useThreadInteraction";
+import { resolveBookThumbnailSrc } from "@/lib/materials/image";
 import NoteThreadCard from "@/app/components/reader/notes/NoteThreadCard";
 import NoteBookHeader from "./NoteBookHeader";
 
@@ -28,11 +30,31 @@ export default function CommunityNoteCard({ item }: { item: CommunityFeedItem })
   });
   const expanded = expandedIds.has(item.note.id);
 
+  // A general note (no highlighted range) never gets the citation/quote
+  // card — just the plain book-metadata header, same as today. Only a note
+  // actually anchored to a passage (a real excerpt resolved) gets the
+  // combined cover+quote Citation block.
+  const passageId = item.note.ranges[0]?.passageId;
+  const href = `/read/${item.material.slug}?${new URLSearchParams({
+    section: item.sectionId,
+    ...(passageId ? { passage: passageId } : {}),
+    note: rangesKey(item.note.ranges),
+  }).toString()}`;
+
   return (
-    <div className="rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] px-3 py-4 sm:p-5">
+    <div className="border-b border-[var(--reader-border)] py-4 lg:mb-5 lg:break-inside-avoid lg:rounded-sm lg:border lg:bg-[var(--reader-surface)] lg:p-5">
       <NoteThreadCard
-        header={<NoteBookHeader item={item} />}
-        quote={item.excerpt}
+        {...(item.excerpt
+          ? {
+              citation: {
+                href,
+                coverSrc: resolveBookThumbnailSrc(item.material),
+                title: item.material.title,
+                author: item.label ? `${item.material.author} · ${item.label}` : item.material.author,
+                quote: item.excerpt,
+              },
+            }
+          : { header: <NoteBookHeader item={item} /> })}
         note={item.note}
         replies={item.replies}
         expanded={expanded}

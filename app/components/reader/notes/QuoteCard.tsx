@@ -1,12 +1,14 @@
 "use client";
 
+import { Quote as QuoteIcon } from "lucide-react";
+
 // A self-contained pull-quote card — modeled on Substack's restack card: an
 // isolated "someone pulled this exact passage out of the page" object, not
-// just styled body text. Theme-reactive (a lighter sunken surface in light
-// mode, a darker one in dark mode) rather than fixed-dark in both themes —
-// a feed built from many stacked cards must not read as oppressively dark
-// just because the object it embeds is metaphorically "a dark card"; it
-// should sit on the page the way the reader's own theme already does.
+// just styled body text. Same tinted surface as the home feed's Citation
+// block (--color-app-surface-muted, theme-reactive), so a passage quote
+// reads as the same kind of object everywhere it appears — the notes
+// panel's own standalone quote card and the home feed's cover+quote
+// Citation, not two different treatments for the same idea.
 // Shared shell for both the book-passage quote (top of a fresh thread) and
 // a drilled-in note's own quote (top of its reply thread) — same object,
 // different source of "the thing being replied to." See Quote and NoteQuote.
@@ -45,14 +47,18 @@ export default function QuoteCard({
             }
           : undefined
       }
-      className={`rounded-sm bg-[var(--reader-quote-bg)] border border-[var(--reader-border)] flex flex-col px-4 py-4 gap-1 ${
+      className={`rounded-sm bg-[var(--color-app-surface-muted)] border border-[var(--reader-border)] flex flex-col px-4 py-4 gap-1 ${
         onClick ? "cursor-pointer" : ""
       }`}
     >
       {icon && (
-        <span aria-hidden="true" className="select-none font-literata text-[32px] leading-[0.5] text-[var(--reader-quote-subtle)]">
-          &ldquo;
-        </span>
+        <QuoteIcon
+          aria-hidden="true"
+          size={16}
+          fill="currentColor"
+          strokeWidth={0}
+          className="mb-1 select-none text-[var(--color-app-text-muted)]"
+        />
       )}
       {children}
     </div>

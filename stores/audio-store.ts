@@ -33,6 +33,8 @@ type AudioState = {
    * materialId). NarrationEngine reads/writes reading-position-store by
    * this, not `book.id`. */
   materialId: string | null;
+  /** A paragraph picked before the narration engine has received this book. */
+  startAtPassage: { bookId: string; sectionId: string; passageId: string } | null;
 
   play: () => void;
   pause: () => void;
@@ -45,6 +47,8 @@ type AudioState = {
    * the engine's own resume-position effect immediately reconciles
    * currentTimeMs against whatever was last saved for it. */
   openBook: (book: BookDocument, materialId: string) => void;
+  openBookAtPassage: (book: BookDocument, materialId: string, sectionId: string, passageId: string) => void;
+  clearStartAtPassage: () => void;
   /** Keeps `book` in sync as more of it arrives — Reader.tsx's own prose
    * loads progressively (see useProgressiveText's doc comment: every
    * section's structure is real from the start, but non-eager sections'
@@ -79,6 +83,7 @@ export const useAudioStore = create<AudioState>()(
       playerHeight: 0,
       book: null,
       materialId: null,
+      startAtPassage: null,
 
       play: () => set({ isPlaying: true }),
       pause: () => set({ isPlaying: false }),
@@ -88,8 +93,17 @@ export const useAudioStore = create<AudioState>()(
       setSpeed: (speed) => set({ speed }),
       setPlayerHeight: (playerHeight) => set({ playerHeight }),
       openBook: (book, materialId) => set({ book, materialId, currentTimeMs: 0, isPlaying: true }),
+      openBookAtPassage: (book, materialId, sectionId, passageId) =>
+        set({
+          book,
+          materialId,
+          currentTimeMs: 0,
+          isPlaying: true,
+          startAtPassage: { bookId: book.id, sectionId, passageId },
+        }),
+      clearStartAtPassage: () => set({ startAtPassage: null }),
       updateBookContent: (book) => set((s) => (s.book && s.book.id === book.id ? { book } : {})),
-      closePlayer: () => set({ book: null, materialId: null, isPlaying: false }),
+      closePlayer: () => set({ book: null, materialId: null, isPlaying: false, startAtPassage: null }),
     }),
     {
       name: "ominira-audio-prefs",

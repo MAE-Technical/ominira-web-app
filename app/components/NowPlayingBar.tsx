@@ -7,6 +7,7 @@ import { useAudioStore } from "@/stores/audio-store";
 import { useNarrationStore } from "@/stores/narration-store";
 import { useReaderOverlayStore } from "@/stores/reader-overlay-store";
 import { useLayoutStore } from "@/stores/layout-store";
+import { useReaderStore } from "@/stores/reader-store";
 
 // Matches both reader routes (app/read/[slug], the canonical/shareable URL,
 // and app/reader/[slug], the soft-navigable one ReaderLink actually lands
@@ -36,14 +37,9 @@ export default function NowPlayingBar() {
   // variables would all resolve to nothing and the player would render
   // with no background/border/text color at all.
   //
-  // Always forced to "dark" (never the reader's own light/dark toggle) —
-  // AppBottomNav and this bar were rendering in near-identical surface
-  // colors under the light theme, and on mobile (where they sit flush
-  // against each other with no gap) that made them visually merge into one
-  // strip. Dark theme's tokens are already black-surface/white-text
-  // (globals.css), so pinning to it gives a real black bg + near-white
-  // controls regardless of which theme the rest of the app is in, and
-  // costs nothing extra when the app happens to already be in dark theme.
+  // The bar lives outside Reader's theme-scoped tree, so it supplies the
+  // current theme attribute itself and stays visually continuous with the
+  // reader in either mode.
   const book = useAudioStore((s) => s.book);
   const closePlayer = useAudioStore((s) => s.closePlayer);
   const setPlayerHeight = useAudioStore((s) => s.setPlayerHeight);
@@ -54,6 +50,7 @@ export default function NowPlayingBar() {
   const skipToNextSection = useNarrationStore((s) => s.skipToNextSection);
   const handleSeek = useNarrationStore((s) => s.handleSeek);
   const isBuffering = useNarrationStore((s) => s.isBuffering);
+  const theme = useReaderStore((s) => s.theme);
   // Every route except the reader itself now has a persistent left sidebar
   // (app/components/shell/AppSidebar.tsx) at the same 860px breakpoint —
   // full-width here would run this bar underneath it, covering the
@@ -114,7 +111,7 @@ export default function NowPlayingBar() {
   return (
     <div
       ref={containerRef}
-      data-reader-theme="dark"
+      data-reader-theme={theme}
       className={`fixed left-0 right-0 z-50 ${hasSidebar ? "shell:left-[var(--app-sidebar-w)]" : ""} ${
         clearsReaderPanel ? "shell:right-95" : ""
       }`}

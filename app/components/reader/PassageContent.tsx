@@ -89,31 +89,15 @@ function buildSegments(
   return tokens;
 }
 
-/** Every plain-text word segment gets these (data-word-index for
- * Reader.tsx's imperative om-narrating-word toggle; onClick for tap-to-
- * seek) whenever narration is live for this passage — `onWordClick` is
- * undefined outside listen mode, so plain reading never attaches a click
- * handler or a data attribute to ordinary text at all. Skipped on the
- * link/note-marker branches below: those already own a click of their own
- * (navigate / open thread), and layering a second, conflicting one over
- * the same word would race it. */
+/** Every plain-text word segment gets a stable marker while narration is
+ * active, so Reader.tsx can move the karaoke underline without rerendering
+ * prose. Paragraph controls own seeking; words are deliberately not buttons. */
 function wordProps(
   seg: Segment,
-  onWordClick: ((wordIndex: number) => void) | undefined
-): { "data-word-index"?: number; onClick?: (e: React.MouseEvent) => void } {
-  if (seg.wordIndex === undefined || !onWordClick) return {};
-  return {
-    "data-word-index": seg.wordIndex,
-    onClick: (e) => {
-      // Don't hijack a fresh drag-selection that merely happens to end on
-      // top of this word — same guard the annotation-marker click below
-      // already uses.
-      const sel = window.getSelection();
-      if (sel && !sel.isCollapsed && sel.toString().trim()) return;
-      e.stopPropagation();
-      onWordClick(seg.wordIndex!);
-    },
-  };
+  trackNarrationWords: boolean | undefined
+): { "data-word-index"?: number } {
+  if (seg.wordIndex === undefined || !trackNarrationWords) return {};
+  return { "data-word-index": seg.wordIndex };
 }
 
 function renderLeaf(
@@ -122,9 +106,9 @@ function renderLeaf(
   notesById: Map<string, NoteLookup>,
   onNoteClick: (note: NoteLookup, target: HTMLElement) => void,
   onInternalLinkClick: (sectionId: string, fragmentId?: string) => void,
-  onWordClick: ((wordIndex: number) => void) | undefined
+  trackNarrationWords: boolean | undefined
 ) {
-  const wp = wordProps(seg, onWordClick);
+  const wp = wordProps(seg, trackNarrationWords);
   const text = seg.text;
 
   if (!seg.mark) return <span key={key} {...wp}>{seg.text}</span>;
@@ -281,13 +265,9 @@ type PassageTextProps = {
    * action instead (re-select the marked text and use the pill), so a
    * click here has exactly one job. */
   onNoteMarkerClick: (annotationId: string) => void;
-  /** Present only in listen mode — turns on word tokenization (tagging
-   * every word with a stable [data-word-index], for Reader.tsx's imperative
-   * om-narrating-word toggle to find) and tap-to-seek. Called with the
-   * clicked word's index; the caller already knows which passage this is.
-   * `undefined` outside listen mode, so plain reading attaches neither the
-   * data attribute nor a click handler to any word. */
-  onWordClick?: (wordIndex: number) => void;
+  /** Present only in listen mode — turns on word tokenization for
+   * Reader.tsx's imperative karaoke underline. */
+  trackNarrationWords?: boolean;
   /** The one annotation (if any) the reader was just taken to from its own
    * quote card in the annotation feed or a deep link — gets the
    * .reader-jump-flash treatment (a one-shot pulse that settles into, and
@@ -307,7 +287,7 @@ type PassageTextProps = {
  * Wrapped in memo(): with the whole book mounted at once (reader-issues.md
  * — no notion of pages), tokenization now runs for every passage rather
  * than just the one being narrated or annotated. Reader.tsx passes stable
- * references for `passage`/`annotations`/`onWordClick` and stable
+ * references for `passage`/`annotations`/`trackNarrationWords` and stable
  * callbacks, so this only re-tokenizes a passage when something about it
  * actually changed — never on every playback tick, which is why the
  * currently-narrated word itself is marked by Reader.tsx toggling a plain
@@ -320,11 +300,11 @@ export const PassageText = memo(function PassageText({
   onInternalLinkClick,
   annotations,
   onNoteMarkerClick,
-  onWordClick,
+  trackNarrationWords,
   justJumpedAnnotationId,
 }: PassageTextProps) {
   const readerId = useSessionStore((s) => s.readerId);
-  const words = onWordClick ? computeWordRanges(passage.text) : [];
+  const words = trackNarrationWords ? computeWordRanges(passage.text) : [];
   // An annotation carries one range per passage it touches — resolve each
   // to its own local [start,end) here, since that's all buildSegments
   // needs to know about for this one passage.
@@ -359,7 +339,7 @@ export const PassageText = memo(function PassageText({
     <>
       {runs.map((run, i) => {
         const children = run.segs.map((seg, j) =>
-          renderLeaf(seg, j, notesById, onNoteClick, onInternalLinkClick, onWordClick)
+          renderLeaf(seg, j, notesById, onNoteClick, onInternalLinkClick, trackNarrationWords)
         );
         if (!run.annotationId) return <span key={i}>{children}</span>;
 

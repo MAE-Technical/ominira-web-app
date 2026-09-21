@@ -1,4 +1,4 @@
-const CACHE_NAME = "ominira-shell-v3";
+const CACHE_NAME = "ominira-shell-v5";
 // Launch artwork is part of the PWA shell, not page content: it needs to be
 // available before a network request can complete on a cold app start. Cache
 // both themes because the reader preference is restored client-side.
@@ -59,6 +59,9 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(payload.title, {
       body: payload.body,
       tag: payload.tag,
+      // The installed PWA mark is deliberately used for both surfaces: it
+      // keeps Ominira identifiable in an OS notification tray even when the
+      // notification's own title/body contain the interaction emoji.
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       data: { url: payload.url },
@@ -66,15 +69,27 @@ self.addEventListener("push", (event) => {
   );
 });
 
-// Focuses an existing tab on that URL if one's open, otherwise opens a new one.
+// Focuses the exact destination when it is already open. If the reader is
+// open to another place in the same book, navigate that tab first — merely
+// focusing it would leave the reader at the wrong note/highlight.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url ?? "/";
+  const url = new URL(event.notification.data?.url ?? "/", self.location.origin);
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      const existing = clients.find((client) => new URL(client.url).pathname === url);
+      const existing = clients.find((client) => {
+        const current = new URL(client.url);
+        return current.origin === url.origin && current.pathname === url.pathname && current.search === url.search;
+      });
       if (existing) return existing.focus();
-      return self.clients.openWindow(url);
+      const readerTab = clients.find((client) => {
+        const current = new URL(client.url);
+        return current.origin === url.origin && current.pathname === url.pathname;
+      });
+      if (readerTab && "navigate" in readerTab) {
+        return readerTab.navigate(url.href).then((client) => client?.focus());
+      }
+      return self.clients.openWindow(url.href);
     })
   );
 });

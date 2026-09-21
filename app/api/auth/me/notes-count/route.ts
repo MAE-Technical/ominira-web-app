@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (!reader) return unauthorized();
 
   const { count } = await getSupabaseAdminClient()
-    .from("notes")
+    .from("posts")
     .select("*", { count: "exact", head: true })
     .eq("reader_id", reader.readerId);
 

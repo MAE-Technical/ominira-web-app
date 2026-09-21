@@ -18,12 +18,21 @@ import { pseudonymToSlug } from "@/lib/reader/profileSlug";
 export default function AuthorRow({
   name,
   savedAt,
+  city = null,
+  topicName = null,
   size = "default",
   isPrivate = false,
   menu,
 }: {
   name: string;
   savedAt: number;
+  /** Shown after the timestamp ("· {city}") when known — same trailing
+   * metadata line as `topicName` below. */
+  city?: string | null;
+  /** Shown after city ("· in {topicName}") — every Note carries this (each
+   * post always has a topic_id), so it's only null if the topic lookup
+   * itself failed. */
+  topicName?: string | null;
   /** Reply-tier entries render smaller than top-level notes. */
   size?: "default" | "small";
   /** True only for a note/reply that's both `visibility: "private"` *and*
@@ -41,18 +50,18 @@ export default function AuthorRow({
   const displayName = comradeName(name);
   const profileHref = `/@${pseudonymToSlug(name)}`;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2.5">
       <Link href={profileHref} className="flex flex-none no-underline">
         <span
           style={{ background: avatarColor(displayName) }}
-          className={`flex flex-none items-center justify-center rounded-sm font-bold text-white ${
-            small ? "h-4 w-4 text-[10px]" : "h-5 w-5 text-xs"
+          className={`flex flex-none items-center justify-center rounded-full font-bold text-white ${
+            small ? "h-6 w-6 text-[11px]" : "h-7 w-7 text-xs"
           }`}
         >
           {avatarInitial(displayName)}
         </span>
       </Link>
-      <div className="flex items-baseline gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
         <Link
           href={profileHref}
           className={`font-bold capitalize text-[var(--reader-text)] no-underline hover:underline ${
@@ -66,7 +75,9 @@ export default function AuthorRow({
             small ? "text-[10px]" : "text-[11px]"
           }`}
         >
-          {formatShortTimeAgo(savedAt)}
+          {formatShortTimeAgo(savedAt)} &nbsp;
+          {city && <> · &nbsp; {city}</>} &nbsp;
+          {topicName && <> · &nbsp; in {topicName}</>}
         </span>
         {isPrivate && (
           <span

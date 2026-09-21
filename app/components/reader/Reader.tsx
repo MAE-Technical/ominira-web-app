@@ -144,6 +144,9 @@ export default function Reader({
   // clears the slot, never just navigating away from this book's page.
   const audioStoreBook = useAudioStore((s) => s.book);
   const openBook = useAudioStore((s) => s.openBook);
+  const openBookAtPassage = useAudioStore((s) => s.openBookAtPassage);
+  const playAudio = useAudioStore((s) => s.play);
+  const pauseAudio = useAudioStore((s) => s.pause);
   const updateBookContent = useAudioStore((s) => s.updateBookContent);
   const playerHeight = useAudioStore((s) => s.playerHeight);
   const anyPlayerActive = audioStoreBook !== null;
@@ -206,7 +209,7 @@ export default function Reader({
   const narrationAudioSection = useNarrationStore((s) => s.audioSection);
   const currentPlayingPassageId = useNarrationStore((s) => s.currentPlayingPassageId);
   const currentNarrationWords = useNarrationStore((s) => s.currentWords);
-  const handleNarrationWordClick = useNarrationStore((s) => s.handleWordClick);
+  const seekToPassageForListening = useNarrationStore((s) => s.seekToPassageForListening);
   const narrationExplicitJumpSeq = useNarrationStore((s) => s.explicitJumpSeq);
   const jumpNarrationToSection = useNarrationStore((s) => s.jumpToSection);
   // Drives om-listen-active (globals.css) — the cursor/hover affordance on
@@ -215,6 +218,34 @@ export default function Reader({
   // also drive a BookContent prop without defeating its memo()).
   const audioIsPlaying = useAudioStore((s) => s.isPlaying);
   const audioCurrentTimeMs = useAudioStore((s) => s.currentTimeMs);
+
+  // Paragraph controls deliberately own narration seeking. Word spans remain
+  // present only for karaoke timing, never as click targets.
+  const handlePassagePlayback = useCallback(
+    (sectionId: string, passageId: string) => {
+      if (isListen && currentPlayingPassageId === passageId) {
+        if (audioIsPlaying) pauseAudio();
+        else playAudio();
+        return;
+      }
+      if (isListen) {
+        seekToPassageForListening(sectionId, passageId);
+        return;
+      }
+      openBookAtPassage(liveBook, materialId, sectionId, passageId);
+    },
+    [
+      audioIsPlaying,
+      currentPlayingPassageId,
+      isListen,
+      liveBook,
+      materialId,
+      openBookAtPassage,
+      pauseAudio,
+      playAudio,
+      seekToPassageForListening,
+    ]
+  );
 
   // These stores skip automatic persist hydration (see their own comments)
   // specifically so the server and the client's first paint render
@@ -482,7 +513,7 @@ export default function Reader({
   //
   // This is the ONE place the carousel ever moves in response to
   // narration — every "jump narration somewhere" entry point (chapter-skip
-  // buttons, the chapters drawer, clicking a passage/word, all the way
+  // buttons, the chapters drawer, clicking a paragraph, all the way
   // down in NarrationEngine) only ever changes narration-store's own
   // audioIndex/explicitJumpSeq; none of them touch the carousel directly
   // any more. The drawer used to also call navigateToSection itself,
@@ -868,7 +899,10 @@ export default function Reader({
   // fixed overlay that can reappear over the content at any moment on
   // upward scroll, so the scroll area always reserves their space instead
   // of the content reflowing underneath them when they're hidden.
-  const contentPad = isMobile ? "px-5" : "px-10";
+  // A consistent 40px inset reserves a real left gutter for paragraph
+  // narration controls on every viewport, without adding spacing to any
+  // individual paragraph.
+  const contentPad = "px-10";
   const contentTopPad = topBarHeightPx + (isMobile ? 28 : 48);
   // Reserves room for the docked ChapterNavFooter — a floating overlay
   // (like the header) that only surfaces once the reader reaches the
@@ -984,7 +1018,9 @@ export default function Reader({
               onTextSelect={onTextSelect}
               onNoteMarkerClick={openNoteMarker}
               justJumpedAnnotationId={justJumpedAnnotationId}
-              onWordClick={isListen ? handleNarrationWordClick : undefined}
+              onPassagePlayback={canListen ? handlePassagePlayback : undefined}
+              currentPlayingPassageId={isListen ? currentPlayingPassageId : undefined}
+              trackNarrationWords={isListen}
               isNarrationPlaying={isListen && audioIsPlaying}
             />
 

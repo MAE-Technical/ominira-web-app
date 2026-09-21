@@ -92,7 +92,7 @@ export function useCreateNote(materialId: string) {
       const optimistic: Note = {
         id: tempId,
         materialId,
-        author: { readerId: readerId ?? "", pseudonym: profile?.pseudonym ?? "" },
+        author: { readerId: readerId ?? "", pseudonym: profile?.pseudonym ?? "", city: profile?.city ?? null },
         ranges: input.ranges,
         parentId: target?.parentId ?? input.parentId ?? null,
         replyingToId: target?.parentId ? input.parentId! : null,
@@ -100,6 +100,7 @@ export function useCreateNote(materialId: string) {
         visibility: input.visibility ?? "public",
         reactionCount: 0,
         reactedByMe: false,
+        topicName: target?.topicName ?? null,
         createdAt: now,
         updatedAt: now,
       };

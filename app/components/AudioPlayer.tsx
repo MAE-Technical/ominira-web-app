@@ -22,7 +22,7 @@ type Props = {
    * the streaming case, which renders no timeline at all — there's no
    * fixed duration to show for audio still being synthesized on demand,
    * and an estimated one would be false precision that corrects itself
-   * under the reader mid-scrub. Seeking happens by tapping a passage/word
+   * under the reader mid-scrub. Seeking starts from a paragraph control
    * in the text itself (karaoke-style), not by dragging a bar here. */
   durationMs?: number;
   /** True while the passage the player is targeting isn't playable yet
@@ -311,8 +311,8 @@ export default function AudioPlayer({
           (a future prerecorded, fixed-duration section; see durationMs's
           own doc comment). The current streaming case has no fixed
           duration to show a timeline for, so it shows none at all rather
-          than a fake one — seeking happens by tapping a passage/word in
-          the text itself instead. */}
+          than a fake one — seeking starts from paragraph controls in the
+          reader itself instead. */}
       {showsDuration && (
         <div className={`flex items-center gap-2.5 ${isMini ? "px-4 pt-2" : isMobile ? "px-3.5 pt-2.5" : "px-6 pt-3"}`}>
           <span className="text-[11px] font-medium text-[var(--reader-text-muted)] flex-none tabular-nums">

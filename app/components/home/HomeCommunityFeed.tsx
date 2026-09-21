@@ -11,12 +11,13 @@ import HomeInstallBanner from "./HomeInstallBanner";
 import HomePushPrompt from "./HomePushPrompt";
 
 /** Stand-in for a CommunityNoteCard while `GET /api/community/notes` is
- * still in flight — same rounded-card footprint (border, padding, roughly
- * a card's worth of lines) so the feed's layout doesn't jump once real
- * cards swap in, and so this reads as "loading," not as an empty state. */
+ * still in flight — same footprint as the real card at each breakpoint (a
+ * flush flat row on mobile, a boxed masonry card on desktop) so the feed's
+ * layout doesn't jump once real cards swap in, and so this reads as
+ * "loading," not as an empty state. */
 function CommunityNoteCardSkeleton() {
   return (
-    <div className="animate-pulse rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] p-4">
+    <div className="animate-pulse border-b border-[var(--reader-border)] py-4 lg:mb-5 lg:break-inside-avoid lg:rounded-sm lg:border lg:bg-[var(--reader-surface)] lg:p-5">
       <div className="mb-3 h-3 w-2/3 rounded-full bg-[var(--reader-surface-hover)]" />
       <div className="mb-2 h-3 w-full rounded-full bg-[var(--reader-surface-hover)]" />
       <div className="mb-4 h-3 w-4/5 rounded-full bg-[var(--reader-surface-hover)]" />
@@ -54,36 +55,28 @@ export default function HomeCommunityFeed() {
       </div>
 
       {isLoading ? (
-        <div className="columns-1 gap-5 lg:columns-2">
+        <div className="lg:columns-2 lg:gap-5">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="mb-5 break-inside-avoid">
-              <CommunityNoteCardSkeleton />
-            </div>
+            <CommunityNoteCardSkeleton key={i} />
           ))}
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-[var(--reader-text-muted)]">No notes yet — annotate a passage to start the discourse.</p>
       ) : (
-        // A 2-column masonry on desktop (CSS multi-column, not CSS Grid —
-        // no broadly-supported grid masonry mode exists yet) rather than a
-        // single column, since card height varies a lot here: voice vs.
-        // text notes, and however many replies happen to be expanded.
-        // Multi-column re-flows on its own whenever a card's height changes
-        // (e.g. expanding a reply thread) — no JS measuring/repositioning
-        // needed, unlike a hand-rolled masonry. The one real tradeoff: this
-        // fills top-to-bottom in column 1 before starting column 2
-        // (newspaper order), not left-to-right row by row, so "Top"/
-        // "Recent" reads column-major rather than one strict ranked
-        // sequence — acceptable for a discussion feed, not a leaderboard.
-        // `gap` only spaces the columns apart, not items stacked within one
-        // column, so each card's own wrapper carries the vertical margin
-        // instead; break-inside-avoid keeps a card from splitting across
-        // the column break.
-        <div className="columns-1 gap-5 lg:columns-2">
+        // Mobile: a single column of flat rows, each separated by its own
+        // bottom border, flush with the page's own edges (no card padding)
+        // so a note lines up with the "Community notes" heading above it —
+        // the redesign's precise mobile treatment. Desktop: still a 2-column
+        // masonry of boxed cards (CSS multi-column, not Grid — no broadly-
+        // supported grid masonry mode exists yet) — a single column reads
+        // too wide there for now; CommunityNoteCard's own lg: classes add
+        // the border/background/padding/break-inside-avoid back in at that
+        // breakpoint. Plain block flow (no flex-col) is what makes the
+        // mobile single-column stacking free — only the lg:columns-2 needs
+        // an explicit multi-column declaration.
+        <div className="lg:columns-2 lg:gap-5">
           {items.map((item) => (
-            <div key={item.note.id} className="mb-5 break-inside-avoid">
-              <CommunityNoteCard item={item} />
-            </div>
+            <CommunityNoteCard key={item.note.id} item={item} />
           ))}
         </div>
       )}

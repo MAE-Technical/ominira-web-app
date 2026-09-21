@@ -155,18 +155,10 @@ body {
    simply replace those, same token names, so reintroducing variants later
    doesn't require touching any consumer.
 
-   --reader-active-word-bg/text is the *currently narrated word* during
-   listen mode (PassageContent.tsx/Reader.tsx) — light theme uses a soft
-   apricot marker straight out of the brand family (brand-100 wash,
-   brand-700 ink), the "Highlighter Wash" concept: one word lit at a time,
-   nothing else in the sentence dimmed, faded, or grouped around it, and no
-   passage-level wash left standing underneath it. --reader-active-word-bg-
-   hover is the subtler brand-50 tint shown on any *other* word while
-   narration is active, signalling "tap this to seek" without competing
-   with the one word actually playing. Dark theme's own block below inverts
-   the same brand family into an oxblood mark instead of reusing these exact
-   values (concept 2a, "Highlighter Wash · dark theme") — see its own
-   comment. */
+   --reader-active-word-bg/text marks the current karaoke word. It uses the
+   same yellow family as reader selections; --reader-active-passage-bg is a
+   quieter version of that selection wash for the containing paragraph.
+   Player-control tokens intentionally invert with the reader theme. */
 [data-reader-theme="light"] {
   --reader-bg: #ffffff;
   /* Slightly off-white — pure white bg with pure white surfaces gave every
@@ -198,22 +190,25 @@ body {
      since brand-500 alone (a plain Tailwind text-brand-500 class) loses too
      much contrast once dark theme's background goes literal black. */
   --reader-accent: var(--color-brand-500);
-  /* The quote card's own "sunken" surface — a cool near-black, deliberately
-     inverted against the rest of this light theme (dark card, light text)
-     rather than a step down from --reader-surface, so a pulled-out excerpt
-     reads as its own distinct object sitting on the page rather than
-     blending into the surrounding paper tone. --reader-quote-text/-muted/
-     -subtle are this same card's text colors, sized for that dark surface —
-     everywhere else keeps using the plain --reader-text family. Dark theme
-     keeps the near-black sand-900 below unchanged and just points its
-     quote-text trio at the theme's own (already-light) text colors. */
-  --reader-quote-bg: #1f1d1b;
-  --reader-quote-text: #ffffff;
-  --reader-quote-text-muted: rgba(255, 255, 255, 0.68);
-  --reader-quote-subtle: rgba(255, 255, 255, 0.45);
-  --reader-active-word-bg: var(--color-brand-100);
-  --reader-active-word-bg-hover: var(--color-brand-50);
-  --reader-active-word-text: var(--color-brand-700);
+  --reader-active-word-bg: var(--reader-highlight);
+  --reader-active-word-text: #251d00;
+  --reader-active-passage-bg: color-mix(in srgb, var(--reader-highlight) 42%, transparent);
+  --reader-active-passage-text: var(--reader-text);
+  --reader-passage-control-icon: #171717;
+  --reader-passage-control-border: rgba(0, 0, 0, 0.18);
+
+  /* The redesigned note card's own semantic tokens (Citation, NoteContent's
+     link/video preview) — mapped onto the existing sand/brand scale rather
+     than the new design's literal hex values, so this stays one theme
+     system rather than a second, unrelated one living alongside --reader-*.
+     Only defined where the ported note-card pieces actually use them. */
+  --color-app-surface: var(--reader-surface);
+  --color-app-surface-muted: var(--color-sand-75);
+  --color-app-border: var(--color-sand-200);
+  --color-app-text: var(--color-sand-950);
+  --color-app-text-secondary: var(--color-sand-600);
+  --color-app-text-muted: var(--color-sand-500);
+  --color-app-brand: var(--color-brand-500);
 }
 
 [data-reader-theme="dark"] {
@@ -241,10 +236,6 @@ body {
   --reader-highlight-flash: rgba(255, 222, 89, 0.55);
   --reader-note-accent: var(--color-brand-300);
   --reader-accent: var(--color-brand-300);
-  --reader-quote-bg: var(--color-sand-900);
-  --reader-quote-text: var(--reader-text);
-  --reader-quote-text-muted: var(--reader-text-muted);
-  --reader-quote-subtle: var(--reader-text-subtle);
   /* Back to concept 2a's own oxblood mark (brand-800 fill, brand-100 ink) —
      that's the actual design for dark theme, not a stand-in. Only the hover
      tint changed from the mockup's flat white: rgba(255,255,255,0.08) read
@@ -254,9 +245,23 @@ body {
      not a different one) rather than brand-800's own near-black tone, which
      would barely register at any usable opacity against this page's already
      near-black background. */
-  --reader-active-word-bg: var(--color-brand-800);
-  --reader-active-word-bg-hover: rgba(190, 64, 13, 0.25);
-  --reader-active-word-text: var(--color-brand-100);
+  --reader-active-word-bg: rgba(255, 222, 89, 0.72);
+  --reader-active-word-text: #211a00;
+  --reader-active-passage-bg: color-mix(in srgb, var(--reader-highlight) 60%, transparent);
+  --reader-active-passage-text: var(--reader-text);
+  --reader-passage-control-icon: #f5f5f7;
+  --reader-passage-control-border: rgba(255, 255, 255, 0.24);
+
+  /* Dark-theme half of the note card's semantic tokens — see the light
+     block's own comment. Piggybacks on --reader-*'s existing dark values
+     rather than a separate literal palette. */
+  --color-app-surface: var(--reader-surface);
+  --color-app-surface-muted: var(--reader-surface-hover);
+  --color-app-border: var(--reader-border);
+  --color-app-text: var(--reader-text);
+  --color-app-text-secondary: var(--reader-text-muted);
+  --color-app-text-muted: var(--reader-text-subtle);
+  --color-app-brand: var(--color-brand-300);
 }
 
 /* The browser's native drag-selection wash, recolored to the same marker
@@ -371,6 +376,68 @@ body {
   -webkit-box-decoration-break: clone;
 }
 
+/* Paragraph narration controls stay beside the active paragraph and surface
+   for a hovered or keyboard-focused paragraph. On touch-first devices there
+   is no hover state, so every playable paragraph exposes its control. */
+.om-narration-passage {
+  position: relative;
+}
+.om-passage-play {
+  position: absolute;
+  top: 0.35em;
+  /* The reading column has 40px of desktop side padding. Keeping this just
+     inside that gutter means overflow scrolling never clips it, while it
+     remains entirely outside the paragraph's line box. */
+  left: -2.4rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid var(--reader-passage-control-border);
+  border-radius: 999px;
+  background: var(--reader-bg);
+  color: var(--reader-passage-control-icon);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 140ms ease, transform 140ms ease, background-color 140ms ease;
+}
+.om-narration-passage:hover .om-passage-play,
+.om-narration-passage:focus-within .om-passage-play,
+.om-passage-control-revealed .om-passage-play,
+.om-narrating-passage .om-passage-play {
+  opacity: 1;
+  transform: scale(1);
+}
+.om-passage-play:hover,
+.om-passage-play:focus-visible {
+  background: var(--reader-surface-hover);
+  outline: none;
+}
+.om-passage-play:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--reader-accent) 28%, transparent);
+}
+.om-narrating-passage {
+  background: var(--reader-active-passage-bg);
+  color: var(--reader-active-passage-text) !important;
+  border-radius: 6px;
+  box-shadow: 0 0 0 5px var(--reader-active-passage-bg);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .om-passage-play {
+    /* The shared 40px content inset leaves the same real gutter on touch
+       devices as desktop, so the button remains beside—not above—the line. */
+    top: 0.35em;
+    left: -2.4rem;
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+}
+
 /* "Now narrating" word marker (Reader.tsx) — toggled by plain DOM
    classList add/remove (not a React prop) on whichever [data-word-index]
    span is currently playing, the same imperative pattern this file already
@@ -388,26 +455,13 @@ body {
 .om-narrating-word {
   background: var(--reader-active-word-bg);
   color: var(--reader-active-word-text);
-  border-radius: 4px;
-  padding: 1px 3px;
-  margin: 0 -3px;
-  transition: background 0.1s ease;
+  border-radius: 3px;
+  padding: 1px 2px;
+  margin: 0 -2px;
+  font-weight: 650;
+  transition: background-color 0.1s ease, color 0.1s ease;
 }
 
-/* The rest of the passage's words while narration is active (Reader.tsx
-   sets this on the section container for as long as isListen is true) —
-   cursor and a quiet hover wash are the only "this is tappable" cue, since
-   the running text otherwise looks exactly like plain reading prose. Never
-   applied to the word actually playing (:not(.om-narrating-word)): that one
-   already has its own, stronger mark above and shouldn't also pick up the
-   dimmer hover tint. */
-.om-listen-active [data-word-index] {
-  cursor: pointer;
-}
-.om-listen-active [data-word-index]:hover:not(.om-narrating-word) {
-  background: var(--reader-active-word-bg-hover);
-  border-radius: 4px;
-}
 
 /* Reader-as-overlay open/close (ReaderModal.tsx) — an intercepted-route
    modal that swapped in/out instantly read as indistinguishable from a

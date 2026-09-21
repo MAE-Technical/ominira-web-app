@@ -61,7 +61,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ mate
   ) : null;
 
   let query = admin
-    .from("notes")
+    .from("posts")
     .select("*")
     .eq("material_id", material.id)
     .is("parent_id", null)
@@ -125,7 +125,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ mate
   // thread (api-spec.md).
   const { data: replyRows } = page.length
     ? await admin
-        .from("notes")
+        .from("posts")
         .select("*")
         .in(
           "parent_id",

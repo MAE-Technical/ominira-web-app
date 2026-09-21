@@ -31,18 +31,14 @@ const EXIT_ANIMATION_MS = 220;
  * this entirely and unmounts instantly — not fixable without intercepting
  * popstate, and out of scope here).
  *
- * But motion alone wasn't enough — once settled, a full-bleed panel is
- * pixel-identical to a real page, so the "this is a layer on top of
- * something" read has to survive after the animation ends too, not just
- * during it. `shell:left-[var(--app-sidebar-w)]` is what does that at
- * rest: the same 220px strip AppShell already reserves for the persistent
- * desktop nav rail (AppSidebar.tsx) stays uncovered, so the app underneath
- * keeps visibly existing the whole time the modal is open — exactly the cue
- * the Substack reference this was modeled on relies on. Below that
- * breakpoint the panel stays full-bleed on purpose rather than leaving the
- * same strip for AppBottomNav (still mounted underneath, just covered) —
- * there's no spare width to spend on a mobile screen the way there is next
- * to the desktop rail, and reading real estate wins.
+ * Full-bleed at every breakpoint, sidebar included — reading real estate
+ * wins over the "layer on top of something" cue a partial-width panel used
+ * to give (a strip left uncovered for AppSidebar.tsx). The overlay still
+ * *is* one, not a real navigation: closing is router.back(), a plain
+ * history pop, which is exactly what guarantees landing back at the precise
+ * scroll position on the underlying page (the home community feed today)
+ * rather than a fresh load of it — covering the sidebar changes nothing
+ * about that.
  *
  * z-40 — above ordinary page content, but still below NowPlayingBar's own
  * z-50 (app/components/NowPlayingBar.tsx), so a playing book's persistent
@@ -136,7 +132,7 @@ export default function ReaderModal({
     // around it while animating — a plain single-div version couldn't fade
     // a background in behind its own transform.
     <div
-      className={`fixed inset-0 shell:left-[var(--app-sidebar-w)] z-40 ${closing ? "reader-modal-scrim-exit" : "reader-modal-scrim-enter"}`}
+      className={`fixed inset-0 z-40 ${closing ? "reader-modal-scrim-exit" : "reader-modal-scrim-enter"}`}
     >
       <div className={`h-full w-full ${closing ? "reader-modal-panel-exit" : "reader-modal-panel-enter"}`}>
         <Reader

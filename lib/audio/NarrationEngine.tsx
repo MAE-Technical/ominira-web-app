@@ -88,6 +88,7 @@ export default function NarrationEngine() {
   const audioCurrentTimeMs = useAudioStore((s) => s.currentTimeMs);
   const audioSpeed = useAudioStore((s) => s.speed);
   const voice = useAudioStore((s) => s.voice);
+  const startAtPassage = useAudioStore((s) => s.startAtPassage);
 
   const getPosition = useReadingPositionStore((s) => s.getPosition);
   const setPosition = useReadingPositionStore((s) => s.setPosition);
@@ -101,7 +102,7 @@ export default function NarrationEngine() {
   // narrationIndex.ts had to switch to the recursive buildSectionsById
   // instead of a shallow `.find`. A shallow scan here silently dropped
   // every passage belonging to a nested section from this map entirely, so
-  // ensureClip/seekToPassageForListening/handleWordClick could never
+  // ensureClip/seekToPassageForListening could never
   // resolve a real Passage for them (`getPassage(id)` returned undefined)
   // — no error, just a target that could never actually kick off a fetch:
   // a book with any Part-grouped chapter (common) silently never narrated
@@ -203,7 +204,7 @@ export default function NarrationEngine() {
 
   // Bumped once per *explicit* jump — a reader-initiated section/passage
   // change (chapter-skip buttons, chapters drawer, clicking a
-  // passage/word), as opposed to the 'ended' handler quietly advancing on
+  // paragraph), as opposed to the 'ended' handler quietly advancing on
   // its own. Pushed into narration-store below so Reader.tsx's carousel-
   // follow effect (its own single consumer) can tell the two apart — see
   // that store field's own doc comment for why this replaced Reader
@@ -669,6 +670,18 @@ export default function NarrationEngine() {
     [passageById, requestTarget]
   );
 
+  // A paragraph can be selected before this engine has switched over to its
+  // book. Consume that one-shot intent only once the real passage index is
+  // available, so it never briefly starts at the saved/default position.
+  useEffect(() => {
+    if (!startAtPassage || startAtPassage.bookId !== book?.id) return;
+    const passage = passageById(startAtPassage.passageId);
+    if (!passage || !hasNarratableText(passage)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- consumes an external one-shot playback command.
+    seekToPassageForListening(startAtPassage.sectionId, startAtPassage.passageId);
+    useAudioStore.getState().clearStartAtPassage();
+  }, [book?.id, passageById, seekToPassageForListening, startAtPassage]);
+
   // Chapter-skip (player's prev/next-chapter buttons, not the ±15s seek) —
   // jumps narration to the adjacent spine section's first narratable
   // passage (typically its heading, but whatever that section's first
@@ -746,34 +759,6 @@ export default function NarrationEngine() {
     };
   }, [seekAudio, skipToPrevSection, skipToNextSection]);
 
-  // Click-a-specific-word-to-narrate-from-there. Since a whole passage is
-  // now one clip (see narrationText.ts's own doc comment), `wordIndex` maps
-  // directly onto that clip's own word timings — no sentence-locating
-  // needed at all, precise or otherwise. An exact word offset is only
-  // honored when the click lands in the passage already loaded (chunkIndex
-  // 0 — the passage's own single chunk in the overwhelmingly common case;
-  // its timings are known); clicking a word in a *different* passage
-  // switches to it and starts from its beginning instead: there's no clip
-  // to seek into before it's been fetched.
-  const handleWordClick = useCallback(
-    (passageId: string, wordIndex: number) => {
-      const entry = passageIndex.get(passageId);
-      if (!entry || !hasNarratableText(entry.passage)) return;
-      const { sectionId } = entry;
-
-      const word = passageId === target?.passageId ? live.words[wordIndex] : undefined;
-      if (word) {
-        // A real seek within the clip already loaded.
-        seekAudio(word.startMs);
-        useAudioStore.getState().play();
-        return;
-      }
-      requestTarget({ sectionId, passageId, chunkIndex: 0 }, { explicit: true });
-      useAudioStore.getState().play();
-    },
-    [passageIndex, target, live.words, seekAudio, requestTarget]
-  );
-
   const handleSeek = useCallback((ms: number) => seekAudio(ms), [seekAudio]);
 
   useEffect(() => {
@@ -804,10 +789,9 @@ export default function NarrationEngine() {
       skipToPrevSection,
       skipToNextSection,
       jumpToSection,
-      handleWordClick,
       handleSeek,
     });
-  }, [seekToPassageForListening, skipToPrevSection, skipToNextSection, jumpToSection, handleWordClick, handleSeek]);
+  }, [seekToPassageForListening, skipToPrevSection, skipToNextSection, jumpToSection, handleSeek]);
 
   return null;
 }

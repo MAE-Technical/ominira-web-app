@@ -35,7 +35,10 @@ export async function enrichFeedItems(rows: NoteRow[], callerId: string | undefi
   if (rows.length === 0) return [];
   const admin = getSupabaseAdminClient();
 
-  const materialIds = Array.from(new Set(rows.map((r) => r.material_id)));
+  // material_id is nullable on posts in general (a topic-only discussion
+  // post has none), but every row this function ever receives came from a
+  // book-anchored notes feed, where it's always set.
+  const materialIds = Array.from(new Set(rows.map((r) => r.material_id).filter((id): id is string => id !== null)));
   const { data: materials } = await admin.from("materials").select(`${MATERIAL_SUMMARY_COLUMNS}, json_storage_path`).in("id", materialIds);
   const materialsById = new Map((materials ?? []).map((m) => [m.id, m]));
 
@@ -43,7 +46,7 @@ export async function enrichFeedItems(rows: NoteRow[], callerId: string | undefi
 
   const { data: replyRows } = rows.length
     ? await admin
-        .from("notes")
+        .from("posts")
         .select("*")
         .in(
           "parent_id",
@@ -75,11 +78,13 @@ export async function enrichFeedItems(rows: NoteRow[], callerId: string | undefi
 
   const items: FeedItem[] = [];
   for (const row of rows) {
-    const material = materialsById.get(row.material_id);
+    const material = row.material_id ? materialsById.get(row.material_id) : undefined;
     const note = hydratedById.get(row.id);
     if (!material || !note) continue;
 
-    const { sectionId, label, excerpt } = resolveExcerpt(bookByMaterialId.get(row.material_id), row.ranges as AnnotationRange[]);
+    // material_id is non-null here — the `!material` check above already
+    // continued past any row where it wasn't.
+    const { sectionId, label, excerpt } = resolveExcerpt(bookByMaterialId.get(row.material_id!), row.ranges as AnnotationRange[]);
 
     const replies = (repliesByParent.get(row.id) ?? [])
       .map((r) => hydratedById.get(r.id))

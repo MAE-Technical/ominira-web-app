@@ -1,6 +1,7 @@
 "use client";
 
 import type { NoteContent as NoteContentValue } from "@/lib/api/types";
+import { LinkPreview, VideoPreview } from "./LinkPreview";
 import VoiceNoteView from "./VoiceNoteView";
 
 // Matches http(s) URLs and bare "www." ones (the latter get "https://"
@@ -33,6 +34,29 @@ function linkify(text: string): Array<string | { url: string; label: string }> {
   });
 }
 
+/** First recognizable URL in a note's text, normalized the same way
+ * linkify does (bare "www." gets "https://" prepended) — used to decide
+ * whether a preview card renders below the text at all. Only the first
+ * one: a note that mentions several links still gets just one preview,
+ * same "one card, not a gallery" simplicity as the composer's own. */
+function firstUrl(text: string): string | null {
+  const match = text.match(URL_PATTERN);
+  if (!match) return null;
+  const value = match[0].replace(TRAILING_PUNCTUATION, "");
+  return value.toLowerCase().startsWith("www.") ? `https://${value}` : value;
+}
+
+function youtubeId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "youtu.be") return parsed.pathname.slice(1) || null;
+    if (parsed.hostname.endsWith("youtube.com")) return parsed.searchParams.get("v") ?? parsed.pathname.split("/").pop() ?? null;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 /** One note/reply's actual content — text or voice — with no author,
  * timestamp, or actions bundled in (see AuthorRow for those); split out so
  * the same rendering works at both the top-level-note and reply scale. */
@@ -44,38 +68,42 @@ export default function NoteContent({
   if (content.kind === "voice") {
     return <VoiceNoteView audioUrl={content.audioUrl} durationMs={content.durationMs} />;
   }
+  const url = firstUrl(content.text);
   return (
-    <p
-      // min-w-0 matters as much as the wrap utilities do: every caller
-      // renders this as a direct child of a `flex flex-col` wrapper
-      // (NoteThreadCard, ReplyEntry), and a flex item's default
-      // `min-width: auto` sizes it to its content's own minimum width —
-      // for a long unbroken run like a URL, that minimum can exceed the
-      // panel's width outright, overflowing it horizontally regardless of
-      // what word-break/overflow-wrap say, since the item never actually
-      // shrinks down to the point where breaking would kick in. break-words
-      // (overflow-wrap) covers any other long unbroken token in the note's
-      // own text; the link itself additionally carries break-all (see
-      // below) since a raw URL has none of the natural break points
-      // (hyphens, etc.) overflow-wrap alone waits for.
-      className="m-0 min-w-0 whitespace-pre-wrap break-words font-serif text-sm leading-[1.6] text-[var(--reader-text)]"
-    >
-      {linkify(content.text).map((part, i) =>
-        typeof part === "string" ? (
-          <span key={i}>{part}</span>
-        ) : (
-          <a
-            key={i}
-            href={part.url}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            onClick={(e) => e.stopPropagation()}
-            className="text-[var(--reader-accent)] underline decoration-1 underline-offset-2 break-all"
-          >
-            {part.label}
-          </a>
-        )
-      )}
-    </p>
+    <div className="flex min-w-0 flex-col gap-2.5">
+      <p
+        // min-w-0 matters as much as the wrap utilities do: every caller
+        // renders this as a direct child of a `flex flex-col` wrapper
+        // (NoteThreadCard, ReplyEntry), and a flex item's default
+        // `min-width: auto` sizes it to its content's own minimum width —
+        // for a long unbroken run like a URL, that minimum can exceed the
+        // panel's width outright, overflowing it horizontally regardless of
+        // what word-break/overflow-wrap say, since the item never actually
+        // shrinks down to the point where breaking would kick in. break-words
+        // (overflow-wrap) covers any other long unbroken token in the note's
+        // own text; the link itself additionally carries break-all (see
+        // below) since a raw URL has none of the natural break points
+        // (hyphens, etc.) overflow-wrap alone waits for.
+        className="m-0 min-w-0 whitespace-pre-wrap break-words font-serif text-[16px] leading-[1.6] text-[var(--reader-text)]"
+      >
+        {linkify(content.text).map((part, i) =>
+          typeof part === "string" ? (
+            <span key={i}>{part}</span>
+          ) : (
+            <a
+              key={i}
+              href={part.url}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              onClick={(e) => e.stopPropagation()}
+              className="text-[var(--reader-accent)] underline decoration-1 underline-offset-2 break-all"
+            >
+              {part.label}
+            </a>
+          )
+        )}
+      </p>
+      {url ? youtubeId(url) ? <VideoPreview /> : <LinkPreview data={{ url }} /> : null}
+    </div>
   );
 }

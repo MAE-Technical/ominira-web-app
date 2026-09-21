@@ -56,7 +56,7 @@ export type MaterialSummary = {
 export type Note = {
   id: string;
   materialId: string;
-  author: { readerId: string; pseudonym: string };
+  author: { readerId: string; pseudonym: string; city: string | null };
   ranges: AnnotationRange[];
   parentId: string | null;
   replyingToId: string | null;
@@ -64,6 +64,10 @@ export type Note = {
   visibility: NoteVisibility;
   reactionCount: number;
   reactedByMe: boolean;
+  /** The post's topic name (migrations/20260919_topics_and_posts.sql) — null
+   * only if the topic lookup itself failed (never by design: every post has
+   * a topic_id). Surfaced so AuthorRow can show "· in {topicName}". */
+  topicName: string | null;
   createdAt: string;
   updatedAt: string;
 };

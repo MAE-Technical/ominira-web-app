@@ -4,10 +4,11 @@ import { getAuthenticatedReader } from "@/lib/auth/session";
 import { notFound, unauthorized, validationError } from "@/lib/api/errors";
 import { decodeCursor, encodeCursor, keysetBeforeFilter, type Keyset } from "@/lib/api/cursor";
 import { resolveMaterialRow } from "@/lib/materials/resolve";
-import { contentToColumns, hydrateNotes, type NoteRow } from "@/lib/community/notes";
+import { contentToColumns, hydrateNotes, resolveTopicIdForNewThread, type NoteRow } from "@/lib/community/notes";
 import { enrichFeedItems } from "@/lib/community/feed";
 import type { AnnotationRange, NoteContent } from "@/lib/api/types";
 import { notifyReader } from "@/lib/notifications/notify";
+import { noteInteractionUrl } from "@/lib/notifications/noteTarget";
 
 type Sort = "recent" | "top" | "trending";
 type TopCursor = { reactionCount: number; createdAt: string; id: string };
@@ -27,7 +28,7 @@ function trendingScore(row: NoteRow): number {
 
 async function fetchPage(sort: Sort, limit: number, cursor: unknown) {
   const admin = getSupabaseAdminClient();
-  const base = admin.from("notes").select("*").is("parent_id", null).eq("visibility", "public");
+  const base = admin.from("posts").select("*").is("parent_id", null).eq("visibility", "public");
 
   if (sort === "top") {
     let query = base.order("reaction_count", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false });
@@ -129,13 +130,15 @@ export async function POST(request: Request) {
   let parentId: string | null = null;
   let replyingToId: string | null = null;
   let replyTargetReaderId: string | null = null;
+  let replyRootNoteId: string | null = null;
+  let topicId: string;
 
   if (body.parentId) {
     // Mirrors stores/library-store.ts's addNote resolution exactly: whichever
     // note was actually tapped "Reply" on (root or another reply) resolves
     // to the thread's true top-level note; replyingToId is stamped only
     // when that target wasn't already the root.
-    const { data: target } = await admin.from("notes").select("*").eq("id", body.parentId).maybeSingle();
+    const { data: target } = await admin.from("posts").select("*").eq("id", body.parentId).maybeSingle();
     if (!target) return notFound();
     if (!rangesEqual(target.ranges as AnnotationRange[], body.ranges)) {
       return validationError("A reply must use the same ranges as its parent thread.", "ranges");
@@ -143,12 +146,17 @@ export async function POST(request: Request) {
     parentId = target.parent_id ?? target.id;
     replyingToId = target.parent_id ? target.id : null;
     replyTargetReaderId = target.reader_id;
+    replyRootNoteId = parentId;
+    topicId = target.topic_id;
+  } else {
+    topicId = await resolveTopicIdForNewThread(admin, material.id);
   }
 
   const { data, error } = await admin
-    .from("notes")
+    .from("posts")
     .insert({
       reader_id: reader.readerId,
+      topic_id: topicId,
       material_id: material.id,
       parent_id: parentId,
       replying_to_id: replyingToId,
@@ -164,13 +172,22 @@ export async function POST(request: Request) {
   // Fire-and-forget — never let a push failure affect the create response.
   // No self-notification when replying to your own note.
   if (replyTargetReaderId && replyTargetReaderId !== reader.readerId) {
-    void notifyReader(replyTargetReaderId, {
-      kind: "reply",
-      title: "New reply",
-      body: "Someone replied to your note.",
-      url: "/notes",
-      tag: `note-reply-${replyingToId ?? parentId}`,
-    });
+    void (async () => {
+      const { data: actor } = await admin.from("readers").select("pseudonym").eq("id", reader.readerId).maybeSingle();
+      const url = await noteInteractionUrl({
+        materialSlug: material.slug,
+        ranges: body.ranges,
+        rootNoteId: replyRootNoteId!,
+      });
+      const actorName = actor?.pseudonym ?? "A comrade";
+      await notifyReader(replyTargetReaderId, {
+        kind: "reply",
+        title: `💬 ${actorName} added a reply to your note`,
+        body: `Open it in ${material.title}.`,
+        url,
+        tag: `note-reply-${replyRootNoteId}`,
+      });
+    })();
   }
 
   const [note] = await hydrateNotes([data], reader.readerId);

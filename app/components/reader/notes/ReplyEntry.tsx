@@ -26,11 +26,17 @@ import type { ThreadActions, ThreadUIState } from "@/lib/reader/threadTypes";
 export default function ReplyEntry({
   reply,
   replyingToName,
+  depth = 1,
   ui,
   actions,
 }: {
   reply: Note;
   replyingToName?: string;
+  /** 2 for a reply that itself addresses another reply (nested one step
+   * further under the vertical thread rule) rather than the top-level
+   * note — same distinction `replyingToName` already carries, just as an
+   * indent level for the rule/padding below. */
+  depth?: 1 | 2;
   ui: ThreadUIState;
   actions: ThreadActions;
 }) {
@@ -45,10 +51,12 @@ export default function ReplyEntry({
     // and without it a long unbroken run inside NoteContent (a URL) sets
     // this reply's own minimum width to that run's full length rather than
     // letting NoteContent's wrap utilities engage.
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div className={`relative flex min-w-0 flex-col gap-1.5 py-2 ${depth === 2 ? "pl-10" : "pl-8"}`}>
+      <span className={`absolute inset-y-0 w-px bg-[var(--reader-border)] ${depth === 2 ? "left-8" : "left-3"}`} aria-hidden="true" />
       <AuthorRow
         name={reply.author.pseudonym}
         savedAt={Date.parse(reply.updatedAt)}
+        city={reply.author.city}
         size="small"
         isPrivate={own && reply.visibility === "private"}
         menu={
