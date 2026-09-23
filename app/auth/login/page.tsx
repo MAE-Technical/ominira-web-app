@@ -88,9 +88,9 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
           <div className="mt-2 text-right">
-            <button type="button" className="cursor-pointer border-none bg-transparent p-0 text-xs font-bold text-brand-500">
+            <Link href="/auth/forgot-password" className="text-xs font-bold text-brand-500 no-underline">
               Forgot password?
-            </button>
+            </Link>
           </div>
         </div>
 
