@@ -13,6 +13,15 @@
 // than the sidebar/bottom nav too) read as a hole opening up in the middle
 // of the page instead of a page-wide transition.
 //
+// The unconfined (fixed) variant carries z-40 — the same level as
+// ReaderModal's own scrim (see ReaderModal.tsx) — since every unconfined
+// caller is a route's loading.tsx standing in for content that itself
+// renders at or above that level once it mounts (the intercepted read-modal
+// route in particular: without this, its pre-mount Loader had no z-index at
+// all, so a `relative z-10` element already on the page underneath it — e.g.
+// a community note's "See more" toggle — would paint on top of this
+// nominally full-viewport dim instead of being covered by it).
+//
 // `confined` opts back into the old absolute-inset-0 behavior — Reader.tsx's
 // own hydration gate is the one legitimate exception: it's nested inside
 // ReaderModal's already sidebar-inset panel (shell:left-[var(
@@ -31,7 +40,7 @@
 export default function Loader({ confined = false }: { confined?: boolean }) {
   return (
     <div
-      className={`${confined ? "absolute" : "fixed"} inset-0 flex items-center justify-center select-none no-callout`}
+      className={`${confined ? "absolute" : "fixed z-40"} inset-0 flex items-center justify-center select-none no-callout`}
       style={{ background: "color-mix(in srgb, var(--reader-bg) 90%, transparent)" }}
     >
       <div
