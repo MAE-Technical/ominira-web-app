@@ -130,7 +130,7 @@ export async function POST(request: Request) {
   const admin = getSupabaseAdminClient();
   let parentId: string | null = null;
   let replyingToId: string | null = null;
-  let replyTargetReaderId: string | null = null;
+  let replyRecipientReaderIds: string[] = [];
   let replyRootNoteId: string | null = null;
   let topicId: string;
 
@@ -146,9 +146,20 @@ export async function POST(request: Request) {
     }
     parentId = target.parent_id ?? target.id;
     replyingToId = target.parent_id ? target.id : null;
-    replyTargetReaderId = target.reader_id;
     replyRootNoteId = parentId;
     topicId = target.topic_id;
+
+    // Notify the immediate parent's author (the reply you tapped "Reply" on)
+    // and, when that target isn't itself the thread root, the root note's
+    // author too — otherwise a reply-to-a-reply never reaches the original
+    // note author. Deduped since both can be the same reader.
+    const recipientIds = new Set<string>([target.reader_id]);
+    if (target.parent_id) {
+      const { data: root } = await admin.from("posts").select("reader_id").eq("id", target.parent_id).maybeSingle();
+      if (root?.reader_id) recipientIds.add(root.reader_id);
+    }
+    recipientIds.delete(reader.readerId); // no self-notification
+    replyRecipientReaderIds = [...recipientIds];
   } else {
     topicId = await resolveTopicIdForNewThread(admin, material.id);
   }
@@ -171,25 +182,31 @@ export async function POST(request: Request) {
   if (error || !data) return validationError("Could not create note.");
 
   // Fire-and-forget — never let a push failure affect the create response.
-  // No self-notification when replying to your own note.
-  if (replyTargetReaderId && replyTargetReaderId !== reader.readerId) {
+  // Wrapped in try/catch so a thrown error (e.g. URL resolution) can't
+  // silently swallow the whole notification for every recipient.
+  if (replyRecipientReaderIds.length > 0) {
     void (async () => {
-      const { data: actor } = await admin.from("readers").select("pseudonym").eq("id", reader.readerId).maybeSingle();
-      const url = await noteInteractionUrl({
-        materialSlug: material.slug,
-        ranges: body.ranges ?? [],
-        rootNoteId: replyRootNoteId!,
-      });
-      const actorName = actor?.pseudonym ? comradeName(actor.pseudonym) : "A comrade";
-      await notifyReader(replyTargetReaderId, {
-        kind: "reply",
-        title: `💬 ${actorName} replied to your note`,
-        body: `Tap to view in ${material.title}`,
-        url,
-        tag: `note-reply-${replyRootNoteId}`,
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
-      });
+      try {
+        const { data: actor } = await admin.from("readers").select("pseudonym").eq("id", reader.readerId).maybeSingle();
+        const url = await noteInteractionUrl({
+          materialSlug: material.slug,
+          ranges: body.ranges ?? [],
+          rootNoteId: replyRootNoteId!,
+        });
+        const actorName = actor?.pseudonym ? comradeName(actor.pseudonym) : "A comrade";
+        const payload = {
+          kind: "reply" as const,
+          title: `💬 ${actorName} replied to your note`,
+          body: `Tap to view in ${material.title}`,
+          url,
+          tag: `note-reply-${replyRootNoteId}`,
+          icon: "/icons/icon-192.png",
+          badge: "/icons/icon-192.png",
+        };
+        await Promise.all(replyRecipientReaderIds.map((recipientId) => notifyReader(recipientId, payload)));
+      } catch (err) {
+        console.error("Failed to send reply notification/push", err);
+      }
     })();
   }
 
