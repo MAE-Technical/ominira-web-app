@@ -1295,11 +1295,20 @@ export default function Reader({
           than Loader's normal fixed-to-viewport default — see Loader's own
           doc comment for why that matters specifically inside ReaderModal.
           Kept mounted (not conditionally rendered) so the opacity
-          transition actually plays. */}
+          transition actually plays.
+          transition-[opacity,visibility]: `visibility` is not a "no self-
+          transition" static prop swap here — its toggle rides the same
+          duration-300 as opacity, so it flips at the END of the fade
+          instead of the instant `isReady` flips. Without that, a deep link
+          that opens straight into a note (e.g. its citation's "See more")
+          mounted underneath this mask the same render `isReady` goes true
+          was clickable through the still-visibly-fading overlay, because a
+          plain `pointer-events-none` swaps immediately regardless of the
+          opacity transition's own duration. */}
       <div
         aria-hidden={isReady}
-        className={`absolute inset-0 z-[100] transition-opacity duration-300 ${
-          isReady ? "opacity-0 pointer-events-none" : "opacity-100"
+        className={`absolute inset-0 z-[100] transition-[opacity,visibility] duration-300 ${
+          isReady ? "opacity-0 invisible" : "opacity-100 visible"
         }`}
       >
         <Loader confined />
