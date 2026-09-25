@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AnnotationRange, Note } from "@/lib/api/types";
 import { useCreateNote, useUpdateNote, useDeleteNote, useToggleReaction } from "@/lib/community/useNoteMutations";
 import { topLevelNotes } from "./noteThread";
@@ -21,7 +21,6 @@ export function useThreadInteraction({
   ranges,
   allNotes,
   initialEditingId,
-  initialExpandAll,
   onNoteAdded,
 }: {
   materialId: string;
@@ -32,12 +31,6 @@ export function useThreadInteraction({
    * collapsed, invisible thread. Only the standalone note panel uses this
    * (a deep-link from elsewhere in the reader) — the feed never does. */
   initialEditingId?: string;
-  /** Starts every top-level note's replies expanded rather than collapsed
-   * — the home feed's deep link into one specific note sets this, since a
-   * reader arriving from a community discussion came for the conversation
-   * and shouldn't have to expand every reply by hand to see it. A plain
-   * marker click leaves this unset (collapsed default). */
-  initialExpandAll?: boolean;
   /** Fires right when a reply is sent (optimistic-timed, not gated on the
    * request actually landing — same "instant" feel as the optimistic row
    * itself) — the book-wide feed's own FeedHighlightThread uses this to
@@ -56,14 +49,16 @@ export function useThreadInteraction({
   const deleteNote = useDeleteNote(materialId);
   const toggleReaction = useToggleReaction(materialId);
 
-  // Evaluated once at mount, same as editingId below — not a live
-  // subscription, since allNotes/initialEditingId are set once per
-  // thread instance (a fresh NotesSidebar/FeedHighlightThread mount).
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
-    if (initialExpandAll) return new Set(topLevelNotes(allNotes).map((n) => n.id));
-    const target = initialEditingId ? allNotes.find((n) => n.id === initialEditingId) : undefined;
-    return target?.parentId ? new Set([target.parentId]) : new Set();
-  });
+  // A live derived value, not one-time state — allNotes often starts empty
+  // and fills in once its query resolves (e.g. a deep link opens this panel
+  // before the annotation itself has loaded), so seeding this once via
+  // useState's initializer would permanently lock in an empty set from that
+  // first, still-loading render. Every top-level note starts expanded — one
+  // standard UX everywhere a thread is surfaced, whether that's the
+  // standalone note panel, the book-wide feed, or the home feed: a reader
+  // arriving at a thread came to read what's already there, not to expand
+  // every reply by hand.
+  const expandedIds = useMemo(() => new Set(topLevelNotes(allNotes).map((n) => n.id)), [allNotes]);
   // Only one composer/menu is ever open across this thread at a time —
   // opening a new one implicitly closes whatever else was open. Keyed by
   // whichever note/reply id it belongs to.
@@ -111,13 +106,10 @@ export function useThreadInteraction({
     toggleReaction: (noteId) => toggleReaction.mutate(noteId, { onError }),
   };
 
-  const toggleExpanded = (id: string) =>
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  // No-op: every root is always expanded (see expandedIds above), so
+  // there's nothing left to toggle. Kept only so NoteThreadCard's
+  // onToggleExpand still has something to call.
+  const toggleExpanded = (_id: string) => {};
 
   return { ui, actions, expandedIds, toggleExpanded };
 }

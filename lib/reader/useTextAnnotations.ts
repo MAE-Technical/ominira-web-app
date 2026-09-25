@@ -37,9 +37,6 @@ export type NotesPanelState = {
    * (from a per-entry Edit) — absent, the panel composes a fresh note to
    * append to the thread instead of overwriting one. */
   editingNoteId?: string;
-  /** Every top-level note's replies start expanded rather than collapsed —
-   * see onNoteMarkerClick's own comment for when this is set. */
-  expandAll?: boolean;
   /** When deep-linked from a notification, the specific thread (root note
    * id) whose replies should be fully expanded (show all) rather than
    * collapsed to 2. */
@@ -186,17 +183,9 @@ export function useTextAnnotations(materialId: string) {
   // or in full, and use the pill's Highlight/Delete — see selection/
   // deleteSelection above), so a plain click has exactly one job: read/add
   // to this span's notes.
-  //
-  // `expandAll` defaults to false (a reader who taps a marker mid-book
-  // usually cares about one specific reply, if any, not the whole thread at
-  // once) — Reader.tsx's own deep-link effect passes true, since a reader
-  // arriving from the home feed's community discussion came *for* the
-  // conversation and shouldn't have to expand every reply by hand to see
-  // it. Same "opt-in via the call site, not a second function" reasoning as
-  // openNoteMarker's own keepHeaderVisible.
   const onNoteMarkerClick = useCallback(
-    (passageId: string, annotationId: string, opts?: { expandAll?: boolean; targetThreadId?: string }) => {
-      setNotesPanel({ passageId, annotationId, expandAll: opts?.expandAll, targetThreadId: opts?.targetThreadId });
+    (passageId: string, annotationId: string, opts?: { targetThreadId?: string }) => {
+      setNotesPanel({ passageId, annotationId, targetThreadId: opts?.targetThreadId });
     },
     []
   );

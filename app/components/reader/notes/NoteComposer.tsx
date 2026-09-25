@@ -135,14 +135,21 @@ export default function NoteComposer({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Which of the two composer shapes to render — see this component's own
-  // doc comment. Defaults to the mobile (narrower) shape so a server-
-  // rendered/first-paint pass never briefly shows the desktop inline box on
-  // a phone before hydration corrects it; `matchMedia`'s own `change` event
-  // (not a resize listener) is what keeps this in sync with the viewport
-  // afterward, same idiom, cheaper than a resize listener that only ever
-  // cares about one threshold crossing.
+  // doc comment. Starts `false` (mobile) so a server-rendered/first-paint
+  // pass on a phone never briefly shows the desktop inline box before
+  // hydration corrects it — but that correction runs in a *layout* effect,
+  // not a regular one: a layout effect fires synchronously after commit
+  // but before the browser paints, so even a composer that mounts fresh
+  // on a wide desktop screen (any reply composer, opened by a click) never
+  // actually paints the wrong shape first — regular `useEffect` runs after
+  // paint, which is what let the mobile full-screen overlay (and its
+  // `document.body.style.overflow = "hidden"`) flash into view for one
+  // frame on desktop before flipping back. `matchMedia`'s own `change`
+  // event (not a resize listener) is what keeps this in sync with the
+  // viewport afterward, same idiom, cheaper than a resize listener that
+  // only ever cares about one threshold crossing.
   const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const mq = window.matchMedia(`(min-width: ${DESKTOP_BREAKPOINT_PX}px)`);
     const onChange = () => setIsDesktop(mq.matches);
     onChange();

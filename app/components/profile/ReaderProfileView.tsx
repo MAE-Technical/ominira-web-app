@@ -7,12 +7,13 @@ import { ArrowLeft, Globe } from "lucide-react";
 import { useReaderProfile, type ReaderProfilePage } from "@/lib/reader/useReaderProfile";
 import { avatarColor, avatarInitial, comradeName } from "@/lib/reader/authorDisplay";
 import { resolveBookThumbnailSrc } from "@/lib/materials/image";
+import { communityFeedItemHref } from "@/lib/community/useCommunityFeed";
 import Loader from "@/app/components/Loader";
 import BookCover from "@/app/components/shared/BookCover";
 import UnderlineTabs from "@/app/components/UnderlineTabs";
 import ShareButton from "@/app/components/book/ShareButton";
 import QuoteCard from "@/app/components/reader/notes/QuoteCard";
-import CommunityNoteCard from "@/app/components/home/CommunityNoteCard";
+import NoteCard from "@/app/components/reader/notes/NoteCard";
 
 type Tab = "notes" | "highlights";
 const TAB_OPTIONS: { value: Tab; label: string }[] = [
@@ -94,15 +95,27 @@ function PublicNotesList({ items, emptyText }: { items: ReaderProfilePage["publi
   return (
     <div className="flex flex-col gap-5">
       {items.map((item) => (
-        <CommunityNoteCard key={item.note.id} item={item} />
+        <NoteCard
+          key={item.note.id}
+          materialId={item.material.id}
+          note={item.note}
+          replies={item.replies}
+          excerpt={item.excerpt}
+          bookContext={{
+            href: communityFeedItemHref(item),
+            title: item.material.title,
+            section: item.label,
+            coverUrl: resolveBookThumbnailSrc(item.material),
+          }}
+        />
       ))}
     </div>
   );
 }
 
 /** Self-view only, "highlight just the quote card" — a bare highlight has
- * no note attached to it, so unlike PublicNotesList's full CommunityNoteCard
- * reuse (reply/react/edit thread and all), each entry here is just the
+ * no note attached to it, so unlike PublicNotesList's full NoteCard reuse
+ * (reply/react/edit thread and all), each entry here is just the
  * quoted passage in the same QuoteCard every other quote in this app
  * renders in, plus which book it's from. Never interactive, never shown to
  * a visitor — see ReaderProfileView's own doc comment on why this tab

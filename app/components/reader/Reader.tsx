@@ -813,10 +813,10 @@ export default function Reader({
   const openNoteMarker = (
     passageId: string,
     annotationId: string,
-    opts?: { keepHeaderVisible?: boolean; expandAll?: boolean; targetThreadId?: string }
+    opts?: { keepHeaderVisible?: boolean; targetThreadId?: string }
   ) => {
     noteFeed.close();
-    onNoteMarkerClick(passageId, annotationId, { expandAll: opts?.expandAll, targetThreadId: opts?.targetThreadId });
+    onNoteMarkerClick(passageId, annotationId, { targetThreadId: opts?.targetThreadId });
     setNotesPanelKeepsHeader(Boolean(opts?.keepHeaderVisible));
   };
 
@@ -846,7 +846,6 @@ export default function Reader({
     setJustJumpedAnnotationId(targetNoteId);
     openNoteMarker(targetPassageId, targetNoteId, {
       keepHeaderVisible: true,
-      expandAll: true,
       targetThreadId: targetThreadId,
     });
     // The centering scroll above is a *programmatic* jump, but
@@ -1244,7 +1243,6 @@ export default function Reader({
                 annotationId={notesPanel.annotationId}
                 pendingRanges={notesPanel.ranges}
                 editingNoteId={notesPanel.editingNoteId}
-                expandAll={notesPanel.expandAll}
                 targetThreadId={notesPanel.targetThreadId}
                 panelType={isMobile ? "sheet" : "side"}
                 onClose={closeNotesPanel}

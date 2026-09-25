@@ -1,8 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import type { NoteContent as NoteContentValue } from "@/lib/api/types";
-import { LinkPreview, VideoPreview } from "./LinkPreview";
+import { LinkPreview } from "./LinkPreview";
+import { VideoPreview } from "./VideoPreview";
 import VoiceNoteView from "./VoiceNoteView";
+import { truncateQuote } from "./HighlightCard";
+
+// Same idea as HighlightCard's own preview budget — a note's own body is
+// the reader's writing, not a passage from the book, so it gets a somewhat
+// longer allowance before "See more" kicks in.
+const NOTE_PREVIEW_CHARS = 320;
 
 // Matches http(s) URLs and bare "www." ones (the latter get "https://"
 // prepended for the href only — the visible text stays exactly what the
@@ -65,28 +73,18 @@ export default function NoteContent({
 }: {
   content: NoteContentValue;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (content.kind === "voice") {
     return <VoiceNoteView audioUrl={content.audioUrl} durationMs={content.durationMs} />;
   }
   const url = firstUrl(content.text);
+  const { shown, isTruncated } = truncateQuote(content.text, NOTE_PREVIEW_CHARS);
+  const displayedText = expanded ? content.text : shown;
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
-      <p
-        // min-w-0 matters as much as the wrap utilities do: every caller
-        // renders this as a direct child of a `flex flex-col` wrapper
-        // (NoteThreadCard, ReplyEntry), and a flex item's default
-        // `min-width: auto` sizes it to its content's own minimum width —
-        // for a long unbroken run like a URL, that minimum can exceed the
-        // panel's width outright, overflowing it horizontally regardless of
-        // what word-break/overflow-wrap say, since the item never actually
-        // shrinks down to the point where breaking would kick in. break-words
-        // (overflow-wrap) covers any other long unbroken token in the note's
-        // own text; the link itself additionally carries break-all (see
-        // below) since a raw URL has none of the natural break points
-        // (hyphens, etc.) overflow-wrap alone waits for.
-        className="m-0 min-w-0 whitespace-pre-wrap break-words font-serif text-[16px] leading-[1.6] text-[var(--reader-text)]"
-      >
-        {linkify(content.text).map((part, i) =>
+      <p className="m-0 min-w-0 whitespace-pre-wrap break-words font-serif text-[15px] leading-[1.6] text-[var(--reader-text)]">
+        {linkify(displayedText).map((part, i) =>
           typeof part === "string" ? (
             <span key={i}>{part}</span>
           ) : (
@@ -103,7 +101,18 @@ export default function NoteContent({
           )
         )}
       </p>
-      {url ? youtubeId(url) ? <VideoPreview /> : <LinkPreview data={{ url }} /> : null}
+      {isTruncated && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded((v) => !v);
+          }}
+          className="mb-1.5 w-fit cursor-pointer border-none bg-transparent p-0 text-[12px] font-medium text-[var(--color-app-text-secondary)] hover:text-[var(--color-app-text)]"
+        >
+          {expanded ? "See less" : "See more"}
+        </button>
+      )}
+      {(!isTruncated || expanded) && url ? youtubeId(url) ? <VideoPreview /> : <LinkPreview data={{ url }} /> : null}
     </div>
   );
 }

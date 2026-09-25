@@ -5,13 +5,14 @@ import type { NoteContent, NoteVisibility } from "@/lib/api/types";
  * composer currently targets, produced by useThreadInteraction and
  * threaded down to whichever NoteThreadCard/ReplyEntry it concerns.
  *
- * `activeComposerFor: null` means the composer targets the top-level note
- * itself (its default, "root" position) — not that no composer exists.
- * There is exactly one composer instance per thread (see NoteThreadCard);
- * a reply's own "Reply" trigger retargets it via `toggleComposer(id)`
- * rather than mounting a second one, and toggling the same id again (or an
- * outside click — see NoteComposer's own onCancel handling) resets it back
- * to `null`/root instead of dismissing it outright. */
+ * `activeComposerFor: null` means no composer is showing anywhere in this
+ * thread — there is no default/always-on composer. It only ever becomes
+ * non-null when a reader deliberately clicks a "Reply" trigger on a
+ * specific entry (the root note or one of its replies, `id` either way),
+ * and the composer then mounts right there, inline under that entry — not
+ * in one fixed slot shared by every target. Clicking that same entry's
+ * trigger again (or an outside click — see NoteComposer's own onCancel
+ * handling) resets this back to `null`, unmounting it. */
 export type ThreadUIState = {
   activeComposerFor: string | null;
   toggleComposer: (id: string) => void;

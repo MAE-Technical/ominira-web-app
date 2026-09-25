@@ -29,13 +29,30 @@ export function truncateQuote(text: string, max: number): { shown: string; isTru
  * book-wide feed (`onJump` makes the whole card itself the "show in
  * passage" click target), and a home-feed card (no `onJump` — there's
  * nowhere local for it to jump to). One fixed size and treatment
- * everywhere; only `onJump` is opt in per caller. */
-export default function Quote({ text, onJump }: { text: string; onJump?: () => void }) {
+ * everywhere; only `onJump` is opt in per caller. A caller that also needs
+ * the book's own attribution (home feed/profile's book-context section)
+ * renders a sibling BookPreview alongside this, not inside it — same
+ * "content, then its preview" pattern every attachment type follows. */
+export default function HighlightCard({
+  text,
+  onJump,
+  maxChars = PREVIEW_CHARS,
+  bare = false,
+}: {
+  text: string;
+  onJump?: () => void;
+  /** Overrides the default 240-char preview budget — e.g. the book-context
+   * feed section (NoteBookContext) requests a tighter 160 to match
+   * Citation's old density. */
+  maxChars?: number;
+  /** Passed through to QuoteCard — see its own doc comment. */
+  bare?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const { shown, isTruncated } = truncateQuote(text, PREVIEW_CHARS);
+  const { shown, isTruncated } = truncateQuote(text, maxChars);
 
   return (
-    <QuoteCard onClick={onJump}>
+    <QuoteCard onClick={onJump} bare={bare}>
       <div className="flex flex-col gap-1.5">
         <p className="m-0 font-serif text-[15px] leading-[1.6] text-[var(--color-app-text)]">
           {expanded ? text : shown}
@@ -43,8 +60,11 @@ export default function Quote({ text, onJump }: { text: string; onJump?: () => v
         {isTruncated && (
           <button
             onClick={(e) => {
-              // The card itself may be a click target (`onJump`) — expanding
-              // the preview is a distinct action, never the trigger for it.
+              // The card itself may be a click target (`onJump`), or it may
+              // sit inside a real <Link> (NoteBookContext's merged section)
+              // — expanding the preview is a distinct action, never the
+              // trigger for either.
+              e.preventDefault();
               e.stopPropagation();
               setExpanded((v) => !v);
             }}

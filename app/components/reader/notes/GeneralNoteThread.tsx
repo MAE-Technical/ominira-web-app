@@ -10,8 +10,8 @@ import NoteThreadCard from "./NoteThreadCard";
  * FeedHighlightThread there's no quote, no "jump to passage" (there's no
  * passage to jump to), and no shared per-highlight root composer: every
  * general note is its own independent card, same "one root note + its own
- * flat reply thread, full stop" shape CommunityNoteCard/BookNoteCard already
- * render for the home feed/book-details community tab — not a shared thread
+ * flat reply thread, full stop" shape NoteCard already renders for the
+ * home feed/book-details community tab — not a shared thread
  * several general notes pile into the way same-ranges annotated notes do.
  *
  * `allNotes` is this material's *entire* flat note list (from
@@ -34,10 +34,6 @@ export default function GeneralNoteThread({
     materialId,
     ranges: note.ranges,
     allNotes: [note, ...repliesFor(allNotes, note.id)],
-    // Same "arrive already expanded" default as FeedHighlightThread/
-    // CommunityNoteCard — a reader browsing the feed came to read what's
-    // already there, not to expand every thread by hand first.
-    initialExpandAll: true,
   });
 
   return (

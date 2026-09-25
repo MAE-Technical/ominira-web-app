@@ -20,7 +20,7 @@ import Link, { type LinkProps } from "next/link";
  * crossing into or out of the reader.
  *
  * The ONE place the modal overlay is actually meant to trigger is the home
- * community feed's own passage+note permalinks — NoteBookHeader.tsx keeps
+ * community feed's own passage+note permalinks — NoteBookContext.tsx keeps
  * using next/link's <Link> straight at /read/[slug] on purpose, since a
  * "preview without leaving the feed" overlay is the whole point there.
  */

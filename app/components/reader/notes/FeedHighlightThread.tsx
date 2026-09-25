@@ -5,21 +5,20 @@ import { quoteForRanges } from "@/lib/reader/annotationSelection";
 import { topLevelNotes, repliesFor, sortNotes } from "@/lib/reader/noteThread";
 import { useThreadInteraction } from "@/lib/reader/useThreadInteraction";
 import type { FeedEntry } from "@/lib/reader/annotationFeed";
-import Quote from "./Quote";
+import HighlightCard from "./HighlightCard";
 import NoteThreadCard from "./NoteThreadCard";
 import NoteComposer from "./NoteComposer";
 
 /** One highlight's full block in the book-wide feed — a truncated quote
- * (Quote's own universal "See more") that's itself the "show in passage"
+ * (HighlightCard's own universal "See more") that's itself the "show in passage"
  * click target (`onJump`), followed by the exact same interactive thread
  * the standalone note panel renders for this highlight — full
  * reply/edit/delete/react, not a read-only summary, via the same
  * useThreadInteraction hook that panel uses. Which section this excerpt
  * belongs to is the enclosing feed's own label's job (see
  * BookAnnotationFeedPanel), not repeated per card. Every root note's own
- * replies start expanded (`initialExpandAll`), same as CommunityNoteCard on
- * the home feed — a reader browsing the feed came to read the discussion,
- * not to expand every thread by hand first. */
+ * replies start expanded, the one standard default useThreadInteraction
+ * applies everywhere a thread is surfaced. */
 export default function FeedHighlightThread({
   materialId,
   entry,
@@ -45,13 +44,12 @@ export default function FeedHighlightThread({
     // necessarily at this passage) — same "always land where the note
     // actually is" reasoning as the bottom composer's own onSave below.
     onNoteAdded: () => onJump(entry),
-    initialExpandAll: true,
   });
   const roots = sortNotes(topLevelNotes(annotation.notes), "chronological");
 
   return (
     <div className="flex flex-col gap-3 border-l-2 border-[var(--reader-border)] pl-4">
-      <Quote text={excerpt} onJump={() => onJump(entry)} />
+      <HighlightCard text={excerpt} onJump={() => onJump(entry)} />
 
       {roots.length > 0 && (
         <div className="flex flex-col gap-4">
@@ -73,13 +71,14 @@ export default function FeedHighlightThread({
       {/* Same single-composer-active-at-a-time rule as the standalone note
           panel's own root composer (see NotesSidebar), scoped to this
           highlight's own ui state so a reply/edit open on a sibling
-          highlight never hides this one's composer. Also hidden whenever
-          any of this highlight's own threads is expanded — that thread
-          already carries its own composer (defaulting to a reply on its
-          root note), so this one would otherwise double up alongside it. */}
+          highlight never hides this one's composer. No composer exists
+          anywhere until a reader deliberately asks for one, so checking
+          just activeComposerFor/editingId is enough — an expanded thread
+          with nothing actively targeted for reply has no composer of its
+          own to double up with this one. */}
       {ui.actionError && <p className="m-0 text-[11px] text-[var(--reader-text-muted)]">{ui.actionError}</p>}
 
-      {expandedIds.size === 0 && ui.activeComposerFor === null && ui.editingId === null && (
+      {ui.activeComposerFor === null && ui.editingId === null && (
         <NoteComposer
           initialText=""
           placeholder="Add your thoughts"

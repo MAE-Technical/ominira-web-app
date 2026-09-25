@@ -18,6 +18,7 @@ export default function QuoteCard({
   children,
   icon = true,
   onClick,
+  bare = false,
 }: {
   children: React.ReactNode;
   /** The standalone quote-mark glyph above `children` — on by default
@@ -32,6 +33,12 @@ export default function QuoteCard({
    * this reader's cards already work. Adds the pointer cursor and minimal
    * keyboard/role support itself, so callers don't each reimplement it. */
   onClick?: () => void;
+  /** Drops this card's own border/radius, keeping just the tinted
+   * background + padding — for a caller (NoteBookContext) that fuses this
+   * quote block with a BookPreview meta strip underneath into one bordered
+   * card, the way VideoPreview's thumbnail+meta strip reads as one object
+   * rather than two stacked ones. */
+  bare?: boolean;
 }) {
   return (
     <div
@@ -47,14 +54,14 @@ export default function QuoteCard({
             }
           : undefined
       }
-      className={`rounded-sm bg-[var(--color-app-surface-muted)] border border-[var(--reader-border)] flex flex-col px-4 py-4 gap-1 ${
-        onClick ? "cursor-pointer" : ""
-      }`}
+      className={`bg-[var(--color-app-surface-muted)] flex flex-col px-4 pt-4 pb-1 gap-1 ${
+        bare ? "" : "rounded-sm border border-[var(--reader-border)]"
+      } ${onClick ? "cursor-pointer" : ""}`}
     >
       {icon && (
         <QuoteIcon
           aria-hidden="true"
-          size={16}
+          size={12}
           fill="currentColor"
           strokeWidth={0}
           className="mb-1 select-none text-[var(--color-app-text-muted)]"

@@ -14,7 +14,7 @@ import BookCover from "@/app/components/shared/BookCover";
 import { ReadingNowMetaItem, ReadingRoomModal } from "@/app/components/shared/CurrentReaders";
 import { resolveBookCoverSrc } from "@/lib/materials/image";
 import PulseDot from "@/app/components/shared/PulseDot";
-import BookNoteCard from "./BookNoteCard";
+import NoteCard from "@/app/components/reader/notes/NoteCard";
 import ShareButton from "./ShareButton";
 import ReaderLink from "../ReaderLink";
 import UnderlineTabs from "../UnderlineTabs";
@@ -38,69 +38,6 @@ function TabBar({ tab, onChange }: { tab: Tab; onChange: (tab: Tab) => void }) {
     <div className="mb-6 border-b border-[var(--reader-border)]">
       <UnderlineTabs options={TAB_OPTIONS} selected={tab} onSelect={onChange} />
     </div>
-  );
-}
-
-/**
- * The community-notes tab's layout — two independent flex-col stacks
- * (left/right) in row-major reading order (card 1 left, card 2 right, card
- * 3 left, ...), not a CSS grid.
- *
- * A grid was the first version, and broke visibly once a book had more than
- * a couple of notes: a grid's rows are *shared* tracks — even with
- * `items-start` (which only stops the *shorter* cell in a row from
- * stretching to fill it), the row's own height is still set by its tallest
- * cell. A note card's height depends entirely on how much a reader wrote
- * and how long its reply thread is, so neighboring cells in the same row
- * routinely differ wildly — and the shorter column ends up with a
- * mismatched, content-dependent gap under each such card instead of a
- * uniform one. Two self-contained flex-col stacks remove the row coupling
- * entirely — each column's own gap is always exactly gap-5.
- *
- * Not CSS multi-column masonry (`columns-2`) either: masonry fills the
- * *entire first column* before spilling into the second, which for a
- * handful of unevenly-sized cards crams nearly everything into one column
- * and leaves the other almost empty. Alternating by index instead always
- * keeps cards in reading order across the row — for an odd card count, the
- * leftover lands in the left column, the same position every other row's
- * first card already has.
- *
- * Rendered as two full DOM trees, one hidden per breakpoint, rather than
- * one structure reflowed by CSS — the same swap AppBottomNav/AppSidebar
- * already do for the app shell itself. The single mobile column
- * (0,1,2,3,...) and the two desktop columns (evens down the left, odds
- * down the right) are genuinely different shapes; no CSS variant can
- * retarget that on its own.
- */
-function CardGrid<T>({
-  items,
-  keyOf,
-  children,
-}: {
-  items: T[];
-  keyOf: (item: T, index: number) => React.Key;
-  children: (item: T, index: number) => React.ReactNode;
-}) {
-  const columns = [items.filter((_, i) => i % 2 === 0), items.filter((_, i) => i % 2 === 1)];
-
-  return (
-    <>
-      <div className="flex flex-col gap-5 shell:hidden">
-        {items.map((item, i) => (
-          <div key={keyOf(item, i)}>{children(item, i)}</div>
-        ))}
-      </div>
-      <div className="hidden shell:flex shell:items-start shell:gap-5">
-        {columns.map((column, colIndex) => (
-          <div key={colIndex} className="flex min-w-0 flex-1 flex-col gap-5">
-            {column.map((item, i) => {
-              const index = i * 2 + colIndex;
-              return <div key={keyOf(item, index)}>{children(item, index)}</div>;
-            })}
-          </div>
-        ))}
-      </div>
-    </>
   );
 }
 
@@ -186,9 +123,11 @@ function NotesTab({ materialId }: { materialId: string }) {
   }
 
   return (
-    <CardGrid items={items} keyOf={(item) => item.note.id}>
-      {(item) => <BookNoteCard materialId={materialId} item={item} />}
-    </CardGrid>
+    <div className="flex flex-col">
+      {items.map((item) => (
+        <NoteCard key={item.note.id} materialId={materialId} note={item.note} replies={item.replies} excerpt={item.excerpt} />
+      ))}
+    </div>
   );
 }
 
@@ -307,10 +246,10 @@ function BookDescription({ text }: { text: string }) {
  * separately-boxed widgets.
  *
  * The two tabs deliberately don't share one layout: the outline is a single
- * document (one flowing list, see OutlineTab), while notes are a feed of
- * independent posts (a card grid, see CardGrid) — each gets the shape that
- * actually matches what it is, rather than forcing both into one mold for
- * its own sake.
+ * document (one flowing list, see OutlineTab), while notes are a flat feed
+ * of independent posts (see NotesTab) — each gets the shape that actually
+ * matches what it is, rather than forcing both into one mold for its own
+ * sake.
  *
  * Served entirely from `materials.detail`'s DB-only fields (api-spec.md's
  * own worked example for this exact page) — no `BookDocument`, no Storage

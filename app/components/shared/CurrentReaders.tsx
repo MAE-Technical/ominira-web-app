@@ -57,7 +57,7 @@ type TriggerProps = Props & { onOpen: () => void };
  * this file's own doc comment). The trailing chevron is the one visual cue
  * that this dot-separated fact, unlike its neighbors on MetaLine (published
  * year, page count), is actually clickable — without it this read as inert
- * text sitting next to real metadata, same affordance NoteBookHeader's own
+ * text sitting next to real metadata, same affordance NoteBookContext's own
  * "open" glyph gives an otherwise-plain row. */
 export function ReadingNowMetaItem({ readers, totalCount, onOpen }: TriggerProps) {
   if (readers.length === 0) return null;

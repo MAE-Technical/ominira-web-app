@@ -14,7 +14,7 @@ import { useThreadInteraction } from "@/lib/reader/useThreadInteraction";
 import NoteThreadCard from "./notes/NoteThreadCard";
 import NoteComposer from "./notes/NoteComposer";
 import PanelShell from "./notes/PanelShell";
-import Quote from "./notes/Quote";
+import HighlightCard from "./notes/HighlightCard";
 // import SortToggle from "./notes/SortToggle";
 import OverflowMenu from "./notes/OverflowMenu";
 
@@ -34,9 +34,6 @@ type Props = {
   /** Deep-links straight into editing one specific existing entry — absent,
    * the panel opens to the thread as normal. */
   editingNoteId?: string;
-  /** Every top-level note's replies start expanded rather than collapsed —
-   * see useTextAnnotations' onNoteMarkerClick for when this is set. */
-  expandAll?: boolean;
   /** When deep-linked from a notification, the specific thread (root note
    * id) whose replies should be fully expanded (show all). */
   targetThreadId?: string;
@@ -58,7 +55,6 @@ function EditPanel({
   annotationId,
   pendingRanges,
   editingNoteId,
-  expandAll,
   targetThreadId,
   panelType,
   onClose,
@@ -103,7 +99,6 @@ function EditPanel({
     ranges,
     allNotes,
     initialEditingId: editingNoteId,
-    initialExpandAll: expandAll,
   });
 
   const handleDeleteAnnotation = () => {
@@ -127,6 +122,28 @@ function EditPanel({
       panelType={panelType}
       title=""
       onClose={onClose}
+      footer={
+        // Same bottom-docked composer as the book-wide feed panel
+        // (BookAnnotationFeedPanel) — pinned below the scrollable thread
+        // regardless of scroll position, not part of the flowing content.
+        // Hidden during the delete-confirmation step so there's no
+        // competing action while that warning is up.
+        !confirmingDelete && (
+          <NoteComposer
+            initialText=""
+            placeholder="Add a note"
+            startCollapsed
+            showMemberPrompt
+            action="note"
+            onSave={(content, visibility) =>
+              createNote.mutate(
+                { ranges, content, visibility },
+                { onError: () => ui.reportError("Couldn't save your note — check your connection and try again.") }
+              )
+            }
+          />
+        )
+      }
       headerMenu={
         existing && !confirmingDelete ? (
           <div className="relative flex-none">
@@ -164,7 +181,13 @@ function EditPanel({
         ) : undefined
       }
     >
-      <Quote text={quoteText} />
+      {/* Only shown here, above the thread list, when there's no note yet
+          to attach it to (a fresh thread) — once a root note exists, its
+          own NoteThreadCard renders this same quote itself, positioned
+          after that note's AuthorRow rather than before it (see the
+          `quote` prop passed below). Showing it in both places at once
+          would repeat it once per root note. */}
+      {sortedRoots.length === 0 && <HighlightCard text={quoteText} />}
       {confirmingDelete ? (
         <div className="flex flex-col gap-3 pb-1">
           <p className="text-sm font-literata leading-relaxed text-[var(--reader-text)] m-0">
@@ -197,6 +220,7 @@ function EditPanel({
               {sortedRoots.map((note) => (
                 <NoteThreadCard
                   key={note.id}
+                  quote={quoteText}
                   note={note}
                   replies={repliesFor(allNotes, note.id)}
                   expanded={expandedIds.has(note.id)}
@@ -213,38 +237,8 @@ function EditPanel({
             </p>
           )}
 
-          {/* Only one composer is ever on screen at a time — this is the
-              same rule already governing which single note/reply gets its
-              own inline composer (activeComposerFor) or edit view
-              (editingId), just extended to the root composer too. Without
-              this, clicking Reply on a note left its own inline composer
-              AND this always-present one both visible, with no clear
-              signal which one a reader's next tap was actually for.
-              Also hidden whenever any thread is expanded — an expanded
-              thread already carries its own composer, defaulting to a
-              reply on that thread's own root note (see NoteThreadCard),
-              so this "start a fresh top-level note" composer would
-              otherwise sit right alongside it, two empty compose surfaces
-              deep for no reason a reader could tell apart. Collapsing
-              every thread is what brings this one back. */}
           {ui.actionError && (
             <p className="m-0 text-[11px] text-[var(--reader-text-muted)]">{ui.actionError}</p>
-          )}
-
-          {expandedIds.size === 0 && ui.activeComposerFor === null && ui.editingId === null && (
-            <NoteComposer
-              initialText=""
-              placeholder="Add your thoughts"
-              startCollapsed
-              showMemberPrompt
-              action="note"
-              onSave={(content, visibility) =>
-                createNote.mutate(
-                  { ranges, content, visibility },
-                  { onError: () => ui.reportError("Couldn't save your note — check your connection and try again.") }
-                )
-              }
-            />
           )}
         </>
       )}

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/client";
 import { communityKeys } from "@/lib/community/queryKeys";
+import { rangesKey } from "@/stores/library-store";
 import type { MaterialSummary, Note } from "@/lib/api/types";
 
 export type CommunityFeedItem = {
@@ -23,6 +24,25 @@ export type CommunityFeedItem = {
    * separate fetch required. */
   replies: Note[];
 };
+
+/** The deep link into the book at the exact passage a feed item's note is
+ * anchored to — shared by every surface that renders a `CommunityFeedItem`
+ * (the home feed, the profile page's public-notes list), so this one bit of
+ * URL-building logic exists in exactly one place. Reader.tsx's own
+ * annotation ids are deterministic, derived from an annotation's exact
+ * ranges (see `rangesKey`) — recomputing it here from the same note's own
+ * ranges is what makes `?note=` actually match the Annotation the reader
+ * lands on once inside the book (Reader.tsx's useTextAnnotations/
+ * useAnnotations builds that same key from the same ranges), rather than
+ * the note's own (unrelated) row id. */
+export function communityFeedItemHref(item: CommunityFeedItem): string {
+  const passageId = item.note.ranges[0]?.passageId;
+  return `/read/${item.material.slug}?${new URLSearchParams({
+    section: item.sectionId,
+    ...(passageId ? { passage: passageId } : {}),
+    note: rangesKey(item.note.ranges),
+  }).toString()}`;
+}
 
 /** The two sorts CommunityFeedSortToggle's UI exposes — `GET
  * /api/community/notes` also supports `trending`, not wired to any control

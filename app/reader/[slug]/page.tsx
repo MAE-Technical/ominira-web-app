@@ -14,7 +14,7 @@ import { readerPageMetadata, loadReaderPageBook } from "@/lib/reader/readerPageD
  * never unmounts crossing into or out of the reader, so playback never
  * actually stops. /read/[slug] keeps its own two jobs unchanged — the
  * canonical/shareable URL, and the modal-preview target for the home
- * feed's permalinks (NoteBookHeader.tsx).
+ * feed's permalinks (NoteBookContext.tsx).
  */
 export async function generateMetadata({
   params,

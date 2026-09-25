@@ -6,6 +6,7 @@ import type { Note } from "@/lib/api/types";
 import { useIsOwnNote } from "@/lib/reader/currentAuthor";
 import { comradeName } from "@/lib/reader/authorDisplay";
 import { pseudonymToSlug } from "@/lib/reader/profileSlug";
+import AuthorAvatar from "./AuthorAvatar";
 import AuthorRow from "./AuthorRow";
 import NoteContent from "./NoteContent";
 import ReactionButton from "./ReactionButton";
@@ -53,78 +54,95 @@ export default function ReplyEntry({
     // letting NoteContent's wrap utilities engage.
     <div className={`relative flex min-w-0 flex-col gap-1.5 py-2 ${depth === 2 ? "pl-10" : "pl-8"}`}>
       <span className={`absolute inset-y-0 w-px bg-[var(--reader-border)] ${depth === 2 ? "left-8" : "left-3"}`} aria-hidden="true" />
-      <AuthorRow
-        name={reply.author.pseudonym}
-        savedAt={Date.parse(reply.updatedAt)}
-        city={reply.author.city}
-        size="small"
-        isPrivate={own && reply.visibility === "private"}
-        menu={
-          own ? (
-            <div className="relative ml-auto flex-none">
-              <button
-                onClick={() => ui.toggleMenu(isMenuOpen ? null : reply.id)}
-                className="flex items-center bg-transparent border-none cursor-pointer text-[var(--reader-text-muted)] p-0.5"
-              >
-                <EllipsisVertical size={14} />
-              </button>
-              {isMenuOpen && (
-                <EntryMenu
-                  isOwn={own}
-                  isTextEntry={reply.content.kind === "text"}
-                  onEdit={() => {
-                    ui.startEdit(reply.id);
-                    ui.toggleMenu(null);
-                  }}
-                  onDelete={() => {
-                    actions.delete(reply.id);
-                    ui.toggleMenu(null);
-                  }}
-                  onClose={() => ui.toggleMenu(null)}
-                />
-              )}
-            </div>
-          ) : undefined
-        }
-      />
-      {replyingToName && (
-        <div className="w-fit font-serif italic text-[12px] text-[var(--reader-text-muted)]">
-          — in reply to{" "}
-          <Link href={`/@${pseudonymToSlug(replyingToName)}`} className="text-[var(--reader-text-muted)] hover:underline">
-            {comradeName(replyingToName)}
-          </Link>
+      {/* Same avatar-beside-just-the-name-row pairing as NoteThreadCard's
+          own root layout, scaled down — see that component's doc comment. */}
+      <div className="flex min-w-0 items-center gap-2">
+        <AuthorAvatar name={reply.author.pseudonym} size="small" />
+        <div className="min-w-0 flex-1">
+          <AuthorRow
+            name={reply.author.pseudonym}
+            savedAt={Date.parse(reply.updatedAt)}
+            city={reply.author.city}
+            size="small"
+            isPrivate={own && reply.visibility === "private"}
+            menu={
+              own ? (
+                // self-center: see the identical comment on NoteThreadCard's
+                // own menu button — keeps this non-text child out of
+                // AuthorRow's own baseline alignment, so it can't inflate
+                // the row taller than AuthorAvatar beside it.
+                <div className="relative ml-auto flex-none self-center">
+                  <button
+                    onClick={() => ui.toggleMenu(isMenuOpen ? null : reply.id)}
+                    className="flex items-center bg-transparent border-none cursor-pointer text-[var(--reader-text-muted)] p-0.5"
+                  >
+                    <EllipsisVertical size={14} />
+                  </button>
+                  {isMenuOpen && (
+                    <EntryMenu
+                      isOwn={own}
+                      isTextEntry={reply.content.kind === "text"}
+                      onEdit={() => {
+                        ui.startEdit(reply.id);
+                        ui.toggleMenu(null);
+                      }}
+                      onDelete={() => {
+                        actions.delete(reply.id);
+                        ui.toggleMenu(null);
+                      }}
+                      onClose={() => ui.toggleMenu(null)}
+                    />
+                  )}
+                </div>
+              ) : undefined
+            }
+          />
         </div>
-      )}
-      {isEditing ? (
-        <NoteComposer
-          initialText={reply.content.kind === "text" ? reply.content.text : ""}
-          initialVisibility={reply.visibility}
-          startCollapsed={false}
-          onCancel={() => ui.startEdit(null)}
-          onSave={(content, visibility) => {
-            actions.saveEdit(reply.id, content, visibility);
-            ui.startEdit(null);
-          }}
-        />
-      ) : (
-        <NoteContent content={reply.content} />
-      )}
-      <div className="flex items-center gap-3.5">
-        <ReactionButton
-          count={reply.reactionCount}
-          reacted={reply.reactedByMe}
-          onToggle={() => actions.toggleReaction(reply.id)}
-          size="small"
-        />
-        <button
-          data-note-reply-trigger
-          onClick={() => ui.toggleComposer(reply.id)}
-          className={`border-[var(--reader-border)] bg-[var(--reader-surface)] cursor-pointer text-xs font-semibold p-0 ${
-            isTargeted ? "text-[var(--reader-text)]" : "text-[var(--reader-text-muted)]"
-          }`}
-        >
-          Reply
-        </button>
+      </div>
+
+      {/* pl-6: avatar width (16px, h-4/w-4) + the row's own gap-2 (8px)
+          above — lines this column up under the name text, not the
+          avatar. */}
+      <div className="flex min-w-0 flex-col gap-1.5 pl-6">
+        {replyingToName && (
+          <div className="w-fit font-serif italic text-[12px] text-[var(--reader-text-muted)]">
+            — in reply to{" "}
+            <Link href={`/@${pseudonymToSlug(replyingToName)}`} className="text-[var(--reader-text-muted)] hover:underline">
+              {comradeName(replyingToName)}
+            </Link>
+          </div>
+        )}
+        {isEditing ? (
+          <NoteComposer
+            initialText={reply.content.kind === "text" ? reply.content.text : ""}
+            initialVisibility={reply.visibility}
+            startCollapsed={false}
+            onCancel={() => ui.startEdit(null)}
+            onSave={(content, visibility) => {
+              actions.saveEdit(reply.id, content, visibility);
+              ui.startEdit(null);
+            }}
+          />
+        ) : (
+          <NoteContent content={reply.content} />
+        )}
+        <div className="flex items-center gap-3.5">
+          <ReactionButton
+            count={reply.reactionCount}
+            reacted={reply.reactedByMe}
+            onToggle={() => actions.toggleReaction(reply.id)}
+            size="small"
+          />
+          <button
+            data-note-reply-trigger
+            onClick={() => ui.toggleComposer(reply.id)}
+            className={`border-[var(--reader-border)] bg-[var(--reader-surface)] cursor-pointer text-xs font-semibold p-0 ${
+              isTargeted ? "text-[var(--reader-text)]" : "text-[var(--reader-text-muted)]"
+            }`}
+          >
+            Reply
+          </button>
+        </div>
       </div>
     </div>
   );

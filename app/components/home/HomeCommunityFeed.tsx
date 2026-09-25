@@ -2,22 +2,22 @@
 
 import { useState } from "react";
 import SearchableAppPage from "@/app/components/shell/SearchableAppPage";
-import { useCommunityFeed, type CommunityFeedSort } from "@/lib/community/useCommunityFeed";
+import { communityFeedItemHref, useCommunityFeed, type CommunityFeedSort } from "@/lib/community/useCommunityFeed";
+import { resolveBookThumbnailSrc } from "@/lib/materials/image";
 import FeaturedThisWeek from "@/app/components/shell/FeaturedThisWeek";
 import CommunityFeedSortToggle from "./CommunityFeedSortToggle";
-import CommunityNoteCard from "./CommunityNoteCard";
+import NoteCard from "@/app/components/reader/notes/NoteCard";
 import HomeAuthBanner from "./HomeAuthBanner";
 import HomeInstallBanner from "./HomeInstallBanner";
 import HomePushPrompt from "./HomePushPrompt";
 
-/** Stand-in for a CommunityNoteCard while `GET /api/community/notes` is
- * still in flight — same footprint as the real card at each breakpoint (a
- * flush flat row on mobile, a boxed masonry card on desktop) so the feed's
- * layout doesn't jump once real cards swap in, and so this reads as
- * "loading," not as an empty state. */
-function CommunityNoteCardSkeleton() {
+/** Stand-in for a NoteCard while `GET /api/community/notes` is still in
+ * flight — same flush flat-row footprint as the real card, at every width,
+ * so the feed's layout doesn't jump once real cards swap in, and so this
+ * reads as "loading," not as an empty state. */
+function NoteCardSkeleton() {
   return (
-    <div className="animate-pulse border-b border-[var(--reader-border)] py-4 lg:mb-5 lg:break-inside-avoid lg:rounded-sm lg:border lg:bg-[var(--reader-surface)] lg:p-5">
+    <div className="animate-pulse border-b border-[var(--reader-border)] py-4">
       <div className="mb-3 h-3 w-2/3 rounded-full bg-[var(--reader-surface-hover)]" />
       <div className="mb-2 h-3 w-full rounded-full bg-[var(--reader-surface-hover)]" />
       <div className="mb-4 h-3 w-4/5 rounded-full bg-[var(--reader-surface-hover)]" />
@@ -55,28 +55,34 @@ export default function HomeCommunityFeed() {
       </div>
 
       {isLoading ? (
-        <div className="lg:columns-2 lg:gap-5">
+        <div className="flex flex-col">
           {Array.from({ length: 4 }).map((_, i) => (
-            <CommunityNoteCardSkeleton key={i} />
+            <NoteCardSkeleton key={i} />
           ))}
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-[var(--reader-text-muted)]">No notes yet — annotate a passage to start the discourse.</p>
       ) : (
-        // Mobile: a single column of flat rows, each separated by its own
-        // bottom border, flush with the page's own edges (no card padding)
-        // so a note lines up with the "Community notes" heading above it —
-        // the redesign's precise mobile treatment. Desktop: still a 2-column
-        // masonry of boxed cards (CSS multi-column, not Grid — no broadly-
-        // supported grid masonry mode exists yet) — a single column reads
-        // too wide there for now; CommunityNoteCard's own lg: classes add
-        // the border/background/padding/break-inside-avoid back in at that
-        // breakpoint. Plain block flow (no flex-col) is what makes the
-        // mobile single-column stacking free — only the lg:columns-2 needs
-        // an explicit multi-column declaration.
-        <div className="lg:columns-2 lg:gap-5">
+        // One column of flat rows, each separated by its own bottom
+        // border, at every width — no boxed/masonry treatment on desktop
+        // (see NoteCard's own doc comment for why: CSS multi-column forced
+        // a full-feed reflow whenever any one card's height changed, e.g.
+        // its inline reply composer opening).
+        <div className="flex flex-col">
           {items.map((item) => (
-            <CommunityNoteCard key={item.note.id} item={item} />
+            <NoteCard
+              key={item.note.id}
+              materialId={item.material.id}
+              note={item.note}
+              replies={item.replies}
+              excerpt={item.excerpt}
+              bookContext={{
+                href: communityFeedItemHref(item),
+                title: item.material.title,
+                section: item.label,
+                coverUrl: resolveBookThumbnailSrc(item.material),
+              }}
+            />
           ))}
         </div>
       )}
