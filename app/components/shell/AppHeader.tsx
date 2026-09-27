@@ -2,7 +2,8 @@
 
 import { Search } from "lucide-react";
 import NotificationsMenu from "./NotificationsMenu";
-import ThemeToggleButton from "./ThemeToggleButton";
+import ProfileMenu from "./ProfileMenu";
+import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 
 type Props = {
   /** Omitted by pages with nothing to search yet (the stub pages) — the
@@ -19,10 +20,12 @@ type Props = {
 };
 
 export default function AppHeader({ searchValue, onSearchChange, onSearchFocus }: Props) {
+  const isAuthenticated = useIsAuthenticated();
+
   return (
     <header className="-mx-5 mb-5 bg-[var(--reader-bg)] px-5 py-3 shell:-mx-10 shell:px-10">
       <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0 flex items-center gap-2 h-10 px-3.5 rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)]">
+        <div className="flex-1 min-w-0 max-w-md flex items-center gap-2 h-10 px-3.5 rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)]">
           <Search size={16} className="flex-none text-[var(--reader-text-muted)]" />
           <input
             value={searchValue ?? ""}
@@ -34,8 +37,10 @@ export default function AppHeader({ searchValue, onSearchChange, onSearchFocus }
           />
         </div>
 
-        <ThemeToggleButton />
-        <NotificationsMenu />
+        <div className="ml-auto flex flex-none items-center gap-2">
+          {isAuthenticated && <NotificationsMenu />}
+          <ProfileMenu />
+        </div>
       </div>
     </header>
   );

@@ -1,4 +1,4 @@
-import { BookOpen, Home, Library, User } from "lucide-react";
+import { BookOpen, Home, Library } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 // `size`/`strokeWidth`/`className` (SVGProps covers the rest) — lucide's own
@@ -16,10 +16,12 @@ export type NavItem = {
 // destination, with desktop instead exposing the same list directly in the
 // sidebar (SidebarContinueReading); now that it's a proper nav item on both
 // surfaces, that sidebar shelf is gone.
+// Account used to be a nav item here (desktop sidebar + mobile tab bar) but
+// is now reached exclusively through AppHeader's ProfileMenu (the avatar
+// dropdown) — one destination for it instead of two.
 export const NAV_ITEMS: NavItem[] = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/reading", label: "Reading", icon: BookOpen },
   { href: "/library", label: "Library", icon: Library },
   // { href: "/notes", label: "Notes", icon: MessageCircle },
-  { href: "/account", label: "Account", icon: User },
 ];

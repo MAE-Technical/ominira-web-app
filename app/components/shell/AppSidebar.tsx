@@ -2,16 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import * as Popover from "@radix-ui/react-popover";
-import { LogOut, MoreVertical, X } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { X } from "lucide-react";
 import { NAV_ITEMS } from "./navItems";
 import BrandMark from "./BrandMark";
 import { useReaderOverlayStore } from "@/stores/reader-overlay-store";
 import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
-import { useProfile } from "@/lib/auth/useProfile";
-import { useLogout } from "@/lib/auth/useLogout";
-import { avatarColor, avatarInitial } from "@/lib/reader/authorDisplay";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -24,11 +20,8 @@ function isActive(pathname: string, href: string) {
  */
 export default function AppSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const overlayOpen = useReaderOverlayStore((s) => s.open);
   const isAuthenticated = useIsAuthenticated();
-  const { data: reader } = useProfile();
-  const logout = useLogout();
   // Dismissing the promo card only clears it for this page load, not
   // forever — HomeAuthBanner (the other login discovery surface) only
   // renders on /home, so a permanent dismiss here would leave a reader who
@@ -51,11 +44,6 @@ export default function AppSidebar() {
       }
     : undefined;
 
-  // Account has nothing to show without an account — hidden rather than
-  // repurposed the way it used to be (swapped for Log in/Join us rows);
-  // those now live in the promo card below instead.
-  const items = NAV_ITEMS.filter((item) => item.href !== "/account" || isAuthenticated);
-
   return (
     <aside className="hidden shell:flex fixed left-0 top-0 h-full w-[var(--app-sidebar-w)] z-30 flex-col box-border border-r border-[var(--reader-border)] bg-[var(--reader-surface)] select-none no-callout">
       <Link
@@ -68,7 +56,7 @@ export default function AppSidebar() {
       </Link>
 
       <nav className="flex-1 min-h-0 overflow-y-auto px-2.5 pt-2 flex flex-col gap-2">
-        {items.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
             <Link
@@ -122,52 +110,6 @@ export default function AppSidebar() {
           </div>
         )}
       </nav>
-
-      {/* Theme switching lives in AppHeader, beside the notification bell —
-          this footer is account-only. Log in / Join us live in the promo
-          card above instead, alongside HomeAuthBanner on mobile, whenever
-          !isAuthenticated. */}
-      {isAuthenticated && reader && (
-        <div className="flex-none px-4 pb-6 flex items-center gap-2.5">
-          <span
-            style={{ background: avatarColor(reader.pseudonym) }}
-            className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full text-[11px] font-semibold text-white"
-          >
-            {avatarInitial(reader.pseudonym)}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--reader-text)]">
-            {reader.pseudonym}
-          </span>
-          <Popover.Root>
-            <Popover.Trigger asChild>
-              <button
-                type="button"
-                aria-label="Account menu"
-                className="cursor-pointer flex-none rounded-sm border-none bg-transparent p-0.5 text-[var(--reader-text-subtle)] hover:text-[var(--reader-text-muted)]"
-              >
-                <MoreVertical size={16} />
-              </button>
-            </Popover.Trigger>
-            <Popover.Portal>
-              <Popover.Content
-                align="start"
-                sideOffset={6}
-                className="z-50 min-w-40 rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] p-1 shadow-lg"
-              >
-                <button
-                  type="button"
-                  onClick={() => logout.mutate(undefined, { onSuccess: () => router.push("/") })}
-                  disabled={logout.isPending}
-                  className="flex w-full cursor-pointer items-center gap-2.5 rounded-sm border-none bg-transparent px-2.5 py-2 text-[13px] font-medium text-[var(--reader-text-muted)] hover:bg-[var(--reader-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <LogOut size={15} />
-                  {logout.isPending ? "Logging out…" : "Logout"}
-                </button>
-              </Popover.Content>
-            </Popover.Portal>
-          </Popover.Root>
-        </div>
-      )}
     </aside>
   );
 }

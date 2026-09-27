@@ -17,7 +17,7 @@ export default function NotificationsMenu() {
       <Link
         href="/notifications"
         aria-label={hasUnread ? `Notifications, ${unreadCount} unread` : "Notifications"}
-        className="relative flex h-10 w-10 flex-none items-center justify-center rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] text-[var(--reader-text)] no-underline hover:bg-[var(--reader-surface-hover)]"
+        className="relative flex h-10 w-10 flex-none items-center justify-center rounded-sm text-[var(--reader-text)] no-underline hover:bg-[var(--reader-surface-hover)]"
       >
         <Bell size={18} />
         {hasUnread && (
