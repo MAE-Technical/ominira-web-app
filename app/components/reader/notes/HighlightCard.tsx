@@ -53,27 +53,36 @@ export default function HighlightCard({
 
   return (
     <QuoteCard onClick={onJump} bare={bare}>
-      <div className="flex flex-col gap-1.5">
-        <p className="m-0 font-serif text-[15px] leading-[1.6] text-[var(--color-app-text)]">
-          {expanded ? text : shown}
-        </p>
-        {isTruncated && (
-          <button
-            onClick={(e) => {
-              // The card itself may be a click target (`onJump`), or it may
-              // sit inside a real <Link> (NoteBookContext's merged section)
-              // — expanding the preview is a distinct action, never the
-              // trigger for either.
-              e.preventDefault();
-              e.stopPropagation();
-              setExpanded((v) => !v);
-            }}
-            className="w-fit cursor-pointer border-none bg-transparent p-0 text-[12px] font-medium text-[var(--color-app-text-secondary)] hover:text-[var(--color-app-text)]"
-          >
-            {expanded ? "See less" : "See more"}
-          </button>
+      {/* "See more" sits right after the truncated run, inline in the same
+          paragraph, rather than dropped to its own line below — reads as
+          a continuation of the cut-off sentence rather than a separate
+          footer control. It's one-way: clicking it reveals the rest and
+          the trigger itself disappears (the button only ever renders
+          `!expanded`), rather than turning into a "See less" toggle — once
+          a reader's asked for the full passage there's no reason to hide
+          it again mid-read. */}
+      <p className="m-0 font-serif text-[15px] leading-[1.6] text-[var(--color-app-text)]">
+        {expanded ? text : shown}
+        {isTruncated && !expanded && (
+          <>
+            {" "}
+            <button
+              onClick={(e) => {
+                // The card itself may be a click target (`onJump`), or it
+                // may sit inside a real <Link> (NoteBookContext's merged
+                // section) — expanding the preview is a distinct action,
+                // never the trigger for either.
+                e.preventDefault();
+                e.stopPropagation();
+                setExpanded(true);
+              }}
+              className="cursor-pointer border-none bg-transparent p-0 font-sans text-[12px] font-medium text-[var(--color-app-text-secondary)] hover:text-[var(--color-app-text)]"
+            >
+              See more
+            </button>
+          </>
         )}
-      </div>
+      </p>
     </QuoteCard>
   );
 }

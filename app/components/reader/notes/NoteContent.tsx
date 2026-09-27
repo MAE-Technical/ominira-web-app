@@ -83,6 +83,11 @@ export default function NoteContent({
   const displayedText = expanded ? content.text : shown;
   return (
     <div className="flex min-w-0 flex-col gap-2.5">
+      {/* "See more" sits right after the truncated run, inline in the same
+          paragraph — see HighlightCard's identical treatment for why. It's
+          one-way: clicking it reveals the rest and the trigger itself
+          disappears (only renders while `!expanded`), no "See less" toggle
+          back. */}
       <p className="m-0 min-w-0 whitespace-pre-wrap break-words font-serif text-[15px] leading-[1.6] text-[var(--reader-text)]">
         {linkify(displayedText).map((part, i) =>
           typeof part === "string" ? (
@@ -100,18 +105,21 @@ export default function NoteContent({
             </a>
           )
         )}
+        {isTruncated && !expanded && (
+          <>
+            {" "}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(true);
+              }}
+              className="cursor-pointer border-none bg-transparent p-0 font-sans text-[12px] font-medium text-[var(--color-app-text-secondary)] hover:text-[var(--color-app-text)]"
+            >
+              See more
+            </button>
+          </>
+        )}
       </p>
-      {isTruncated && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setExpanded((v) => !v);
-          }}
-          className="mb-1.5 w-fit cursor-pointer border-none bg-transparent p-0 text-[12px] font-medium text-[var(--color-app-text-secondary)] hover:text-[var(--color-app-text)]"
-        >
-          {expanded ? "See less" : "See more"}
-        </button>
-      )}
       {(!isTruncated || expanded) && url ? youtubeId(url) ? <VideoPreview /> : <LinkPreview data={{ url }} /> : null}
     </div>
   );
