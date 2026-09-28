@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/client";
 import { useSessionStore } from "@/stores/session-store";
-import type { CommunityFeedItem } from "@/lib/community/useCommunityFeed";
+import type { FeedItem } from "@/lib/community/feed";
 import type { MaterialSummary } from "@/lib/api/types";
 
 export type ReaderProfileStats = { notes: number; reading: number; reactions: number };
@@ -28,19 +28,18 @@ export type ReaderProfileHighlight = {
 
 /**
  * Mirrors lib/reader/profile.ts's `ReaderProfilePage` — a hand-kept client
- * copy rather than an import, same "server-only lib file, client hook
- * defines its own mirrored shape" split useCommunityFeed's own
- * CommunityFeedItem already follows (that file's own doc comment). Reusing
- * `CommunityFeedItem` itself for `publicNotes` below (rather than yet a
- * third identical shape) is exactly why this profile bundle and the home
- * feed can share one card component — see ReaderProfileView.
+ * copy rather than an import of that server-only module, this file's own
+ * client-facing equivalent. `publicNotes` reuses `FeedItem` (lib/community/
+ * feed.ts) directly rather than a second identical shape — that's exactly
+ * why this profile bundle and the home feed can share one card component,
+ * see ReaderProfileView.
  */
 export type ReaderProfilePage = {
   reader: { id: string; pseudonym: string; city: string | null; country: string | null; joinedAt: string };
   isSelf: boolean;
   stats: ReaderProfileStats;
   currentlyReading: ReaderProfileCurrentlyReading[];
-  publicNotes: CommunityFeedItem[];
+  publicNotes: FeedItem[];
   highlights: ReaderProfileHighlight[] | null;
 };
 

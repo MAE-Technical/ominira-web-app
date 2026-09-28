@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Reader from "@/app/components/reader/Reader";
-import { readerPageMetadata, loadReaderPageBook } from "@/lib/reader/readerPageData";
+import PdfDocumentView from "@/app/components/reader/PdfDocumentView";
+import DocxDocumentView from "@/app/components/reader/DocxDocumentView";
+import ArticleDocumentView from "@/app/components/reader/ArticleDocumentView";
+import { readerPageMetadata, loadReaderPageMaterial } from "@/lib/reader/readerPageData";
 
 export async function generateMetadata({
   params,
@@ -50,12 +53,23 @@ export default async function ReadBookPage({
   const { slug } = await params;
   const { section, passage, passageIndex, note, noteId, thread, listen } = await searchParams;
 
-  const { book, materialId, eagerSectionIds } = await loadReaderPageBook(slug, section);
+  const material = await loadReaderPageMaterial(slug, section);
+
+  if (material.kind === "pdf") {
+    return <PdfDocumentView title={material.title} sourceUrl={material.sourceUrl} />;
+  }
+  if (material.kind === "docx") {
+    return <DocxDocumentView title={material.title} sourceUrl={material.sourceUrl} />;
+  }
+  if (material.kind === "webpage") {
+    return <ArticleDocumentView title={material.title} sourceUrl={material.sourceUrl} articleHtml={material.articleHtml} />;
+  }
+
   return (
     <Reader
-      book={book}
-      materialId={materialId}
-      eagerSectionIds={eagerSectionIds}
+      book={material.book}
+      materialId={material.materialId}
+      eagerSectionIds={material.eagerSectionIds}
       targetSectionId={section}
       targetPassageId={passage}
       targetPassageIndex={passageIndex !== undefined && !Number.isNaN(Number(passageIndex)) ? Number(passageIndex) : undefined}

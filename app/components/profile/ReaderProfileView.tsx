@@ -97,16 +97,22 @@ function PublicNotesList({ items, emptyText }: { items: ReaderProfilePage["publi
       {items.map((item) => (
         <NoteCard
           key={item.note.id}
-          materialId={item.material.id}
+          materialId={item.material?.id ?? null}
           note={item.note}
           replies={item.replies}
           excerpt={item.excerpt}
-          bookContext={{
-            href: communityFeedItemHref(item),
-            title: item.material.title,
-            section: item.label,
-            coverUrl: resolveBookThumbnailSrc(item.material),
-          }}
+          {...(item.material
+            ? {
+                bookContext: {
+                  href: communityFeedItemHref(item) ?? "",
+                  title: item.material.title,
+                  author: item.material.author,
+                  section: item.label ?? undefined,
+                  coverUrl: resolveBookThumbnailSrc(item.material),
+                  materialType: item.material.materialType,
+                },
+              }
+            : {})}
         />
       ))}
     </div>

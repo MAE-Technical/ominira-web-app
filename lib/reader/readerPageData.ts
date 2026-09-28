@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getBookDocumentFromMaterial, MaterialNotFoundError } from "@/lib/materials/toBookDocument";
 import { getMaterialDetail } from "@/lib/materials/detail";
 import { PLATFORM_NAME } from "@/lib/config/platform";
+import { loadReaderMaterial, MaterialNotFoundError, type ReaderMaterial } from "./loadReaderMaterial";
 
 /**
  * Shared server-side load for the two routes that render the real,
@@ -32,9 +32,9 @@ export async function readerPageMetadata(slug: string): Promise<Metadata> {
   return { title, description: desc };
 }
 
-export async function loadReaderPageBook(slug: string, eagerSectionId?: string) {
+export async function loadReaderPageMaterial(slug: string, eagerSectionId?: string): Promise<ReaderMaterial> {
   try {
-    return await getBookDocumentFromMaterial(slug, { eagerSectionId });
+    return await loadReaderMaterial(slug, { eagerSectionId });
   } catch (err) {
     if (err instanceof MaterialNotFoundError) notFound();
     // Schema/parse errors and anything unexpected surface through error.tsx

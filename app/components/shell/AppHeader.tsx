@@ -32,12 +32,12 @@ export default function AppHeader({ searchValue, onSearchChange, onSearchFocus }
             onChange={(e) => onSearchChange?.(e.target.value)}
             onFocus={onSearchFocus}
             readOnly={Boolean(onSearchFocus) && !onSearchChange}
-            placeholder="Search for a book"
+            placeholder="Search the library"
             className="flex-1 min-w-0 border-none bg-transparent font-medium text-[14px] text-[var(--reader-text)] outline-none placeholder:text-[var(--reader-text-subtle)]"
           />
         </div>
 
-        <div className="ml-auto flex flex-none items-center gap-2">
+        <div className="ml-auto flex flex-none items-center gap-4">
           {isAuthenticated && <NotificationsMenu />}
           <ProfileMenu />
         </div>

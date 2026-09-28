@@ -23,7 +23,9 @@ export function useThreadInteraction({
   initialEditingId,
   onNoteAdded,
 }: {
-  materialId: string;
+  /** Null for a book-less discussion post — see useNoteMutations.ts's own
+   * doc comments for how each mutation handles that. */
+  materialId: string | null;
   ranges: AnnotationRange[];
   allNotes: Note[];
   /** Deep-links straight into editing one specific existing entry, and

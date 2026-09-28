@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import ReaderModal from "@/app/components/reader/ReaderModal";
-import { getBookDocumentFromMaterial, MaterialNotFoundError } from "@/lib/materials/toBookDocument";
+import PdfDocumentModal from "@/app/components/reader/PdfDocumentModal";
+import DocxDocumentModal from "@/app/components/reader/DocxDocumentModal";
+import ArticleDocumentModal from "@/app/components/reader/ArticleDocumentModal";
+import { loadReaderMaterial, MaterialNotFoundError } from "@/lib/reader/loadReaderMaterial";
 import { getMaterialDetail } from "@/lib/materials/detail";
 import { PLATFORM_NAME } from "@/lib/config/platform";
 
@@ -46,20 +49,33 @@ export default async function ReadBookModalPage({
   const { slug } = await params;
   const { section, passage, note, noteId, thread } = await searchParams;
 
-  let book, materialId, eagerSectionIds;
+  let material;
   try {
-    ({ book, materialId, eagerSectionIds } = await getBookDocumentFromMaterial(slug, { eagerSectionId: section }));
+    material = await loadReaderMaterial(slug, { eagerSectionId: section });
   } catch (err) {
     if (err instanceof MaterialNotFoundError) {
       notFound();
     }
     throw err;
   }
+
+  if (material.kind === "pdf") {
+    return <PdfDocumentModal slug={slug} title={material.title} sourceUrl={material.sourceUrl} />;
+  }
+  if (material.kind === "docx") {
+    return <DocxDocumentModal slug={slug} title={material.title} sourceUrl={material.sourceUrl} />;
+  }
+  if (material.kind === "webpage") {
+    return (
+      <ArticleDocumentModal slug={slug} title={material.title} sourceUrl={material.sourceUrl} articleHtml={material.articleHtml} />
+    );
+  }
+
   return (
     <ReaderModal
-      book={book}
-      materialId={materialId}
-      eagerSectionIds={eagerSectionIds}
+      book={material.book}
+      materialId={material.materialId}
+      eagerSectionIds={material.eagerSectionIds}
       targetSectionId={section}
       targetPassageId={passage}
       targetNoteId={note}

@@ -75,7 +75,7 @@ export default function ProfileMenu() {
         <button
           type="button"
           aria-label="Account menu"
-          className="flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-full border-none p-0"
+          className="flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-full border-none p-0"
         >
           <span
             style={{ background: avatarColor(reader.pseudonym) }}
