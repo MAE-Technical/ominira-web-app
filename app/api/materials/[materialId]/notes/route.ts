@@ -6,7 +6,7 @@ import { resolveMaterialRow } from "@/lib/materials/resolve";
 import { decodeCursor, encodeCursor, keysetBeforeFilter, type Keyset } from "@/lib/api/cursor";
 import { hydrateNotes, visibleToFilter, type NoteRow } from "@/lib/community/notes";
 import { resolveExcerpt } from "@/lib/community/excerpt";
-import { storagePublicUrl } from "@/lib/storage/config";
+import { resolveStorageUrl } from "@/lib/storage/config";
 import { parseBookDocument, type BookDocument } from "@/lib/book/schema";
 import { buildPassageIndex } from "@/lib/reader/sections";
 import type { AnnotationRange } from "@/lib/api/types";
@@ -47,8 +47,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ mate
   // exactly this). The same parsed book doc is reused for excerpt
   // enrichment below rather than fetched twice.
   let book: BookDocument | undefined;
-  if (sectionId || withExcerpts) {
-    const res = await fetch(storagePublicUrl(material.json_storage_path));
+  if ((sectionId || withExcerpts) && material.json_storage_path) {
+    const res = await fetch(resolveStorageUrl(material.json_storage_path));
     if (res.ok) {
       const parsed = parseBookDocument(await res.json());
       if (parsed.ok) book = parsed.data;

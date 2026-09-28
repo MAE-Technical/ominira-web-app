@@ -5,7 +5,7 @@ import { parseGoogleMetaData, parseOpenLibraryMetaData } from "./providerMeta";
 type MaterialRow = Pick<Database["public"]["Tables"]["materials"]["Row"],
   "id" | "slug" | "material_type" | "title" | "author" | "description" | "cover_url" |
   "language" | "published_year" | "page_count_estimate" | "categories" | "thumbnail_url" |
-  "google_meta_data" | "openlibrary_meta_data" | "cover_source">;
+  "google_meta_data" | "openlibrary_meta_data" | "cover_source" | "uploaded_by" | "visibility">;
 
 /** snake_case materials row -> camelCase MaterialSummary (api-spec.md's Shared Types). */
 export function toMaterialSummary(row: MaterialRow): MaterialSummary {
@@ -36,5 +36,7 @@ export function toMaterialSummary(row: MaterialRow): MaterialSummary {
     // doc comment on why this isn't a plain materials-row column.
     currentReaders: [],
     currentReaderCount: 0,
+    uploadedBy: row.uploaded_by,
+    visibility: row.visibility,
   };
 }

@@ -1,8 +1,11 @@
 import { resolveMaterialRow } from "@/lib/materials/resolve";
 import { projectMaterial } from "@/lib/materials/projection";
 import type { BookDocument, Narrator, Note, Passage, Section } from "@/lib/book/schema";
+import type { Database } from "@/lib/supabase/database.types";
 import { fetchMaterialManifest } from "./manifest";
 import { resolveBookCoverSrc, type CoverSource } from "./image";
+
+type MaterialRow = Database["public"]["Tables"]["materials"]["Row"];
 
 export class MaterialNotFoundError extends Error {
   constructor(materialId: string) {
@@ -91,7 +94,17 @@ export async function getBookDocumentFromMaterial(
 ): Promise<{ book: BookDocument; materialId: string; eagerSectionIds: string[] }> {
   const row = await resolveMaterialRow(slug);
   if (!row) throw new MaterialNotFoundError(slug);
+  return buildBookDocumentFromRow(row, opts);
+}
 
+/** Same as `getBookDocumentFromMaterial`, but takes an already-resolved row
+ * — for callers (`loadReaderMaterial.ts`) that must check `material_type`
+ * before deciding whether to build a `BookDocument` at all, so the row gets
+ * resolved exactly once rather than once per branch. */
+export async function buildBookDocumentFromRow(
+  row: MaterialRow,
+  opts: { eagerSectionId?: string } = {}
+): Promise<{ book: BookDocument; materialId: string; eagerSectionIds: string[] }> {
   const [projected, manifest] = await Promise.all([
     projectMaterial(row, { fields: FULL_CONTENT_FIELDS, fullContent: true }),
     fetchMaterialManifest(row.slug),

@@ -1,4 +1,4 @@
-import { storagePublicUrl } from "@/lib/storage/config";
+import { resolveStorageUrl } from "@/lib/storage/config";
 import { parseBookDocument, type BookDocument } from "@/lib/book/schema";
 
 /**
@@ -13,16 +13,19 @@ import { parseBookDocument, type BookDocument } from "@/lib/book/schema";
  * enrichment) doesn't pay for a second materials round trip just to get it.
  * Falls back to leaving a material's id out of the returned map on any
  * per-material Storage hiccup — callers already treat a missing entry as
- * "resolve to empty" (see resolveExcerpt).
+ * "resolve to empty" (see resolveExcerpt). A material with no
+ * json_storage_path (a reader-uploaded PDF, which has no BookDocument at
+ * all) is skipped the same way.
  */
 export async function loadBookDocuments(
-  materials: { id: string; json_storage_path: string }[]
+  materials: { id: string; json_storage_path: string | null }[]
 ): Promise<Map<string, BookDocument>> {
   const bookByMaterialId = new Map<string, BookDocument>();
   await Promise.all(
     materials.map(async (material) => {
+      if (!material.json_storage_path) return;
       try {
-        const res = await fetch(storagePublicUrl(material.json_storage_path));
+        const res = await fetch(resolveStorageUrl(material.json_storage_path));
         if (!res.ok) return;
         const parsed = parseBookDocument(await res.json());
         if (parsed.ok) bookByMaterialId.set(material.id, parsed.data);

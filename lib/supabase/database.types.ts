@@ -52,6 +52,40 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["readers"]["Insert"]>;
         Relationships: [];
       };
+      pending_materials: {
+        Row: {
+          id: string;
+          submission_type: "upload" | "suggestion" | "external_url";
+          title: string;
+          author: string | null;
+          reader_id: string | null;
+          source_url: string | null;
+          storage_path: string | null;
+          original_filename: string | null;
+          mime_type: string | null;
+          file_size_bytes: number | null;
+          status: "pending" | "approved";
+          material_id: string | null;
+        } & Timestamps;
+        Insert: {
+          id?: string;
+          submission_type: "upload" | "suggestion" | "external_url";
+          title: string;
+          author?: string | null;
+          reader_id?: string | null;
+          source_url?: string | null;
+          storage_path?: string | null;
+          original_filename?: string | null;
+          mime_type?: string | null;
+          file_size_bytes?: number | null;
+          status?: "pending" | "approved";
+          material_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["pending_materials"]["Insert"]>;
+        Relationships: [];
+      };
       materials: {
         Row: {
           id: string;
@@ -80,8 +114,14 @@ export type Database = {
           toc: Json;
           toc_titles: string;
           spine: Json;
-          json_storage_path: string;
+          json_storage_path: string | null;
+          /** Readability-extracted article HTML for a `material_type: "webpage"`
+           * row — see migrations/20260929_article_html_storage_path.sql. */
+          article_html_storage_path: string | null;
           status: "draft" | "published";
+          uploaded_by: string | null;
+          visibility: "personal" | "public";
+          source_url: string | null;
           search_vector: string | null;
         } & Timestamps;
         Insert: {
@@ -104,8 +144,12 @@ export type Database = {
           toc?: Json;
           toc_titles?: string;
           spine?: Json;
-          json_storage_path: string;
+          json_storage_path?: string | null;
+          article_html_storage_path?: string | null;
           status?: "draft" | "published";
+          uploaded_by?: string | null;
+          visibility?: "personal" | "public";
+          source_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -229,6 +273,15 @@ export type Database = {
         Row: { material_id: string; topic_id: string; created_at: string };
         Insert: { material_id: string; topic_id: string; created_at?: string };
         Update: Partial<Database["public"]["Tables"]["material_topics"]["Insert"]>;
+        Relationships: [];
+      };
+      // A post's topics beyond its required posts.topic_id "default" — see
+      // migrations/20260927_post_topics.sql. created_at ordering is what
+      // makes the first-inserted row the reader's chosen default.
+      post_topics: {
+        Row: { post_id: string; topic_id: string; created_at: string };
+        Insert: { post_id: string; topic_id: string; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["post_topics"]["Insert"]>;
         Relationships: [];
       };
       // followable_type is constrained to 'topic' today (follows_topic_only,

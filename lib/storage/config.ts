@@ -22,3 +22,24 @@ export function bucketPublicUrl(bucket: string, objectPath: string): string {
 export function storagePublicUrl(objectPath: string): string {
   return bucketPublicUrl(STORAGE_BUCKET, objectPath);
 }
+
+/** Inverse of bucketPublicUrl() — the object path a full public URL points
+ * at inside the given bucket, or null if the URL isn't one of ours (a
+ * different bucket, or not a Storage public URL at all). Used to clean up a
+ * reader upload's Storage objects from the full URLs stored on its
+ * `materials` row (source_url/json_storage_path/cover_url), since those are
+ * the only record of which objects it owns — see DELETE /api/materials/
+ * [materialId]. */
+export function objectPathFromPublicUrl(bucket: string, url: string): string | null {
+  const prefix = `${bucketPublicUrl(bucket, "")}`;
+  return url.startsWith(prefix) ? url.slice(prefix.length) : null;
+}
+
+/** Resolves a `materials.json_storage_path`/`source_url` value to a fetchable
+ * URL regardless of which shape it's stored in: editorial materials still
+ * store a `library`-bucket-relative object path ("books/<slug>.json"),
+ * reader uploads store a full URL (any bucket/provider) directly — see
+ * reader-uploads-spec.md § 1. Already-full values pass through unchanged. */
+export function resolveStorageUrl(pathOrUrl: string): string {
+  return /^https?:\/\//.test(pathOrUrl) ? pathOrUrl : storagePublicUrl(pathOrUrl);
+}

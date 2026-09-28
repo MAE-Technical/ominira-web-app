@@ -1,4 +1,4 @@
-import { storagePublicUrl } from "@/lib/storage/config";
+import { resolveStorageUrl } from "@/lib/storage/config";
 import { parseBookDocument, type BookDocument } from "@/lib/book/schema";
 import { buildSectionsById } from "@/lib/reader/sections";
 import type { Database } from "@/lib/supabase/database.types";
@@ -35,8 +35,9 @@ const STORAGE_FIELDS = new Set(["narrators", "notes"]);
 
 export class MaterialSectionNotFoundError extends Error {}
 
-async function fetchBookFromStorage(jsonStoragePath: string): Promise<BookDocument> {
-  const res = await fetch(storagePublicUrl(jsonStoragePath));
+async function fetchBookFromStorage(jsonStoragePath: string | null): Promise<BookDocument> {
+  if (!jsonStoragePath) throw new Error("Material has no json_storage_path (PDF materials have no BookDocument)");
+  const res = await fetch(resolveStorageUrl(jsonStoragePath));
   if (!res.ok) throw new Error(`Could not fetch book JSON at ${jsonStoragePath} (${res.status})`);
   const parsed = parseBookDocument(await res.json());
   if (!parsed.ok) throw new Error(`Invalid book JSON at ${jsonStoragePath}: ${parsed.error.message}`);
