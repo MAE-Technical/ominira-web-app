@@ -51,11 +51,18 @@ export type MaterialSummary = {
   /** Real count of active readers — may exceed currentReaders.length once
    * the display cap kicks in; that gap is exactly the UI's "+N more". */
   currentReaderCount: number;
+  /** Reader who uploaded this into their personal library — null for the
+   * editorial catalog (see reader-uploads-spec.md). */
+  uploadedBy: string | null;
+  visibility: "personal" | "public";
 };
 
 export type Note = {
   id: string;
-  materialId: string;
+  /** Null for a book-less discussion post (HomeComposer's plain "what's on
+   * your mind" posts, `thread_type: 'discussion'` with no attached book) —
+   * every book-anchored note/reply still always has one. */
+  materialId: string | null;
   author: { readerId: string; pseudonym: string; city: string | null };
   ranges: AnnotationRange[];
   parentId: string | null;
@@ -64,10 +71,25 @@ export type Note = {
   visibility: NoteVisibility;
   reactionCount: number;
   reactedByMe: boolean;
-  /** The post's topic name (migrations/20260919_topics_and_posts.sql) — null
-   * only if the topic lookup itself failed (never by design: every post has
-   * a topic_id). Surfaced so AuthorRow can show "· in {topicName}". */
+  /** The post's default topic name — always topicNames[0] (migrations/
+   * 20260919_topics_and_posts.sql's required topic_id), null only if the
+   * topic lookup itself failed. Surfaced so AuthorRow can show "· in
+   * {topicName}". */
   topicName: string | null;
+  /** topicName's own slug — lets AuthorRow link the topic label straight
+   * into Home's `?topic=<slug>` filter (CategoryPills' own href shape),
+   * without a client-side name->slug lookup. Null exactly when topicName
+   * is. */
+  topicSlug: string | null;
+  /** Every topic the post is tagged under, default first (migrations/
+   * 20260927_post_topics.sql) — a reader can tag a post under several
+   * topics via the composer's multi-select picker. Empty only alongside a
+   * null topicName. */
+  topicNames: string[];
+  /** Same set as topicNames, name+slug pairs — what AuthorRow actually
+   * renders (every tagged topic, each linked into Home's `?topic=<slug>`
+   * filter), rather than just the default. */
+  topics: { name: string; slug: string }[];
   createdAt: string;
   updatedAt: string;
 };

@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import SearchableAppPage from "@/app/components/shell/SearchableAppPage";
 import { communityFeedItemHref, useCommunityFeed, type CommunityFeedSort } from "@/lib/community/useCommunityFeed";
+import { useTopics } from "@/lib/community/useTopics";
 import { resolveBookThumbnailSrc } from "@/lib/materials/image";
 import FeaturedThisWeek from "@/app/components/shell/FeaturedThisWeek";
-import CommunityFeedSortToggle from "./CommunityFeedSortToggle";
+import HomeComposer from "./HomeComposer";
+import CategoryPills from "@/app/components/shell/CategoryPills";
+import HomeSortToggle from "./HomeSortToggle";
 import NoteCard from "@/app/components/reader/notes/NoteCard";
 import HomeAuthBanner from "./HomeAuthBanner";
 import HomeInstallBanner from "./HomeInstallBanner";
@@ -32,7 +36,16 @@ function NoteCardSkeleton() {
  * then a page heading + a filter control, then the content). */
 export default function HomeCommunityFeed() {
   const [sort, setSort] = useState<CommunityFeedSort>("recent");
-  const { data, isLoading } = useCommunityFeed(sort);
+  const { data: topics } = useTopics();
+  // The active filter lives in the URL (`?topic=<slug>`), same as Library's
+  // own `?q=<slug>` — shareable/bookmarkable, and survives a refresh or the
+  // back button, unlike plain component state. Resolved against the fetched
+  // topics list (slug -> id) rather than trusting the id straight off the
+  // URL, same reasoning as Library's resolveCategoryFromSlug: an unknown or
+  // stale slug just falls back to "All" instead of erroring.
+  const topicSlug = useSearchParams().get("topic");
+  const topicId = topics?.find((t) => t.slug === topicSlug)?.id ?? null;
+  const { data, isLoading } = useCommunityFeed(sort, topicId);
   const items = data?.items ?? [];
 
   return (
@@ -44,48 +57,73 @@ export default function HomeCommunityFeed() {
 
       <FeaturedThisWeek />
 
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="m-0 font-serif text-xl font-bold text-[var(--reader-text)]">Community notes</h1>
-          {/* <p className="mt-1 mb-0 font-literata text-sm text-[var(--reader-text-muted)]">
-            What comrades are discussing across the library right now.
-          </p> */}
-        </div>
-        {items.length > 0 && <CommunityFeedSortToggle mode={sort} onChange={setSort} />}
+      <div className="mt-1 mb-7">
+        <h1 className="m-0 font-serif text-2xl font-bold text-[var(--reader-text)]">Community posts</h1>
       </div>
 
-      {isLoading ? (
-        <div className="flex flex-col">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <NoteCardSkeleton key={i} />
-          ))}
+      <div className="mb-10">
+        <CategoryPills
+          items={(topics ?? []).map((topic) => ({ key: topic.slug, label: topic.name }))}
+          allKey="all"
+          selected={topicSlug ?? "all"}
+          hrefFor={(key) => (key === "all" ? "/home" : `/home?topic=${key}`)}
+        />
+      </div>
+
+      <div className="mx-auto max-w-[640px]">
+        <div className="mb-8">
+          <HomeComposer defaultTopicId={topicId} />
         </div>
-      ) : items.length === 0 ? (
-        <p className="text-sm text-[var(--reader-text-muted)]">No notes yet — annotate a passage to start the discourse.</p>
-      ) : (
-        // One column of flat rows, each separated by its own bottom
-        // border, at every width — no boxed/masonry treatment on desktop
-        // (see NoteCard's own doc comment for why: CSS multi-column forced
-        // a full-feed reflow whenever any one card's height changed, e.g.
-        // its inline reply composer opening).
-        <div className="flex flex-col">
-          {items.map((item) => (
-            <NoteCard
-              key={item.note.id}
-              materialId={item.material.id}
-              note={item.note}
-              replies={item.replies}
-              excerpt={item.excerpt}
-              bookContext={{
-                href: communityFeedItemHref(item),
-                title: item.material.title,
-                section: item.label,
-                coverUrl: resolveBookThumbnailSrc(item.material),
-              }}
-            />
-          ))}
+
+        <HomeSortToggle mode={sort} onChange={setSort} />
+
+        <div className="mt-0">
+          {isLoading ? (
+            <div className="flex flex-col">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <NoteCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : items.length === 0 ? (
+            <p className="mt-6 font-literata text-sm text-[var(--reader-text-muted)]">
+              {topicId
+                ? "Nothing here yet — be the first to share your thoughts on this topic."
+                : "No one's here yet in this view — try widening your filters, or start the thread yourself."}
+            </p>
+          ) : (
+            // One column of flat rows, each separated by its own bottom
+            // border, at every width — no boxed/masonry treatment on desktop
+            // (see NoteCard's own doc comment for why: CSS multi-column forced
+            // a full-feed reflow whenever any one card's height changed, e.g.
+            // its inline reply composer opening).
+            <div className="flex flex-col">
+              {items.map((item) => (
+                <NoteCard
+                  key={item.note.id}
+                  materialId={item.material?.id ?? null}
+                  note={item.note}
+                  replies={item.replies}
+                  excerpt={item.excerpt}
+                  // No book context at all for a book-less discussion post
+                  // — there's no book to preview or link into.
+                  {...(item.material
+                    ? {
+                        bookContext: {
+                          href: communityFeedItemHref(item) ?? "",
+                          title: item.material.title,
+                          author: item.material.author,
+                          section: item.label ?? undefined,
+                          coverUrl: resolveBookThumbnailSrc(item.material),
+                          materialType: item.material.materialType,
+                        },
+                      }
+                    : {})}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </SearchableAppPage>
   );
 }

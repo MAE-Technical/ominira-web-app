@@ -11,18 +11,25 @@ import type { AnnotationRange, Note, NoteContent } from "@/lib/api/types";
 export type NoteRow = Database["public"]["Tables"]["posts"]["Row"];
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdminClient>;
 
-/** NoteContent union -> posts.kind + posts.content (jsonb). A book-anchored
- * text note is stored as kind='citation' (posts.kind has more values than
- * the API's NoteContent.kind ever exposes) so the public Note.content shape
- * never has to change. */
-export function contentToColumns(content: NoteContent) {
-  if (content.kind === "text") {
-    return { kind: "citation" as const, content: { kind: "citation", text: content.text } };
+export type PostKind = "citation" | "text" | "book_share" | "voice";
+
+/** NoteContent union -> posts.kind + posts.content (jsonb). A text note
+ * defaults to kind='citation' (posts.kind has more values than the API's
+ * NoteContent.kind ever exposes) — the book-anchored-note shape every
+ * existing caller (NoteComposer, reader annotation flow) relies on,
+ * unchanged. `kind` lets a caller override that default for a top-level
+ * discussion post instead (POST /api/community/notes' own `text`/
+ * `book_share` per whether one has an attached material) — contentFromRow
+ * reads any non-voice kind back as plain text regardless, so this never
+ * needs its own read-side branch. */
+export function contentToColumns(content: NoteContent, kind: PostKind = "citation") {
+  if (content.kind === "voice") {
+    return {
+      kind: "voice" as const,
+      content: { kind: "voice", audioUrl: content.audioUrl, durationMs: content.durationMs },
+    };
   }
-  return {
-    kind: "voice" as const,
-    content: { kind: "voice", audioUrl: content.audioUrl, durationMs: content.durationMs },
-  };
+  return { kind, content: { kind, text: content.text } };
 }
 
 function contentFromRow(row: NoteRow): NoteContent {
@@ -40,22 +47,24 @@ type AuthorMeta = { pseudonym: string; city: string | null };
  * topic name, and reactedByMe are looked up separately (no typed FK
  * embedding — see the helpers below) and passed in rather than queried
  * per-row, so a list of N notes costs a few extra queries, not N per note.
- * materialId/ranges are asserted non-null: every row this endpoint family
- * reads was created through POST /api/community/notes, which always sets
- * both. */
-export function toNote(row: NoteRow, author: AuthorMeta, reactedByMe: boolean, topicName: string | null): Note {
+ * materialId/ranges are null only for a book-less discussion post — every
+ * book-anchored note/reply this endpoint family reads always has both. */
+export function toNote(row: NoteRow, author: AuthorMeta, reactedByMe: boolean, topics: TopicRef[]): Note {
   return {
     id: row.id,
-    materialId: row.material_id!,
+    materialId: row.material_id,
     author: { readerId: row.reader_id, pseudonym: author.pseudonym, city: author.city },
-    ranges: row.ranges as AnnotationRange[],
+    ranges: (row.ranges as AnnotationRange[] | null) ?? [],
     parentId: row.parent_id,
     replyingToId: row.replying_to_id,
     content: contentFromRow(row),
     visibility: row.visibility,
     reactionCount: row.reaction_count,
     reactedByMe,
-    topicName,
+    topicName: topics[0]?.name ?? null,
+    topicSlug: topics[0]?.slug ?? null,
+    topicNames: topics.map((t) => t.name),
+    topics,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -76,15 +85,50 @@ export async function getAuthorsByReaderId(readerIds: string[]): Promise<Map<str
   return new Map((data ?? []).map((r) => [r.id, { pseudonym: r.pseudonym, city: r.city }]));
 }
 
-/** Batched topic-name lookup, same shape as getAuthorsByReaderId — every
- * post has a topic_id, so this is always a real name (barring one of the
- * throwaway pseudo-topics resolveTopicIdForNewThread falls back to when a
- * material has no linked topic). */
-export async function getTopicNamesByIds(topicIds: string[]): Promise<Map<string, string>> {
+export type TopicRef = { name: string; slug: string };
+
+/** Batched topic-name lookup, same shape as getAuthorsByReaderId. Every
+ * post has a topic_id, but not every topic_id is a real, displayable
+ * topic — the throwaway pseudo-topics resolveTopicIdForNewThread (and the
+ * untagged-discussion-post fallback in POST /api/community/notes) create
+ * are `source: 'legacy_migration'`, never meant to surface as a label, so
+ * they're excluded here and simply have no entry in the returned map. */
+export async function getTopicNamesByIds(topicIds: string[]): Promise<Map<string, TopicRef>> {
   const unique = Array.from(new Set(topicIds));
   if (unique.length === 0) return new Map();
-  const { data } = await getSupabaseAdminClient().from("topics").select("id, name").in("id", unique);
-  return new Map((data ?? []).map((t) => [t.id, t.name]));
+  const { data } = await getSupabaseAdminClient()
+    .from("topics")
+    .select("id, name, slug")
+    .in("id", unique)
+    .neq("source", "legacy_migration");
+  return new Map((data ?? []).map((t) => [t.id, { name: t.name, slug: t.slug }]));
+}
+
+/** Every topic a post is tagged under (migrations/20260927_post_topics.sql),
+ * default first — `created_at` ordering on post_topics is exactly insertion
+ * order, and the composer always inserts the reader's chosen default first.
+ * Falls back to just `[post.topic_id]`'s name for a post whose post_topics
+ * rows predate this table (shouldn't happen post-backfill, but batching
+ * degrades safely rather than surfacing an empty topic list). */
+export async function getTopicNamesForPosts(postIds: string[]): Promise<Map<string, TopicRef[]>> {
+  const unique = Array.from(new Set(postIds));
+  if (unique.length === 0) return new Map();
+  const { data } = await getSupabaseAdminClient()
+    .from("post_topics")
+    .select("post_id, topic_id")
+    .in("post_id", unique)
+    .order("created_at", { ascending: true });
+  const rows = data ?? [];
+  const topics = await getTopicNamesByIds(rows.map((r) => r.topic_id));
+  const byPost = new Map<string, TopicRef[]>();
+  for (const row of rows) {
+    const topic = topics.get(row.topic_id);
+    if (!topic) continue;
+    const list = byPost.get(row.post_id) ?? [];
+    list.push(topic);
+    byPost.set(row.post_id, list);
+  }
+  return byPost;
 }
 
 export async function getReactedNoteIds(readerId: string | undefined, noteIds: string[]): Promise<Set<string>> {
@@ -102,14 +146,22 @@ export async function getReactedNoteIds(readerId: string | undefined, noteIds: s
  * same reply/thread hydration shape every notes-reading route needs. */
 export async function hydrateNotes(rows: NoteRow[], callerId: string | undefined): Promise<Note[]> {
   if (rows.length === 0) return [];
-  const [authors, reacted, topicNames] = await Promise.all([
+  const [authors, reacted, topicNamesByPost, defaultTopicNames] = await Promise.all([
     getAuthorsByReaderId(rows.map((r) => r.reader_id)),
     getReactedNoteIds(callerId, rows.map((r) => r.id)),
+    getTopicNamesForPosts(rows.map((r) => r.id)),
     getTopicNamesByIds(rows.map((r) => r.topic_id)),
   ]);
-  return rows.map((row) =>
-    toNote(row, authors.get(row.reader_id) ?? { pseudonym: "Unknown", city: null }, reacted.has(row.id), topicNames.get(row.topic_id) ?? null)
-  );
+  return rows.map((row) => {
+    // post_topics is what's authoritative once populated; a row it has
+    // nothing for (pre-backfill edge case, or an untagged discussion post
+    // whose topic_id is a throwaway pseudo-topic) falls back to just its
+    // default — dropped entirely (empty topics, not a raw id) when that
+    // default has no displayable name of its own.
+    const fallbackTopic = defaultTopicNames.get(row.topic_id);
+    const topics = topicNamesByPost.get(row.id) ?? (fallbackTopic ? [fallbackTopic] : []);
+    return toNote(row, authors.get(row.reader_id) ?? { pseudonym: "Unknown", city: null }, reacted.has(row.id), topics);
+  });
 }
 
 /** Resolves the topic_id a brand-new thread-root note should get, since
@@ -141,4 +193,14 @@ export async function resolveTopicIdForNewThread(admin: SupabaseAdmin, materialI
     status: "archived",
   });
   return topicId;
+}
+
+/** Writes a brand-new thread root's full topic set (default first — see
+ * post_topics's own doc comment) into post_topics. A reply never calls
+ * this: it inherits its thread root's topics wholesale, same as it already
+ * inherits topic_id, so there's nothing new to write. */
+export async function insertPostTopics(admin: SupabaseAdmin, postId: string, topicIds: string[]): Promise<void> {
+  const unique = Array.from(new Set(topicIds));
+  if (unique.length === 0) return;
+  await admin.from("post_topics").insert(unique.map((topicId) => ({ post_id: postId, topic_id: topicId })));
 }

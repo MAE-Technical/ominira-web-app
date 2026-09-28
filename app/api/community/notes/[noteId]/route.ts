@@ -4,7 +4,7 @@ import { MATERIAL_SUMMARY_COLUMNS } from "@/lib/materials/columns";
 import { parseGoogleMetaData, parseOpenLibraryMetaData } from "@/lib/materials/providerMeta";
 import { getAuthenticatedReader } from "@/lib/auth/session";
 import { forbidden, notFound, unauthorized, validationError } from "@/lib/api/errors";
-import { contentToColumns, hydrateNotes, type NoteRow } from "@/lib/community/notes";
+import { contentToColumns, hydrateNotes, type NoteRow, type PostKind } from "@/lib/community/notes";
 import type { NoteContent } from "@/lib/api/types";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -54,13 +54,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ no
 
   const { noteId } = await params;
   const admin = getSupabaseAdminClient();
-  const { data: existing } = await admin.from("posts").select("reader_id").eq("id", noteId).maybeSingle();
+  const { data: existing } = await admin.from("posts").select("reader_id, kind").eq("id", noteId).maybeSingle();
   if (!existing) return notFound();
   if (existing.reader_id !== reader.readerId) return forbidden();
 
   const body = (await request.json()) as { content?: NoteContent; visibility?: "public" | "private" };
   const update: Database["public"]["Tables"]["posts"]["Update"] = {};
-  if (body.content) Object.assign(update, contentToColumns(body.content));
+  // Preserves whatever this row's own kind already was (citation/text/
+  // book_share) rather than defaulting back to contentToColumns' own
+  // 'citation' default — a book-less discussion post edited here would
+  // otherwise get reset to kind='citation' with material_id still null,
+  // which the posts_citation_requires_material check constraint rejects.
+  if (body.content) Object.assign(update, contentToColumns(body.content, existing.kind as PostKind));
   if (body.visibility) update.visibility = body.visibility;
 
   const { data, error } = await admin.from("posts").update(update).eq("id", noteId).select("*").single();
