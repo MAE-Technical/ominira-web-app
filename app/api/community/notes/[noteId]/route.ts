@@ -5,6 +5,7 @@ import { parseGoogleMetaData, parseOpenLibraryMetaData } from "@/lib/materials/p
 import { getAuthenticatedReader } from "@/lib/auth/session";
 import { forbidden, notFound, unauthorized, validationError } from "@/lib/api/errors";
 import { contentToColumns, hydrateNotes, type NoteRow, type PostKind } from "@/lib/community/notes";
+import { STORAGE_BUCKET, objectPathFromPublicUrl } from "@/lib/storage/config";
 import type { NoteContent } from "@/lib/api/types";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -81,7 +82,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
 
   const { noteId } = await params;
   const admin = getSupabaseAdminClient();
-  const { data: existing } = await admin.from("posts").select("reader_id").eq("id", noteId).maybeSingle();
+  const { data: existing } = await admin.from("posts").select("reader_id, material_id").eq("id", noteId).maybeSingle();
   if (!existing) return notFound();
   if (existing.reader_id !== reader.readerId) return forbidden();
 
@@ -91,5 +92,37 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
   // because there was no DB to cascade for it).
   const { error } = await admin.from("posts").delete().eq("id", noteId);
   if (error) return notFound();
+
+  // posts.material_id is `on delete set null`, so the row above never took
+  // the material with it — a personal upload (reader-uploads-spec.md) that
+  // was only ever attached to this one post would otherwise sit orphaned in
+  // `materials` forever. Only clean it up when it's this reader's own
+  // personal upload and no other post still points at it; a catalog book or
+  // a material shared by another post is left untouched.
+  if (existing.material_id) {
+    const { data: material } = await admin
+      .from("materials")
+      .select("id, uploaded_by, source_url, json_storage_path, cover_url")
+      .eq("id", existing.material_id)
+      .maybeSingle();
+    if (material && material.uploaded_by === reader.readerId) {
+      const { count } = await admin
+        .from("posts")
+        .select("id", { count: "exact", head: true })
+        .eq("material_id", material.id);
+      if (!count) {
+        await admin.from("pending_materials").delete().eq("material_id", material.id);
+        const { error: materialDeleteError } = await admin.from("materials").delete().eq("id", material.id);
+        if (!materialDeleteError) {
+          const objectPaths = [material.source_url, material.json_storage_path, material.cover_url]
+            .filter((url): url is string => !!url)
+            .map((url) => objectPathFromPublicUrl(STORAGE_BUCKET, url))
+            .filter((path): path is string => !!path);
+          if (objectPaths.length > 0) await admin.storage.from(STORAGE_BUCKET).remove(objectPaths);
+        }
+      }
+    }
+  }
+
   return new Response(null, { status: 204 });
 }
