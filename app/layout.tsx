@@ -2,6 +2,14 @@ import type { Metadata, Viewport } from "next";
 import { Source_Serif_4, Manrope, Literata } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
+// Global (not CSS-module) stylesheets — Next only reliably applies a global
+// CSS import made from the root layout, not from a nested client component
+// (app/components/reader/PdfDocumentView.tsx previously imported these
+// directly, which is why AnnotationLayer's own "styles not found" runtime
+// check kept firing: the `--react-pdf-annotation-layer` var these set on
+// `body` never actually landed).
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 import ServiceWorkerRegistration from "./ServiceWorkerRegistration";
 import TouchActiveState from "./components/pwa/TouchActiveState";
 import AppSplashScreen from "./components/pwa/AppSplashScreen";

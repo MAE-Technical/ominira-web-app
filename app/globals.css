@@ -567,3 +567,73 @@ body {
 .loader-spin {
   animation: loader-spin 800ms linear infinite;
 }
+
+/* Structural typography for a reflowing whole-document article — DOCX
+   (mammoth's convertToHtml output) and a web page's Readability-extracted
+   HTML (document-readers-spec.md § 3). Both hand this plain semantic HTML
+   (p/h1-h6/strong/em/ul/ol/li/blockquote/a), so one descendant-selector
+   block styles it, rather than each viewer re-deriving its own. The base
+   font-family/font-size/line-height are deliberately *not* set here — they
+   come from lib/reader/useArticleTypographyStyle.ts as an inline style on
+   the element this class is applied to, reading the exact same reader-store
+   values (and reader-configurable font-size/spacing/family preference)
+   BookContent.tsx derives for EPUB, so the two formats' reading feel is the
+   same source of truth, not a hardcoded approximation of it. Every rule
+   below is in `em`, so it already scales correctly off that inline
+   font-size. */
+.reader-article {
+  color: var(--reader-text);
+}
+.reader-article > :first-child {
+  margin-top: 0;
+}
+.reader-article p {
+  margin: 0 0 1.1em;
+}
+.reader-article h1,
+.reader-article h2,
+.reader-article h3,
+.reader-article h4,
+.reader-article h5,
+.reader-article h6 {
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1.6em 0 0.6em;
+  color: var(--reader-text);
+}
+.reader-article h1 {
+  font-size: 1.9em;
+}
+.reader-article h2 {
+  font-size: 1.5em;
+}
+.reader-article h3 {
+  font-size: 1.25em;
+}
+.reader-article h4,
+.reader-article h5,
+.reader-article h6 {
+  font-size: 1.1em;
+}
+.reader-article blockquote {
+  margin: 1.2em 0;
+  padding-left: 1em;
+  border-left: 2px solid var(--reader-border);
+  color: var(--reader-text-muted);
+}
+.reader-article ul,
+.reader-article ol {
+  margin: 0 0 1.1em;
+  padding-left: 1.4em;
+}
+.reader-article li {
+  margin: 0 0 0.4em;
+}
+.reader-article a {
+  color: var(--reader-accent);
+  text-decoration: underline;
+}
+.reader-article img {
+  max-width: 100%;
+  height: auto;
+}
