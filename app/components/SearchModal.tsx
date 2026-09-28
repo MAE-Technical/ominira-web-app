@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 import type { BookDocument } from "@/lib/book/schema";
@@ -11,20 +11,28 @@ import { resolveBookThumbnailSrc } from "@/lib/materials/image";
 
 function highlight(text: string, q: string) {
   if (!q) return text;
-  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  const lowerText = text.toLowerCase();
+  const lowerQ = q.toLowerCase();
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  let idx = lowerText.indexOf(lowerQ, cursor);
   if (idx === -1) return text;
-  return (
-    <>
-      {text.slice(0, idx)}
+  while (idx !== -1) {
+    parts.push(text.slice(cursor, idx));
+    parts.push(
       <mark
+        key={idx}
         style={{ background: "var(--reader-highlight)" }}
         className="text-inherit rounded-[2px]"
       >
         {text.slice(idx, idx + q.length)}
       </mark>
-      {text.slice(idx + q.length)}
-    </>
-  );
+    );
+    cursor = idx + q.length;
+    idx = lowerText.indexOf(lowerQ, cursor);
+  }
+  parts.push(text.slice(cursor));
+  return <>{parts}</>;
 }
 
 type Props = {
@@ -95,7 +103,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={book ? "Search this book..." : "Search for a book"}
+            placeholder={book ? "Search document..." : "Search the library"}
             className="flex-1 border-none outline-none text-[14px] font-medium text-[var(--reader-text)] bg-transparent"
           />
           {query && (
