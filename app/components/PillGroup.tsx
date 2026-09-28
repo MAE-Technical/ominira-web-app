@@ -5,8 +5,8 @@ export type PillOption<T extends string> = { value: T; label: string };
 /**
  * The one pill-filter look this app uses everywhere a reader narrows a
  * list down to one of a few named options — CategoryPills (library
- * categories), CommunityFeedSortToggle (Top/Recent), and the reader's own
- * annotation-feed filter (All/Notes/Highlights) all render through this,
+ * categories) and the reader's own annotation-feed filter (All/Notes/
+ * Highlights) render through this,
  * rather than each inventing its own bordered-pill/segmented-control
  * styling. Individually bordered/filled pills, not a single joined
  * segmented track — reads clearly as "N independent choices" even at three

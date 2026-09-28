@@ -44,7 +44,7 @@ export function PresenceLine({ readers, totalCount }: Props) {
     <div className="mt-0.5 flex items-center gap-1.5">
       <PulseDot />
       <span className="text-[11px] font-medium text-[var(--reader-text-muted)]">
-        {totalCount} reading now
+        {totalCount} currently reading
       </span>
     </div>
   );
@@ -70,7 +70,7 @@ export function ReadingNowMetaItem({ readers, totalCount, onOpen }: TriggerProps
       className="inline-flex cursor-pointer items-center gap-0.5 border-none bg-transparent p-0 font-medium text-[var(--reader-text-muted)] hover:text-[var(--reader-text)]"
     >
       <PulseDot className="mr-1" />
-      {totalCount} reading now
+      {totalCount} currently reading
       <ChevronRight size={13} className="flex-none" />
     </button>
   );
@@ -113,7 +113,7 @@ export function ReadingRoomModal({ readers, totalCount, onClose }: Props & { onC
         }`}
       >
         <div className="flex flex-none items-center justify-between gap-2.5 border-b border-[var(--reader-border)] px-5 py-4">
-          <span className="text-sm font-semibold text-[var(--reader-text)]">{totalCount} reading now</span>
+          <span className="text-sm font-semibold text-[var(--reader-text)]">{totalCount} reading</span>
           <span onClick={onClose} className="cursor-pointer text-sm font-medium text-[var(--reader-text-muted)]">
             Close
           </span>
