@@ -21,20 +21,24 @@ const EXCERPT_PREVIEW_CHARS = 160;
 export default function NoteBookContext({
   href,
   title,
+  author,
   section,
   coverUrl,
+  materialType,
   excerpt,
 }: {
   href: string;
   title: string;
+  author?: string | null;
   section?: string;
   coverUrl?: string | null;
-  excerpt?: string;
+  materialType?: string;
+  excerpt?: string | null;
 }) {
   if (!excerpt) {
     return (
       <Link href={href} className="group flex flex-col no-underline">
-        <BookPreview title={title} section={section} coverUrl={coverUrl} />
+        <BookPreview title={title} author={author} section={section} coverUrl={coverUrl} materialType={materialType} />
       </Link>
     );
   }
@@ -45,6 +49,11 @@ export default function NoteBookContext({
       className="group flex flex-col overflow-hidden rounded-sm border border-[var(--reader-border)] no-underline"
     >
       <HighlightCard text={excerpt} maxChars={EXCERPT_PREVIEW_CHARS} bare />
+      {/* No author/format here — the passage itself is the point of this
+          card, and title/section is enough to place it; author + format
+          only earn their spot on a general book-attached note's own
+          standalone BookPreview row, where there's no quote already
+          carrying the content. */}
       <BookPreview title={title} section={section} coverUrl={coverUrl} bare />
     </Link>
   );

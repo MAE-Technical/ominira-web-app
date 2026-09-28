@@ -68,6 +68,7 @@ export default function NoteComposer({
   onCancel,
   excludeRef,
   onSave,
+  draftKey,
 }: {
   initialText: string;
   /** The toggle's own starting value. Present only for editing an existing
@@ -105,10 +106,32 @@ export default function NoteComposer({
     content: { kind: "text"; text: string } | { kind: "voice"; audioUrl: string; durationMs: number },
     visibility: NoteVisibility
   ) => void;
+  /** Opts this instance into localStorage draft persistence, keyed
+   * `ominira-note-draft-<draftKey>` — only meaningful for a fresh compose
+   * surface (`initialText === ""`), never passed for editing an existing
+   * entry in place (that "draft" is the note itself, not a scratch space).
+   * Callers pass something stable per compose *target* (e.g. a material id
+   * for the book's general composer, a parent note id for a reply) so a
+   * reader who navigates away mid-thought and comes back — to the same
+   * target — finds their text still there. */
+  draftKey?: string;
 }) {
   const isAuthenticated = useIsAuthenticated();
-  const [text, setText] = useState(initialText);
-  const [expanded, setExpanded] = useState(!startCollapsed);
+  const storageKey = draftKey ? `ominira-note-draft-${draftKey}` : null;
+  const [text, setText] = useState(() => {
+    if (!initialText && storageKey && typeof window !== "undefined") {
+      try {
+        return window.localStorage.getItem(storageKey) ?? initialText;
+      } catch {
+        return initialText;
+      }
+    }
+    return initialText;
+  });
+  // A restored draft should land already expanded — same as an in-place
+  // edit's own `!startCollapsed` override — so it doesn't hide behind the
+  // idle pill as if it were empty.
+  const [expanded, setExpanded] = useState(!startCollapsed || text.trim().length > 0);
   const [isFocused, setIsFocused] = useState(false);
   const lastVisibility = useNoteVisibilityStore((s) => s.lastVisibility);
   const setLastVisibility = useNoteVisibilityStore((s) => s.setLastVisibility);
@@ -186,6 +209,19 @@ export default function NoteComposer({
   useEffect(() => {
     if (expanded && recorder.mode === "idle") textareaRef.current?.focus();
   }, [expanded, recorder.mode]);
+
+  // Mirrors every keystroke into localStorage under `storageKey` (when
+  // opted in) — cleared rather than written once the draft's back to empty,
+  // so an abandoned draft doesn't linger forever as a stale restore.
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      if (text) window.localStorage.setItem(storageKey, text);
+      else window.localStorage.removeItem(storageKey);
+    } catch {
+      // Best-effort — a private-browsing quota error shouldn't block typing.
+    }
+  }, [storageKey, text]);
 
   const canSave =
     recorder.mode === "recorded" ? Boolean(recorder.audioUrl) && !isUploadingVoice : text.trim().length > 0;

@@ -17,30 +17,31 @@ import { pseudonymToSlug } from "@/lib/reader/profileSlug";
  * `headerMenu`) — the per-entry overflow trigger lives here, anchored with
  * the author/time metadata it actually manages, rather than down in the
  * react/reply action row below the content, where its position would drift
- * with content length. */
+ * with content length. One size everywhere — a reply is not a lesser
+ * citizen than the note it's attached to. */
 export default function AuthorRow({
   name,
   savedAt,
   city = null,
-  topicName = null,
+  topics = [],
   isPrivate = false,
-  size = "default",
   menu,
 }: {
   name: string;
   savedAt: number;
   city?: string | null;
-  topicName?: string | null;
+  /** Every topic the post is tagged under, default first (Note.topics) —
+   * all of them render here, not just the default, each linking straight
+   * into Home's `?topic=<slug>` filter (same href shape CategoryPills
+   * itself builds). Never includes the throwaway pseudo-topics
+   * (getTopicNamesByIds excludes those), so this is empty rather than
+   * showing a meaningless label when a post has no real topic. */
+  topics?: { name: string; slug: string }[];
   isPrivate?: boolean;
-  /** "small" — a reply's own identity line, one notch down from a
-   * top-level note's. */
-  size?: "default" | "small";
   menu?: ReactNode;
 }) {
   const displayName = comradeName(name);
   const profileHref = `/@${pseudonymToSlug(name)}`;
-  const nameSize = size === "small" ? "text-[11px]" : "text-xs";
-  const metaSize = size === "small" ? "text-[10px]" : "text-[11px]";
   return (
     // flex-nowrap + truncate on the meta span: a single flat line everywhere
     // (feed and notes panel alike), rather than wrapping onto a second line
@@ -49,14 +50,27 @@ export default function AuthorRow({
     <div className="flex min-w-0 flex-nowrap items-baseline gap-x-1.5">
       <Link
         href={profileHref}
-        className={`flex-none font-bold capitalize text-[var(--reader-text)] no-underline hover:underline ${nameSize}`}
+        className="flex-none font-bold capitalize text-[var(--reader-text)] no-underline hover:underline text-xs"
       >
         {displayName}
       </Link>
-      <span className={`min-w-0 flex-1 truncate font-medium text-[var(--reader-text-muted)] ${metaSize}`}>
+      <span className="min-w-0 flex-1 truncate font-semibold text-[var(--reader-text-muted)] text-[11px]">
         {formatShortTimeAgo(savedAt)} &nbsp;
         {city && <> · &nbsp; {city}</>} &nbsp;
-        {topicName && <> · &nbsp; in {topicName}</>}
+        {topics.length > 0 && (
+          <>
+            {" "}
+            · &nbsp;
+            {topics.map((topic, i) => (
+              <span key={topic.slug}>
+                {i > 0 && ", "}
+                <Link href={`/home?topic=${topic.slug}`} className="text-[var(--reader-text-muted)] no-underline hover:underline">
+                  {topic.name}
+                </Link>
+              </span>
+            ))}
+          </>
+        )}
       </span>
       {isPrivate && (
         // self-center: an icon+text badge mixed into this row's own

@@ -135,6 +135,7 @@ function EditPanel({
             startCollapsed
             showMemberPrompt
             action="note"
+            draftKey={`highlight-${materialId}-${JSON.stringify(ranges)}`}
             onSave={(content, visibility) =>
               createNote.mutate(
                 { ranges, content, visibility },

@@ -5,19 +5,18 @@ import { avatarColor, avatarInitial, comradeName } from "@/lib/reader/authorDisp
 import { pseudonymToSlug } from "@/lib/reader/profileSlug";
 
 /** The avatar circle alone, split out of AuthorRow so a caller can place it
- * outside the name/meta column entirely — Substack's own comment layout:
- * the avatar sits in its own left column, with the name, timestamp, quote,
- * and body all stacked in one indented column beside it, rather than the
- * avatar sharing a single row with just the name. */
-export default function AuthorAvatar({ name, size = "default" }: { name: string; size?: "default" | "small" }) {
+ * beside just the name/time row — the quote/body/reactions below run the
+ * full card width rather than staying indented under it. One size
+ * everywhere — a reply is still the same person saying the same kind of
+ * thing as a top-level note, so it gets no smaller a portrait. */
+export default function AuthorAvatar({ name }: { name: string }) {
   const displayName = comradeName(name);
-  const dims = size === "small" ? "h-4 w-4 text-[9px]" : "h-5 w-5 text-[11px]";
 
   return (
     <Link href={`/@${pseudonymToSlug(name)}`} className="flex flex-none no-underline">
       <span
         style={{ background: avatarColor(displayName) }}
-        className={`flex flex-none items-center justify-center rounded-full font-bold text-white ${dims}`}
+        className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-sm font-bold text-white sm:h-8 sm:w-8"
       >
         {avatarInitial(displayName)}
       </span>

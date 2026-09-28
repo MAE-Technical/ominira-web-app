@@ -51,19 +51,22 @@ export default function ReplyEntry({
     // column — this is a flex item of NoteThreadCard's reply-list column,
     // and without it a long unbroken run inside NoteContent (a URL) sets
     // this reply's own minimum width to that run's full length rather than
-    // letting NoteContent's wrap utilities engage.
-    <div className={`relative flex min-w-0 flex-col gap-1.5 py-2 ${depth === 2 ? "pl-10" : "pl-8"}`}>
-      <span className={`absolute inset-y-0 w-px bg-[var(--reader-border)] ${depth === 2 ? "left-8" : "left-3"}`} aria-hidden="true" />
+    // letting NoteContent's wrap utilities engage. No rail of its own — the
+    // whole list shares one continuous rail, drawn once by NoteThreadCard;
+    // a depth-2 reply (addressing another reply, not the root) just gets a
+    // little extra indent of its own, same "in reply to" convention as a
+    // flat YouTube-style thread rather than a second nested rail.
+    <div className={`flex min-w-0 flex-col gap-1.5 ${depth === 2 ? "pl-4 sm:pl-6" : ""}`}>
       {/* Same avatar-beside-just-the-name-row pairing as NoteThreadCard's
-          own root layout, scaled down — see that component's doc comment. */}
-      <div className="flex min-w-0 items-center gap-2">
-        <AuthorAvatar name={reply.author.pseudonym} size="small" />
+          own root layout — a reply's author gets the same identity
+          treatment as a top-level note's, not a scaled-down one. */}
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <AuthorAvatar name={reply.author.pseudonym} />
         <div className="min-w-0 flex-1">
           <AuthorRow
             name={reply.author.pseudonym}
-            savedAt={Date.parse(reply.updatedAt)}
+            savedAt={Date.parse(reply.createdAt)}
             city={reply.author.city}
-            size="small"
             isPrivate={own && reply.visibility === "private"}
             menu={
               own ? (
@@ -76,7 +79,7 @@ export default function ReplyEntry({
                     onClick={() => ui.toggleMenu(isMenuOpen ? null : reply.id)}
                     className="flex items-center bg-transparent border-none cursor-pointer text-[var(--reader-text-muted)] p-0.5"
                   >
-                    <EllipsisVertical size={14} />
+                    <EllipsisVertical size={15} />
                   </button>
                   {isMenuOpen && (
                     <EntryMenu
@@ -100,12 +103,11 @@ export default function ReplyEntry({
         </div>
       </div>
 
-      {/* pl-6: avatar width (16px, h-4/w-4) + the row's own gap-2 (8px)
-          above — lines this column up under the name text, not the
-          avatar. */}
-      <div className="flex min-w-0 flex-col gap-1.5 pl-6">
+      {/* Full width, not indented under the avatar — only the identity row
+          above sits beside it, same as NoteThreadCard's own root layout. */}
+      <div className="flex min-w-0 flex-col gap-1.5">
         {replyingToName && (
-          <div className="w-fit font-serif italic text-[12px] text-[var(--reader-text-muted)]">
+          <div className="w-fit font-serif italic text-[11px] text-[var(--reader-text-muted)]">
             — in reply to{" "}
             <Link href={`/@${pseudonymToSlug(replyingToName)}`} className="text-[var(--reader-text-muted)] hover:underline">
               {comradeName(replyingToName)}

@@ -9,17 +9,18 @@ import QuoteCard from "./QuoteCard";
 // the same regardless of how wide that particular caller's card happens to
 // render, and a very long fresh selection's own quote (which used to never
 // truncate at all here) gets the same "See more" every other quote does.
-const PREVIEW_CHARS = 240;
+const PREVIEW_CHARS = 500;
 
 /** Cuts `text` to at most `max` characters, backing up to the nearest word
  * boundary rather than slicing mid-word — `isTruncated` is false whenever
  * nothing was actually cut, so callers never show a "See more" that has
  * nothing more to reveal. */
 export function truncateQuote(text: string, max: number): { shown: string; isTruncated: boolean } {
-  if (text.length <= max) return { shown: text, isTruncated: false };
-  const cut = text.slice(0, max);
+  const threshold = Math.max(max, PREVIEW_CHARS);
+  if (text.length <= threshold) return { shown: text, isTruncated: false };
+  const cut = text.slice(0, threshold);
   const lastSpace = cut.lastIndexOf(" ");
-  const shown = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut;
+  const shown = lastSpace > threshold * 0.6 ? cut.slice(0, lastSpace) : cut;
   return { shown: `${shown.trimEnd()}…`, isTruncated: true };
 }
 
@@ -61,7 +62,7 @@ export default function HighlightCard({
           `!expanded`), rather than turning into a "See less" toggle — once
           a reader's asked for the full passage there's no reason to hide
           it again mid-read. */}
-      <p className="m-0 font-serif text-[15px] leading-[1.6] text-[var(--color-app-text)]">
+      <p className="m-0 font-serif text-[15px] leading-[1.8] text-[var(--color-app-text)]">
         {expanded ? text : shown}
         {isTruncated && !expanded && (
           <>

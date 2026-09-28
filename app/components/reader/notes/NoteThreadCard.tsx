@@ -79,25 +79,21 @@ export default function NoteThreadCard({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Substack-style layout: the avatar sits beside just the name/time
-          row (`items-center` here pairs their vertical centers — the row
-          below stretches to the height of the taller multi-line content
-          next to it, so aligning against that whole block instead would
-          leave the avatar pinned to its top edge rather than centered on
-          the name it belongs to). Everything else (header/quote, body,
-          reactions) is indented to start under the name text, not the
-          avatar, in its own block below. Replies further down stay full-
-          width — they already carry their own hierarchy cue (the vertical
-          thread line + indent in ReplyEntry), rather than nesting under
-          this note's own avatar indent too. */}
-      <div className="flex min-w-0 items-center gap-2.5">
+      {/* The avatar sits beside just the name/time row (`items-center` here
+          pairs their vertical centers — the row below stretches to the
+          height of the taller multi-line content next to it, so aligning
+          against that whole block instead would leave the avatar pinned to
+          its top edge rather than centered on the name it belongs to).
+          Everything else (header/quote, body, reactions) runs the full
+          width below, not indented under the avatar. */}
+      <div className="flex min-w-0 items-center gap-1 sm:gap-3">
         <AuthorAvatar name={note.author.pseudonym} />
         <div className="min-w-0 flex-1">
           <AuthorRow
             name={note.author.pseudonym}
-            savedAt={Date.parse(note.updatedAt)}
+            savedAt={Date.parse(note.createdAt)}
             city={note.author.city}
-            topicName={note.topicName}
+            topics={note.topics}
             isPrivate={own && note.visibility === "private"}
             menu={
               own ? (
@@ -137,10 +133,9 @@ export default function NoteThreadCard({
         </div>
       </div>
 
-      {/* pl-[30px]: avatar width (20px, h-5/w-5) + the row's own gap-2.5
-          (10px) above — lines this column up under the name text rather
-          than the avatar. */}
-      <div className="flex min-w-0 flex-col gap-3 pl-[30px]">
+      {/* Full width, not indented under the avatar — only the identity row
+          above sits beside it. */}
+      <div className="flex min-w-0 flex-col gap-3">
         {header}
 
         {/* No onJump here — the home feed's own header above already
@@ -155,7 +150,7 @@ export default function NoteThreadCard({
             URL) sets this column's own automatic minimum width to that
             run's full length, overflowing the panel instead of letting
             NoteContent's own wrap utilities actually engage. */}
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 flex-col">
           {isEditing ? (
             <NoteComposer
               initialText={note.content.kind === "text" ? note.content.text : ""}
@@ -170,7 +165,13 @@ export default function NoteThreadCard({
           ) : (
             <NoteContent content={note.content} />
           )}
-          <div className="flex items-center gap-3.5">
+          {/* No gap on the column above: whatever renders before this row —
+              body text, a link preview, a book attachment, or nothing at
+              all — never carries its own bottom spacing. This row's own
+              mt-3 is the single, unconditional source of the space above
+              it, so that space is always the same 12px no matter what's
+              above. */}
+          <div className="mt-4 flex items-center gap-3.5">
             <ReactionButton count={note.reactionCount} reacted={note.reactedByMe} onToggle={() => actions.toggleReaction(note.id)} />
             {/* One control, not two: existing replies are already shown by
                 default wherever this card appears (useThreadInteraction
@@ -193,23 +194,37 @@ export default function NoteThreadCard({
 
           {/* Mounts right here, under the root note's own action row — not
               in some shared slot down past every reply — so it's obvious
-              this composer targets the root note itself. */}
+              this composer targets the root note itself. Same explicit
+              mt-3 as the reaction row above, for the same reason: this
+              column has no gap, so every bit of vertical spacing in it is
+              an explicit margin on the element that needs it, never
+              implicit from a neighbor. */}
           {isReplyingToRoot && (
-            <NoteComposer
-              initialText=""
-              placeholder={`Reply to ${note.author.pseudonym}…`}
-              startCollapsed={false}
-              showMemberPrompt
-              action="reply"
-              onCancel={() => ui.toggleComposer(note.id)}
-              onSave={(content, visibility) => actions.reply(note.id, content, visibility)}
-            />
+            <div className="mt-3">
+              <NoteComposer
+                initialText=""
+                placeholder={`Reply to ${note.author.pseudonym}…`}
+                startCollapsed={false}
+                showMemberPrompt
+                action="reply"
+                onCancel={() => ui.toggleComposer(note.id)}
+                onSave={(content, visibility) => actions.reply(note.id, content, visibility)}
+              />
+            </div>
           )}
         </div>
       </div>
 
       {expanded && (
-        <div className="flex flex-col">
+        // One continuous rail down the left edge of the whole reply list
+        // (YouTube's own comment-thread convention) rather than a
+        // full-bleed divider or a line redrawn per reply — it's what reads
+        // as "these all belong to the note above", with the list's own
+        // indent (pl-2, sm:pl-4 — deliberately tight, mobile width is
+        // precious) doing the rest. Replies are separated from each other
+        // by plain spacing, no border, same as that convention.
+        <div className="relative flex flex-col gap-3 pl-2 sm:pl-4">
+          <span className="absolute inset-y-0 left-0 w-px bg-[var(--reader-border)]" aria-hidden="true" />
           {visibleReplies.map((reply) => {
             const replyingToName = reply.replyingToId
               ? replies.find((r) => r.id === reply.replyingToId)?.author.pseudonym
@@ -218,26 +233,17 @@ export default function NoteThreadCard({
             const isReplyingToThis = ui.activeComposerFor === reply.id && ui.editingId === null;
             return (
               <div key={reply.id}>
-                {/* A divider before every depth-1 reply (including the
-                    first, separating the whole reply list from the root's
-                    own reaction/reply row above it) — each top-level reply
-                    starts its own sub-thread, so it gets its own divider. A
-                    depth-2 reply (nested under the one right before it)
-                    doesn't: it's part of that same sub-thread, already read
-                    as such via its "replying to" tag and the connecting
-                    thread-line in ReplyEntry, not a new one of its own. Its
-                    own element (not just a border-top on this wrapper) with
-                    py-2 rather than a bottom margin, so there's breathing
-                    room on both sides of the line — above it, off whatever
-                    came before, and below it, off the reply that follows. */}
-                {depth === 1 && <div className="border-t border-[var(--reader-border)] my-2" />}
                 <ReplyEntry reply={reply} replyingToName={replyingToName} depth={depth} ui={ui} actions={actions} />
                 {/* Same "mounts right under its own target" rule as the
                     root composer above — indented to this reply's own
                     depth so it visually hangs off the entry it addresses,
-                    never a fixed slot shared by every other reply. */}
+                    never a fixed slot shared by every other reply. mt-3:
+                    this composer is a plain sibling of ReplyEntry inside a
+                    non-flex wrapper, so it doesn't get the list's own
+                    gap-3 between entries — without its own margin it sits
+                    flush against the reaction/reply row above it. */}
                 {isReplyingToThis && (
-                  <div className={depth === 2 ? "pl-10" : "pl-8"}>
+                  <div className={`mt-3 ${depth === 2 ? "pl-4 sm:pl-6" : "pl-2 sm:pl-4"}`}>
                     <NoteComposer
                       initialText=""
                       placeholder={`Reply to ${reply.author.pseudonym}…`}
@@ -257,7 +263,7 @@ export default function NoteThreadCard({
             <button
               type="button"
               onClick={() => setShowAllReplies(true)}
-              className="flex items-center gap-1.5 py-2 pl-5 text-xs font-semibold text-[var(--reader-text-muted)] hover:text-[var(--reader-text)]"
+              className="flex items-center gap-1.5 pl-3 text-xs font-semibold text-[var(--reader-text-muted)] hover:text-[var(--reader-text)]"
             >
               <ChevronRight size={14} />
               Show {hiddenReplyCount} more {hiddenReplyCount === 1 ? "reply" : "replies"}

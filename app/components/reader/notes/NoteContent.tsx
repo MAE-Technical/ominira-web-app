@@ -2,67 +2,40 @@
 
 import { useState } from "react";
 import type { NoteContent as NoteContentValue } from "@/lib/api/types";
-import { LinkPreview } from "./LinkPreview";
-import { VideoPreview } from "./VideoPreview";
+import LinkPreviewCard from "@/app/components/shared/LinkPreviewCard";
 import VoiceNoteView from "./VoiceNoteView";
 import { truncateQuote } from "./HighlightCard";
+import { LINK_URL_PATTERN, extractLinks, normalizeLinkUrl } from "@/lib/community/links";
 
 // Same idea as HighlightCard's own preview budget — a note's own body is
 // the reader's writing, not a passage from the book, so it gets a somewhat
 // longer allowance before "See more" kicks in.
-const NOTE_PREVIEW_CHARS = 320;
+const NOTE_PREVIEW_CHARS = 1500;
 
-// Matches http(s) URLs and bare "www." ones (the latter get "https://"
-// prepended for the href only — the visible text stays exactly what the
-// reader typed). Deliberately plain-text in, link-rendered out: the
-// composer/edit view always shows the raw string a reader typed, and only
-// display (this component) turns recognizable URLs into anchors — so
-// editing a note never shows mid-edit markup, and a reader who copies a
-// note's text back out gets plain text, not HTML.
-const URL_PATTERN = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+// A raw URL reads as noise once it's long — Twitter/Bluesky's own
+// convention is a short "hostname/truncated-path" label in place of the
+// full string, with the untruncated URL still the actual href.
+const INLINE_LINK_LABEL_MAX_CHARS = 42;
 
-// Trailing punctuation a URL is unlikely to actually end with is more often
-// the reader's own sentence punctuation ("check this out: example.com.")
-// than part of the link — stripped from the link and rendered as plain
-// text right after it instead.
-const TRAILING_PUNCTUATION = /[.,!?;:)\]}'"]+$/;
-
-function linkify(text: string): Array<string | { url: string; label: string }> {
-  return text.split(URL_PATTERN).map((part) => {
-    if (!URL_PATTERN.test(part)) return part;
-    URL_PATTERN.lastIndex = 0; // .test() with a /g regex advances lastIndex — reset for the next part
-    // The href drops trailing sentence punctuation ("example.com." only
-    // ever means the site plus a full stop); the visible label keeps it —
-    // simpler than carving it into its own trailing plain-text segment,
-    // and the anchor covering a stray "." costs nothing.
-    const trailingMatch = part.match(TRAILING_PUNCTUATION);
-    const withoutTrailing = trailingMatch ? part.slice(0, -trailingMatch[0].length) : part;
-    const url = withoutTrailing.toLowerCase().startsWith("www.") ? `https://${withoutTrailing}` : withoutTrailing;
-    return { url, label: part };
-  });
-}
-
-/** First recognizable URL in a note's text, normalized the same way
- * linkify does (bare "www." gets "https://" prepended) — used to decide
- * whether a preview card renders below the text at all. Only the first
- * one: a note that mentions several links still gets just one preview,
- * same "one card, not a gallery" simplicity as the composer's own. */
-function firstUrl(text: string): string | null {
-  const match = text.match(URL_PATTERN);
-  if (!match) return null;
-  const value = match[0].replace(TRAILING_PUNCTUATION, "");
-  return value.toLowerCase().startsWith("www.") ? `https://${value}` : value;
-}
-
-function youtubeId(url: string): string | null {
+function truncatedLinkLabel(url: string): string {
+  let label: string;
   try {
     const parsed = new URL(url);
-    if (parsed.hostname === "youtu.be") return parsed.pathname.slice(1) || null;
-    if (parsed.hostname.endsWith("youtube.com")) return parsed.searchParams.get("v") ?? parsed.pathname.split("/").pop() ?? null;
+    const path = parsed.pathname + parsed.search + parsed.hash;
+    label = parsed.hostname.replace(/^www\./, "") + (path === "/" ? "" : path);
   } catch {
-    return null;
+    label = url;
   }
-  return null;
+  return label.length <= INLINE_LINK_LABEL_MAX_CHARS ? label : `${label.slice(0, INLINE_LINK_LABEL_MAX_CHARS - 1)}…`;
+}
+
+function linkify(text: string): Array<string | { url: string; label: string }> {
+  return text.split(LINK_URL_PATTERN).map((part) => {
+    if (!LINK_URL_PATTERN.test(part)) return part;
+    LINK_URL_PATTERN.lastIndex = 0; // .test() with a /g regex advances lastIndex — reset for the next part
+    const url = normalizeLinkUrl(part);
+    return { url, label: truncatedLinkLabel(url) };
+  });
 }
 
 /** One note/reply's actual content — text or voice — with no author,
@@ -78,49 +51,67 @@ export default function NoteContent({
   if (content.kind === "voice") {
     return <VoiceNoteView audioUrl={content.audioUrl} durationMs={content.durationMs} />;
   }
-  const url = firstUrl(content.text);
+  const linkUrls = extractLinks(content.text);
   const { shown, isTruncated } = truncateQuote(content.text, NOTE_PREVIEW_CHARS);
   const displayedText = expanded ? content.text : shown;
   return (
-    <div className="flex min-w-0 flex-col gap-2.5">
+    // gap-2 spaces the text from its own link previews, internal to this
+    // block only. The block as a whole carries no bottom margin of its own
+    // — NoteThreadCard's reaction row owns all spacing beneath whatever
+    // renders here, text/link previews alike.
+    <div className="flex min-w-0 flex-col gap-2">
       {/* "See more" sits right after the truncated run, inline in the same
           paragraph — see HighlightCard's identical treatment for why. It's
           one-way: clicking it reveals the rest and the trigger itself
           disappears (only renders while `!expanded`), no "See less" toggle
           back. */}
-      <p className="m-0 min-w-0 whitespace-pre-wrap break-words font-serif text-[15px] leading-[1.6] text-[var(--reader-text)]">
-        {linkify(displayedText).map((part, i) =>
-          typeof part === "string" ? (
-            <span key={i}>{part}</span>
-          ) : (
-            <a
-              key={i}
-              href={part.url}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-              onClick={(e) => e.stopPropagation()}
-              className="text-[var(--reader-accent)] underline decoration-1 underline-offset-2 break-all"
-            >
-              {part.label}
-            </a>
-          )
-        )}
-        {isTruncated && !expanded && (
-          <>
-            {" "}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpanded(true);
-              }}
-              className="cursor-pointer border-none bg-transparent p-0 font-sans text-[12px] font-medium text-[var(--color-app-text-secondary)] hover:text-[var(--color-app-text)]"
-            >
-              See more
-            </button>
-          </>
-        )}
-      </p>
-      {(!isTruncated || expanded) && url ? youtubeId(url) ? <VideoPreview /> : <LinkPreview data={{ url }} /> : null}
+      {/* Attachment-only notes (a book/link dropped with no written body)
+          carry an empty `content.text` — skipping the paragraph entirely
+          here, rather than rendering it empty, avoids a blank line's worth
+          of leading pushing the reaction row down further than a note that
+          actually has visible content above it. */}
+      {content.text.trim() !== "" && (
+        <p className="m-0 min-w-0 whitespace-pre-wrap break-words font-serif text-[15px] leading-[1.8] text-[var(--reader-text)]">
+          {linkify(displayedText).map((part, i) =>
+            typeof part === "string" ? (
+              <span key={i}>{part}</span>
+            ) : (
+              <a
+                key={i}
+                href={part.url}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                onClick={(e) => e.stopPropagation()}
+                title={part.url}
+                className="text-[var(--color-app-text-secondary)] underline decoration-1 underline-offset-2 decoration-[var(--color-app-border)] hover:text-[var(--reader-accent)]"
+              >
+                {part.label}
+              </a>
+            )
+          )}
+          {isTruncated && !expanded && (
+            <>
+              {" "}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded(true);
+                }}
+                className="cursor-pointer border-none bg-transparent p-0 font-sans text-[12px] font-medium text-[var(--color-app-text-secondary)] hover:text-[var(--color-app-text)]"
+              >
+                See more
+              </button>
+            </>
+          )}
+        </p>
+      )}
+      {(!isTruncated || expanded) && linkUrls.length > 0 && (
+        <div className="flex flex-col">
+          {linkUrls.map((linkUrl) => (
+            <LinkPreviewCard key={linkUrl} url={linkUrl} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

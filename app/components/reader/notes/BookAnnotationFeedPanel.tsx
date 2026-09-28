@@ -235,6 +235,7 @@ export default function BookAnnotationFeedPanel({
             startCollapsed
             showMemberPrompt
             action="note"
+            draftKey={`book-${materialId}`}
             onSave={(content, visibility) => {
               setGeneralComposerError(null);
               createNote.mutate(

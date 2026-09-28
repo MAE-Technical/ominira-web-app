@@ -28,14 +28,25 @@ export default function NoteCard({
   excerpt,
   bookContext,
 }: {
-  materialId: string;
+  /** Null for a book-less discussion post — every mutation this card can
+   * trigger (reply/edit/delete/react) already tolerates that (lib/community/
+   * useNoteMutations.ts), skipping just the per-material cache sync a
+   * book-anchored note also gets. */
+  materialId: string | null;
   note: Note;
   replies: Note[];
-  excerpt?: string;
+  excerpt?: string | null;
   /** Book metadata (+ the excerpt stacked beneath it, via NoteBookContext)
    * — home feed and profile page only. Omitted for the book-details tab,
    * which is already scoped to this one book. */
-  bookContext?: { href: string; title: string; section?: string; coverUrl?: string | null };
+  bookContext?: {
+    href: string;
+    title: string;
+    author?: string | null;
+    section?: string;
+    coverUrl?: string | null;
+    materialType?: string;
+  };
 }) {
   const { ui, actions, expandedIds, toggleExpanded } = useThreadInteraction({
     materialId,
@@ -47,7 +58,7 @@ export default function NoteCard({
   return (
     <div className="border-b border-[var(--reader-border)] py-4">
       <NoteThreadCard
-        {...(bookContext ? { header: <NoteBookContext {...bookContext} excerpt={excerpt} /> } : { quote: excerpt })}
+        {...(bookContext ? { header: <NoteBookContext {...bookContext} excerpt={excerpt} /> } : { quote: excerpt ?? undefined })}
         note={note}
         replies={replies}
         expanded={expanded}
