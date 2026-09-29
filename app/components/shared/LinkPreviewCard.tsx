@@ -8,6 +8,7 @@ import "react-lite-youtube-embed/dist/LiteYouTubeEmbed.css";
 import { useLinkPreview } from "@/lib/community/useLinkPreview";
 import { youtubeVideoId } from "@/lib/community/links";
 import { useUploadFromUrl } from "@/lib/materials/useUploadFromUrl";
+import { ApiError } from "@/lib/api/client";
 
 function hostname(url: string) {
   try {
@@ -39,7 +40,8 @@ function hostname(url: string) {
  * reader's) is a cheap lookup, not a re-fetch/re-extract — "ingested once,
  * doesn't need to again" holds regardless of who clicks or how many times.
  * If extraction fails (not an article — a login page, an app shell, etc.),
- * it falls back to opening the raw URL externally, same as today. The hover
+ * the card shows why and becomes a plain external link to the original
+ * (see openInReader for why that isn't an automatic window.open). The hover
  * arrow (BookPreview's own affordance) is what signals "this opens in the
  * reader," not just another external link. */
 export default function LinkPreviewCard({ url, dismissible, onDismiss }: { url: string; dismissible?: boolean; onDismiss?: () => void }) {
@@ -47,6 +49,7 @@ export default function LinkPreviewCard({ url, dismissible, onDismiss }: { url: 
   const { data, isLoading } = useLinkPreview(url);
   const { upload: uploadFromUrl } = useUploadFromUrl();
   const [ingesting, setIngesting] = useState(false);
+  const [ingestError, setIngestError] = useState<string | null>(null);
   const isVideo = data?.kind === "video";
   const videoId = isVideo ? youtubeVideoId(url) : null;
 
@@ -56,11 +59,14 @@ export default function LinkPreviewCard({ url, dismissible, onDismiss }: { url: 
     try {
       const result = await uploadFromUrl(url, { visibility: "public" });
       router.push(`/read/${result.slug}`);
-    } catch {
+    } catch (err) {
       // Not a readable article (login page, app shell, paywall, …), or the
-      // request itself failed — fall back to the plain external open a
-      // link preview always used to do, rather than dead-ending the click.
-      window.open(url, "_blank", "noopener,noreferrer");
+      // request itself failed. No `window.open` here: by now we're past an
+      // await, and Safari (and every iOS PWA) only lets a tap open a window
+      // synchronously — it silently blocked this, dead-ending the click.
+      // Instead the card turns into a real external link (below), which a
+      // second tap opens natively everywhere, with the reason shown.
+      setIngestError(err instanceof ApiError ? err.message : "Couldn't open this in the reader.");
     } finally {
       // Always clear the guard, even on success: closing the reader overlay
       // is a router.back() to this same soft-navigated page, which can leave
@@ -108,6 +114,17 @@ export default function LinkPreviewCard({ url, dismissible, onDismiss }: { url: 
       {videoId ? (
         <a href={url} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => e.stopPropagation()} className="min-w-0 no-underline">
           {metaStrip}
+        </a>
+      ) : ingestError ? (
+        <a href={url} target="_blank" rel="noopener noreferrer nofollow" onClick={(e) => e.stopPropagation()} className="min-w-0 no-underline">
+          {metaStrip}
+          <div className="flex items-center justify-between gap-2 border-t border-[var(--color-app-border)] px-3 py-2 text-[11px]">
+            <span className="min-w-0 text-[var(--color-app-text-secondary)]">{ingestError}</span>
+            <span className="flex flex-none items-center gap-0.5 font-semibold text-brand-500">
+              Open original
+              <ArrowUpRight aria-hidden="true" size={13} />
+            </span>
+          </div>
         </a>
       ) : (
         <div
