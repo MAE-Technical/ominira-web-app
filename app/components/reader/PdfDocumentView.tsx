@@ -19,7 +19,8 @@ import { TilingLayer, TilingPluginPackage } from "@embedpdf/plugin-tiling/react"
 import { useViewportElement, Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react";
 import { ZoomGestureWrapper, ZoomMode, ZoomPluginPackage, useZoom } from "@embedpdf/plugin-zoom/react";
 import { usePdfEngine } from "@/lib/pdf/pdfiumEngine";
-import { PdfFetchError, usePdfBytes } from "@/lib/pdf/usePdfBytes";
+import { formatDownloadProgress, PdfFetchError, type PdfDownload } from "@/lib/pdf/usePdfBytes";
+import Loader from "@/app/components/Loader";
 import { useReaderStore, type PdfLayout } from "@/stores/reader-store";
 import type { Locator } from "@/lib/reader/locator";
 import { useDocumentProgress } from "@/lib/reader/useDocumentProgress";
@@ -77,9 +78,10 @@ function jumpBehavior() {
 
 /**
  * PDF body renderer — see document-readers-spec.md § 1/§ 3. Whole-document
- * only: page navigation is the only "structure" here, no TOC. Fetches straight
- * from `sourceUrl` (a public Storage URL) — no server round trip beyond the
- * material row already loaded by `loadReaderMaterial`.
+ * only: page navigation is the only "structure" here, no TOC. The document comes
+ * straight from `sourceUrl` (a public Storage URL), downloaded by
+ * PdfDocumentLoader — no server round trip beyond the material row already
+ * loaded by `loadReaderMaterial`.
  *
  * Rendered by EmbedPDF on PDFium (Chrome's own PDF engine, compiled to
  * WebAssembly and run in a worker) rather than pdf.js. Pages arrive as images
@@ -102,13 +104,7 @@ function jumpBehavior() {
  * Zoom and intra-page scroll are deliberately not part of the position: a page
  * is what this viewer can restore exactly.
  */
-export default function PdfDocumentView({
-  materialId,
-  title,
-  sourceUrl,
-  urlLocator,
-  onClose,
-}: {
+export type PdfDocumentViewProps = {
   materialId: string;
   title: string;
   sourceUrl: string;
@@ -117,6 +113,23 @@ export default function PdfDocumentView({
    * position. */
   urlLocator?: Locator;
   onClose?: () => void;
+};
+
+export default function PdfDocumentView({
+  materialId,
+  title,
+  urlLocator,
+  onClose,
+  download,
+  generation,
+  onRetry,
+}: PdfDocumentViewProps & {
+  /** The document's bytes, fetched by PdfDocumentLoader so the download starts
+   * before this module's own code has arrived. */
+  download: PdfDownload;
+  /** Bumped on every Retry — see PdfDocumentLoader. */
+  generation: number;
+  onRetry: () => void;
 }) {
   const theme = useReaderStore((s) => s.theme);
   // These preferences skip automatic persist hydration so the server and the
@@ -126,18 +139,17 @@ export default function PdfDocumentView({
     useReaderStore.persist.rehydrate();
   }, []);
 
-  // Bumped by Retry: refetches the document and, if the engine was what failed,
-  // starts a fresh one.
-  const [generation, setGeneration] = useState(0);
   const { engine, error: engineError, discard: discardEngine } = usePdfEngine(generation);
-  const { buffer, error: fetchError } = usePdfBytes(sourceUrl, generation);
+  const { buffer, error: fetchError, progress } = download;
 
+  // Retry refetches the document and, if the engine was what failed, starts a
+  // fresh one rather than handing back the same failure.
   const retry = useCallback(
     (engineFailed: boolean) => {
       if (engineFailed) discardEngine();
-      setGeneration((n) => n + 1);
+      onRetry();
     },
-    [discardEngine]
+    [discardEngine, onRetry]
   );
 
   let body: ReactNode;
@@ -173,7 +185,9 @@ export default function PdfDocumentView({
       />
     );
   } else {
-    body = <LoadingSheet />;
+    // Once the bytes are in, what's left (the engine finishing its start-up,
+    // PDFium opening the file) is short and unmeasurable, so no caption.
+    body = <Loader confined label={!buffer && progress ? `Downloading · ${formatDownloadProgress(progress)}` : undefined} />;
   }
 
   return (
@@ -248,7 +262,7 @@ function PdfReader({
     <EmbedPDF engine={engine} plugins={plugins}>
       {({ pluginsReady, documents }) => {
         const doc = documents[DOCUMENT_ID];
-        if (!pluginsReady || !doc || doc.status === "loading") return <LoadingSheet />;
+        if (!pluginsReady || !doc || doc.status === "loading") return <Loader confined />;
         if (doc.status === "error") {
           const code = doc.errorCode;
           if (code === PdfErrorCode.Password) {
@@ -279,10 +293,19 @@ function PdfReader({
 }
 
 /** One page: the low-resolution base image, the full-resolution tiles over the
- * visible part of it, and the text-selection layer on top. */
+ * visible part of it, and the text-selection layer on top.
+ *
+ * `select-none no-callout`: a page is images, not text, as far as the browser
+ * can tell, so iOS's own long-press selection grabbed the whole page as one
+ * block (and offered to save the image). Text selection here is EmbedPDF's,
+ * which isn't the browser's and is unaffected. */
 function renderPdfPage({ pageIndex }: PageLayout) {
   return (
-    <PagePointerProvider documentId={DOCUMENT_ID} pageIndex={pageIndex} className="bg-white shadow-sm">
+    <PagePointerProvider
+      documentId={DOCUMENT_ID}
+      pageIndex={pageIndex}
+      className="bg-white shadow-sm select-none no-callout"
+    >
       <RenderLayer documentId={DOCUMENT_ID} pageIndex={pageIndex} scale={BASE_LAYER_SCALE} className="pointer-events-none block" />
       <TilingLayer documentId={DOCUMENT_ID} pageIndex={pageIndex} className="pointer-events-none" />
       <SelectionLayer documentId={DOCUMENT_ID} pageIndex={pageIndex} textStyle={{ background: "var(--reader-highlight)" }} />
@@ -420,6 +443,9 @@ function PdfReaderBody({
   // than run on every change of `layout`, which also covers the stored
   // preference arriving after the viewer opened.
   const fittedLayoutRef = useRef(initialFitLayout);
+  // The layout whose zoom and position have fully landed — trails `layout`
+  // through a switch. Page snapping waits on it (see `snapping` below).
+  const [settledLayout, setSettledLayout] = useState(initialFitLayout);
   const pageRef = useRef(pageNumber);
   useEffect(() => {
     pageRef.current = pageNumber;
@@ -429,10 +455,28 @@ function PdfReaderBody({
     fittedLayoutRef.current = layout;
     const page = pageRef.current;
     zoom.requestZoom(fitZoomFor(layout));
-    // After the zoom's own re-layout has landed.
-    const frame = requestAnimationFrame(() => scrollToPage(page, "instant"));
+    // Re-place the reader only once the zoom's re-layout has actually reached
+    // the page — until then the scroll height is the old one and a jump lands a
+    // few pages off. "Reached" = the scroll height has held still for a couple of
+    // frames (capped, so a layout that never settles can't hold this forever).
+    let frame = 0;
+    let lastHeight = -1;
+    let stableFrames = 0;
+    let frames = 0;
+    const settle = () => {
+      const height = scrollEl?.scrollHeight ?? 0;
+      stableFrames = height === lastHeight ? stableFrames + 1 : 0;
+      lastHeight = height;
+      if (stableFrames < 2 && ++frames < 30) {
+        frame = requestAnimationFrame(settle);
+        return;
+      }
+      scrollToPage(page, "instant");
+      setSettledLayout(layout);
+    };
+    frame = requestAnimationFrame(settle);
     return () => cancelAnimationFrame(frame);
-  }, [layout, layoutReady, zoom, scrollToPage]);
+  }, [layout, layoutReady, zoom, scrollToPage, scrollEl]);
 
   // The page number is the tracked signal in both layouts, reported by the
   // scroll plugin as the reader moves. Still the debounced `commit` rather than
@@ -502,8 +546,10 @@ function PdfReaderBody({
   // past it, a page no longer fits a screen and the reader needs to pan around
   // it freely — and a mandatory snap live while a zoom resizes every page
   // re-snaps mid-resize to whatever is nearest, which flung the reader to the
-  // end of the document. Resetting the zoom brings the snapping back.
-  const snapping = isPaged && !zoomInfo.isCustom;
+  // end of the document. Resetting the zoom brings the snapping back. For the
+  // same reason it waits out a switch into paged (settledLayout): turned on in
+  // the same frame as the switch's own zoom change, it snapped mid-resize.
+  const snapping = isPaged && settledLayout === "paged" && !zoomInfo.isCustom;
 
   return (
     <>
@@ -556,19 +602,6 @@ function PdfReaderBody({
         />
       )}
     </>
-  );
-}
-
-/** A blank sheet, not a spinner — the same thing an unpainted page is, so opening
- * a document and paging through it speak one visual language. */
-function LoadingSheet() {
-  return (
-    <div className="flex h-full justify-center px-4 py-6">
-      <div
-        className="h-[80vh] w-full max-w-[min(90vw,800px)] animate-pulse rounded-sm bg-[var(--reader-surface)] shadow-sm ring-1 ring-[var(--reader-border)]"
-        aria-label="Loading document"
-      />
-    </div>
   );
 }
 

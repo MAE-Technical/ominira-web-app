@@ -1,6 +1,7 @@
 // App-wide loading indicator — no hooks of its own, safe to render from a
 // Server Component (a route's loading.tsx) or a client one (Reader.tsx's
-// hydration gate) alike. Just the spinner, no label.
+// hydration gate) alike. Just the spinner, plus an optional one-line caption
+// for a wait long enough to be worth narrating (a PDF's download progress).
 //
 // Fixed to the true viewport by default (not confined to whatever
 // container it happens to render inside) and translucent rather than a
@@ -37,10 +38,10 @@
 // not just its own subtree, specifically so these tokens resolve correctly
 // here even on a Server Component route's loading.tsx, outside Reader's own
 // themed div.
-export default function Loader({ confined = false }: { confined?: boolean }) {
+export default function Loader({ confined = false, label }: { confined?: boolean; label?: string }) {
   return (
     <div
-      className={`${confined ? "absolute" : "fixed z-40"} inset-0 flex items-center justify-center select-none no-callout`}
+      className={`${confined ? "absolute" : "fixed z-40"} inset-0 flex flex-col items-center justify-center gap-4 select-none no-callout`}
       style={{ background: "color-mix(in srgb, var(--reader-bg) 90%, transparent)" }}
     >
       <div
@@ -51,6 +52,11 @@ export default function Loader({ confined = false }: { confined?: boolean }) {
           borderTopColor: "var(--color-brand-500)",
         }}
       />
+      {label && (
+        <p role="status" className="text-[13px] font-medium tabular-nums text-[var(--reader-text-muted)]">
+          {label}
+        </p>
+      )}
     </div>
   );
 }

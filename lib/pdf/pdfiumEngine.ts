@@ -141,6 +141,18 @@ function acquirePdfEngine() {
 }
 
 /**
+ * Starts the engine without holding on to it — the engine code, its worker and
+ * the ~2MB (compressed) WebAssembly download all begin now, in parallel with
+ * everything else a PDF open waits on, instead of in sequence after the viewer's
+ * own code has arrived (which put the WASM last on the critical path: ~6s of a
+ * ~17s cold open). The viewer then acquires the same, already-starting engine; if
+ * it never does, the idle teardown reclaims it.
+ */
+export function preloadPdfEngine() {
+  acquirePdfEngine().release();
+}
+
+/**
  * The shared engine for as long as the calling component is mounted. Bumping
  * `generation` re-acquires — after `discard`, that means a fresh engine, which is
  * what a reader's Retry needs after the engine itself failed.
