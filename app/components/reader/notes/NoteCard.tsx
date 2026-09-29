@@ -58,7 +58,11 @@ export default function NoteCard({
   return (
     <div className="border-b border-[var(--reader-border)] py-4">
       <NoteThreadCard
-        {...(bookContext ? { header: <NoteBookContext {...bookContext} excerpt={excerpt} /> } : { quote: excerpt ?? undefined })}
+        {...(!bookContext
+          ? { quote: excerpt ?? undefined }
+          : excerpt
+            ? { header: <NoteBookContext {...bookContext} excerpt={excerpt} /> }
+            : { attachment: <NoteBookContext {...bookContext} /> })}
         note={note}
         replies={replies}
         expanded={expanded}

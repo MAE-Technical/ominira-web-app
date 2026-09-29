@@ -71,7 +71,7 @@ export default function BookPreview({
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-[12px] font-semibold text-[var(--color-app-text)]">{title}</span>
+        <span className="break-words text-[12px] font-semibold text-[var(--color-app-text)]">{title}</span>
         {author && <span className="truncate text-[11px] text-[var(--color-app-text-secondary)]">{author}</span>}
         {section && <span className="truncate text-[12px] font-medium text-[var(--color-app-text-secondary)]">{section}</span>}
         {formatLabel && (

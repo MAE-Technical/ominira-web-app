@@ -28,17 +28,21 @@ export function setThemeColor(color: string) {
   meta.content = color;
 }
 
-// Plain ES5, no imports at runtime — it's serialized into the HTML. The
-// dark-variant list mirrors reader-store's v2 migration so a never-migrated
-// v1 blob ("carbon", "winter", …) still boots dark.
+// Plain ES5, no imports at runtime — it's serialized into the HTML. Theme
+// resolution mirrors reader-store (its v2/v5 migrations and merge): a saved
+// dark (incl. never-migrated v1 names like "carbon") is always a choice; a
+// saved light only counts once flagged themeExplicit (older blobs may hold
+// the old default); otherwise the device's scheme, light if it has none.
 //
 // The splash is the installed mobile app's Home launch only: a detail URL
 // opened from the app is regular navigation, and a browser tab never gets
 // one. Once per session, so a reload mid-session doesn't replay it.
 export const BOOT_SCRIPT = `(function(){
-var d=document.documentElement,t="light",s=false;
-try{var p=JSON.parse(localStorage.getItem(${JSON.stringify(READER_PREFS_STORAGE_KEY)})||"null");
-if(p&&p.state&&/^(dark|carbon|black|winter|forest)$/.test(p.state.theme))t="dark"}catch(e){}
+var d=document.documentElement,t="",s=false;
+try{var p=JSON.parse(localStorage.getItem(${JSON.stringify(READER_PREFS_STORAGE_KEY)})||"null"),st=p&&p.state;
+if(st&&/^(dark|carbon|black|winter|forest)$/.test(st.theme))t="dark";
+else if(st&&st.themeExplicit&&st.theme==="light")t="light"}catch(e){}
+if(!t)try{t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}catch(e){t="light"}
 d.setAttribute("data-reader-theme",t);
 try{if((matchMedia("(display-mode: standalone)").matches||navigator.standalone===true)
 &&matchMedia("(max-width: 767px)").matches&&location.pathname==="/home"

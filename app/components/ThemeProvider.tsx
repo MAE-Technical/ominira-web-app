@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
-import { useReaderStore } from "@/stores/reader-store";
+import { systemTheme, useReaderStore } from "@/stores/reader-store";
 import { APP_BG, setThemeColor } from "@/lib/pwa/boot";
 
 // Mounted once at the root layout. The theme itself is put on <html> by
 // lib/pwa/boot.ts's inline <head> script before the first paint, straight
 // from the persisted reader prefs — every --reader-* token (and html/body's
 // own background, globals.css) cascades from there. This component only
-// keeps <html> in step when the reader toggles the theme afterwards.
+// keeps <html> in step when the theme changes afterwards: the reader
+// toggling it, or — until they've picked one — the device switching scheme.
 //
 // It deliberately does NOT wrap children in its own data-reader-theme div
 // or write the store's pre-rehydration value anywhere: before rehydrate()
@@ -24,7 +25,16 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
       if (!root.hasAttribute("data-splash")) setThemeColor(APP_BG[state.theme]);
     });
     useReaderStore.persist.rehydrate();
-    return unsubscribe;
+
+    // Readers who haven't picked a theme follow the device live (e.g. an OS
+    // that goes dark at sunset); syncSystemTheme ignores it once they have.
+    const scheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSchemeChange = () => useReaderStore.getState().syncSystemTheme(systemTheme());
+    scheme.addEventListener("change", onSchemeChange);
+    return () => {
+      unsubscribe();
+      scheme.removeEventListener("change", onSchemeChange);
+    };
   }, []);
 
   return children;

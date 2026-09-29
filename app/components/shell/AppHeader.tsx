@@ -3,7 +3,9 @@
 import { Search } from "lucide-react";
 import NotificationsMenu from "./NotificationsMenu";
 import ProfileMenu from "./ProfileMenu";
+import HeaderThemeToggle from "./HeaderThemeToggle";
 import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
+import { useSessionStore } from "@/stores/session-store";
 
 type Props = {
   /** Omitted by pages with nothing to search yet (the stub pages) — the
@@ -29,6 +31,9 @@ type Props = {
  * not a regression to "fix" back into one component again. */
 export default function AppHeader({ searchValue, onSearchChange, onSearchFocus }: Props) {
   const isAuthenticated = useIsAuthenticated();
+  // Until the session has rehydrated we can't tell signed-in from signed-out,
+  // so neither the bell nor the theme toggle shows (no toggle → bell swap).
+  const sessionKnown = useSessionStore((s) => s.hasHydrated);
 
   return (
     <header className="mb-5 bg-[var(--reader-bg)] py-3">
@@ -60,7 +65,9 @@ export default function AppHeader({ searchValue, onSearchChange, onSearchFocus }
             to pair, far enough that the unread badge never overlaps the
             avatar beside it. */}
         <div className="ml-auto flex flex-none items-center gap-5">
-          {isAuthenticated && <NotificationsMenu />}
+          {/* Signed-out readers have no bell and no theme switch in their
+              account menu, so the theme toggle takes the bell's slot. */}
+          {isAuthenticated ? <NotificationsMenu /> : sessionKnown && <HeaderThemeToggle />}
           <ProfileMenu />
         </div>
       </div>

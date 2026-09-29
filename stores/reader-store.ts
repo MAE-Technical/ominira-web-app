@@ -123,18 +123,33 @@ export const READER_PREF_DEFAULTS = {
   pdfLayout: "paged" as PdfLayout,
 };
 
+/**
+ * The device's colour scheme — the theme for any reader who hasn't picked
+ * one. Light when the device states no preference (or outside a browser).
+ */
+export function systemTheme(): Theme {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 type ReaderState = {
   // Durable, cross-book preferences — persisted.
   fontSizeScale: number;
   fontFamily: FontFamily;
   theme: Theme;
+  /** True once the reader has picked a theme themselves. Until then `theme`
+   * follows the device (systemTheme) and isn't persisted — otherwise saving
+   * any other preference would freeze the default in place. */
+  themeExplicit: boolean;
   lineSpacingScale: number;
   contentWidthScale: number;
   pdfLayout: PdfLayout;
 
   setFontSizeScale: (n: number) => void;
   setFontFamily: (f: FontFamily) => void;
+  /** The reader's own choice — persisted, and stops following the device. */
   setTheme: (t: Theme) => void;
+  /** The device's scheme changed — applied only while the reader hasn't chosen. */
+  syncSystemTheme: (t: Theme) => void;
   setLineSpacingScale: (n: number) => void;
   setContentWidthScale: (n: number) => void;
   setPdfLayout: (layout: PdfLayout) => void;
@@ -145,10 +160,12 @@ export const useReaderStore = create<ReaderState>()(
   persist(
     (set) => ({
       ...READER_PREF_DEFAULTS,
+      themeExplicit: false,
 
       setFontSizeScale: (n) => set({ fontSizeScale: clampScale(n) }),
       setFontFamily: (fontFamily) => set({ fontFamily }),
-      setTheme: (theme) => set({ theme }),
+      setTheme: (theme) => set({ theme, themeExplicit: true }),
+      syncSystemTheme: (theme) => set((s) => (s.themeExplicit ? {} : { theme })),
       setLineSpacingScale: (n) => set({ lineSpacingScale: clampScale(n) }),
       setContentWidthScale: (n) => set({ contentWidthScale: clampScale(n) }),
       setPdfLayout: (pdfLayout) => set({ pdfLayout }),
@@ -156,7 +173,7 @@ export const useReaderStore = create<ReaderState>()(
     }),
     {
       name: "ominira-reader-prefs",
-      version: 4,
+      version: 5,
       // v0: flat light/sepia/dark. v1: briefly an 8-variant light/dark
       // system (white/sepia/paper/dawn, carbon/black/winter/forest). v2:
       // scaled back to just light/dark — collapse anything from either
@@ -174,6 +191,7 @@ export const useReaderStore = create<ReaderState>()(
       migrate: (persisted, version) => {
         const state = persisted as {
           theme?: string;
+          themeExplicit?: boolean;
           fontSize?: number;
           lineSpacing?: string;
           margins?: string;
@@ -198,6 +216,15 @@ export const useReaderStore = create<ReaderState>()(
           state.lineSpacingScale = READER_PREF_DEFAULTS.lineSpacingScale;
           state.contentWidthScale = READER_PREF_DEFAULTS.contentWidthScale;
         }
+        // v5: the theme follows the device until the reader picks one. A
+        // persisted "dark" was necessarily a choice (it was never the
+        // default); a persisted "light" may just be the old default saved
+        // alongside some other preference, so it's dropped and the device
+        // decides.
+        if (version < 5) {
+          state.themeExplicit = state.theme === "dark";
+          if (!state.themeExplicit) delete state.theme;
+        }
         // Cast: `state` is typed narrowly above just for the fields this
         // migration touches, but at runtime it carries every persisted
         // field (untouched ones like fontFamily pass through via the same
@@ -209,10 +236,19 @@ export const useReaderStore = create<ReaderState>()(
           fontSizeScale: number;
           fontFamily: FontFamily;
           theme: Theme;
+          themeExplicit: boolean;
           lineSpacingScale: number;
           contentWidthScale: number;
           pdfLayout: PdfLayout;
         };
+      },
+      // No persisted choice → the device's scheme, resolved at rehydrate so
+      // every consumer gets the right theme from its first post-hydration
+      // render (matches what lib/pwa/boot.ts put on <html> before paint).
+      merge: (persisted, current) => {
+        const merged = { ...current, ...(persisted as Partial<ReaderState>) };
+        if (!merged.themeExplicit) merged.theme = systemTheme();
+        return merged;
       },
       // Same SSR-hydration-mismatch reasoning as highlights-store: theme
       // (rendered straight onto data-reader-theme on first paint) can't be
@@ -224,7 +260,7 @@ export const useReaderStore = create<ReaderState>()(
       partialize: (s) => ({
         fontSizeScale: s.fontSizeScale,
         fontFamily: s.fontFamily,
-        theme: s.theme,
+        ...(s.themeExplicit ? { theme: s.theme, themeExplicit: true } : {}),
         lineSpacingScale: s.lineSpacingScale,
         contentWidthScale: s.contentWidthScale,
         pdfLayout: s.pdfLayout,

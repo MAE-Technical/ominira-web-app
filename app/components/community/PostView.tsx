@@ -24,27 +24,27 @@ function PostThread({ item, focusId }: { item: FeedItem; focusId: string | null 
     allNotes: [item.note, ...item.replies],
   });
 
+  const bookContext = item.material ? (
+    <NoteBookContext
+      href={communityFeedItemHref(item) ?? ""}
+      title={item.material.title}
+      author={item.material.author}
+      section={item.label ?? undefined}
+      coverUrl={resolveBookThumbnailSrc(item.material)}
+      materialType={item.material.materialType}
+      excerpt={item.excerpt}
+    />
+  ) : null;
+
   return (
     <NoteThreadCard
       // NoteBookContext is both the quote card and the way out: it fuses
       // the highlighted passage with its book strip under one deep link
       // into the reader at that exact passage. So this page never opens the
       // reader itself — it shows the note, and the quote is the door.
-      {...(item.material
-        ? {
-            header: (
-              <NoteBookContext
-                href={communityFeedItemHref(item) ?? ""}
-                title={item.material.title}
-                author={item.material.author}
-                section={item.label ?? undefined}
-                coverUrl={resolveBookThumbnailSrc(item.material)}
-                materialType={item.material.materialType}
-                excerpt={item.excerpt}
-              />
-            ),
-          }
-        : {})}
+      // A highlighted passage leads (the note responds to it); a plain
+      // document card follows the note's body instead.
+      {...(bookContext ? (item.excerpt ? { header: bookContext } : { attachment: bookContext }) : {})}
       note={item.note}
       replies={item.replies}
       // Always open: a feed card earns its collapsed state by sitting among

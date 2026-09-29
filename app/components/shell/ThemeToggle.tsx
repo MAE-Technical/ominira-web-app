@@ -5,8 +5,9 @@ import Switch from "./Switch";
 
 /**
  * Dark-mode switch — used by AccountView's Theme row (both auth states) so
- * the control can't drift between the two. The header's own theme switch
- * lives inside ProfileMenu's dropdown. Shares Switch with NotificationsRow
+ * the control can't drift between the two. In the header, signed-in readers
+ * switch theme from ProfileMenu's dropdown and signed-out readers from
+ * HeaderThemeToggle. Shares Switch with NotificationsRow
  * for a consistent on/off look across every account setting.
  */
 export default function ThemeToggle() {

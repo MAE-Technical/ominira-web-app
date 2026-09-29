@@ -92,7 +92,7 @@ export default function LinkPreviewCard({ url, dismissible, onDismiss }: { url: 
         <span className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-app-text-muted)]">
           {data?.siteName ?? hostname(url)}
         </span>
-        <span className="truncate text-[12px] font-semibold text-[var(--color-app-text)]">
+        <span className="break-words text-[12px] font-semibold text-[var(--color-app-text)]">
           {isLoading ? "Loading preview…" : (data?.title ?? url)}
         </span>
         {data?.description && (

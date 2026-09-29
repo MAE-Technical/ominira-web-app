@@ -39,6 +39,7 @@ const COLLAPSED_REPLY_COUNT = 5;
  * entry implicitly closes whichever one was open. */
 export default function NoteThreadCard({
   header,
+  attachment,
   quote,
   note,
   replies,
@@ -55,6 +56,12 @@ export default function NoteThreadCard({
    * reader panel, omitted entirely since those are already scoped to one
    * book. Mutually exclusive with `quote` below. */
   header?: ReactNode;
+  /** Book context with no highlighted passage — a note about the document
+   * as a whole. Unlike `header` (a passage the note responds to, so it
+   * leads), this renders after the note's body, where NoteContent puts a
+   * link preview: the note reads first, the document is where you go next.
+   * Mutually exclusive with `header` and `quote`. */
+  attachment?: ReactNode;
   /** The highlighted excerpt this note is attached to, with no book cover
    * — the book-wide annotation panel and single-note view, both already on
    * that book's own page. Same reasoning as `citation` but without the
@@ -98,7 +105,7 @@ export default function NoteThreadCard({
           height of the taller multi-line content next to it, so aligning
           against that whole block instead would leave the avatar pinned to
           its top edge rather than centered on the name it belongs to).
-          Everything else (header/quote, body, reactions) runs the full
+          Everything else (header/quote, body, attachment, reactions) runs the full
           width below, not indented under the avatar. */}
       <div className="flex min-w-0 items-center gap-1 sm:gap-3">
         <AuthorAvatar name={note.author.pseudonym} avatar={note.author.avatar} />
@@ -179,6 +186,7 @@ export default function NoteThreadCard({
           ) : (
             <NoteContent content={note.content} />
           )}
+          {attachment && <div className="mt-3 min-w-0">{attachment}</div>}
           {/* No gap on the column above: whatever renders before this row —
               body text, a link preview, a book attachment, or nothing at
               all — never carries its own bottom spacing. This row's own
@@ -281,12 +289,12 @@ export default function NoteThreadCard({
                 {/* Trunk through this entry and the gap-3 below it; the last
                     entry's elbow is where the trunk ends. */}
                 {!isLast && (
-                  <span className="absolute -bottom-3 left-[15px] top-0 w-px bg-[var(--reader-border)]" aria-hidden="true" />
+                  <span className="absolute -bottom-3 left-[15px] top-0 w-px bg-[var(--reader-thread-line)]" aria-hidden="true" />
                 )}
                 {/* Elbow down to this reply's avatar center (16px, plus the
                     pt-3 when there is one), across to its left edge. */}
                 <span
-                  className={`absolute left-[15px] top-0 rounded-bl-md border-b border-l border-[var(--reader-border)] ${
+                  className={`absolute left-[15px] top-0 rounded-bl-md border-b border-l border-[var(--reader-thread-line)] ${
                     isNewRootReply ? "h-7" : "h-4"
                   } ${depth === 2 ? "w-[30px] sm:w-[46px]" : "w-[14px] sm:w-[22px]"}`}
                   aria-hidden="true"

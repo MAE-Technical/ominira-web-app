@@ -181,6 +181,10 @@ body {
      outsized weight against a pure-white canvas, so this needs to sit well
      below what would look "muted" on a tinted background. */
   --reader-border: rgba(0, 0, 0, 0.08);
+  /* The notes thread tree (trunk + elbows): exactly --reader-border as it
+     lands on --reader-bg, but opaque, so the trunk and the elbow's
+     overlapping vertical leg don't double up darker than the curve. */
+  --reader-thread-line: #ebebeb;
   --reader-text: #000000;
   --reader-text-muted: #6e6e73;
   --reader-text-subtle: #a1a1a6;
@@ -226,6 +230,7 @@ body {
   --reader-surface: #000000;
   --reader-surface-hover: #1c1c1e;
   --reader-border: rgba(255, 255, 255, 0.1);
+  --reader-thread-line: #1a1a1a;
   --reader-text: #ffffff;
   --reader-text-muted: #98989d;
   --reader-text-subtle: #636366;

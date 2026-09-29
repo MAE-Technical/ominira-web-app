@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { Bell } from "lucide-react";
-import Tooltip from "@/app/components/reader/Tooltip";
 import { useUnreadNotificationsCount } from "@/lib/notifications/useNotifications";
 
 // Just a link to /notifications with an unread badge, not an in-header
@@ -15,7 +14,6 @@ export default function NotificationsMenu() {
   const hasUnread = !!unreadCount && unreadCount > 0;
 
   return (
-    <Tooltip label="Notifications" side="bottom" align="end">
       <Link
         href="/notifications"
         aria-label={hasUnread ? `Notifications, ${unreadCount} unread` : "Notifications"}
@@ -28,6 +26,5 @@ export default function NotificationsMenu() {
           </span>
         )}
       </Link>
-    </Tooltip>
   );
 }
