@@ -9,7 +9,7 @@ type Props = {
 /** Shared product signature for shell chrome and compact scroll headers. */
 export default function BrandMark({ className, withMark = false }: Props) {
   return (
-    <span className={`flex items-center gap-2.5 ${className ?? ""}`}>
+    <span className={`flex items-end gap-2.5 ${className ?? ""}`}>
       {withMark &&
         // Transparent mark straight on the sidebar, in both theme variants —
         // <html>'s data-reader-theme hides the other (.theme-*-only,
@@ -23,10 +23,13 @@ export default function BrandMark({ className, withMark = false }: Props) {
             aria-hidden="true"
             width={480}
             height={467}
-            className={`theme-${theme}-only h-14 w-auto flex-none`}
+            className={`theme-${theme}-only h-13 w-auto flex-none`}
           />
         ))}
-      <span className="text-[15px] font-bold uppercase tracking-[0.08em] text-[var(--reader-accent)]">Ominira</span>
+      {/* Bottom-anchored, not centered: the mark is optically bottom-heavy
+          (thin rays above, the book below), so the wordmark sits level with
+          the book. */}
+      <span className={`${withMark ? "mb-1.5" : ""} text-[15px] font-bold uppercase tracking-[0.08em] text-[var(--reader-accent)]`}>Ominira</span>
     </span>
   );
 }
