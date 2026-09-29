@@ -254,63 +254,74 @@ export default function NoteThreadCard({
       </div>
 
       {expanded && (
-        // One continuous rail down the left edge of the whole reply list
-        // (YouTube's own comment-thread convention) rather than a
-        // full-bleed divider or a line redrawn per reply — it's what reads
-        // as "these all belong to the note above", with the list's own
-        // indent (pl-2, sm:pl-4 — deliberately tight, mobile width is
-        // precious) doing the rest. Replies are separated from each other
-        // by plain spacing, no border, same as that convention.
-        <div className="relative flex flex-col gap-3 pl-2 sm:pl-4">
-          <span className="absolute inset-y-0 left-0 w-px bg-[var(--reader-border)]" aria-hidden="true" />
-          {visibleReplies.map((reply) => {
+        // A tree, so replies read as belonging to this note: a trunk drops
+        // from the root avatar's center (left-[15px] — AuthorAvatar is 32px)
+        // and a rounded elbow branches off it into each reply's avatar,
+        // stopping at the last one. Deliberately shallow for phone width:
+        // the thread model is capped at two levels (a reply, or a reply to a
+        // reply — see `depth`), so the indent can never compound, and a
+        // depth-2 reply is told apart by a longer elbow into ReplyEntry's
+        // own small extra indent rather than a second nested trunk.
+        <div className="flex flex-col gap-3">
+          {visibleReplies.map((reply, index) => {
             const replyingToName = reply.replyingToId
               ? replies.find((r) => r.id === reply.replyingToId)?.author.pseudonym
               : undefined;
             const depth = replyingToName ? 2 : 1;
             const isReplyingToThis = ui.activeComposerFor === reply.id && ui.editingId === null;
+            const isLast = index === visibleReplies.length - 1;
             // Each depth-1 reply starts a fresh little sub-thread of its own
-            // (itself plus whichever depth-2 replies address it) — a
-            // border-top demarcates where one of those groups ends and the
-            // next begins. Applies from the very first entry too, to
-            // separate the reply list as a whole from the root note's own
-            // reaction/reply row above it. Sized to the reply's own identity
-            // row (avatar through the ellipsis menu), not the full card
-            // width like NoteCard's own post-to-post border-b.
+            // (itself plus whichever depth-2 replies address it) — extra top
+            // spacing marks where one of those groups ends and the next
+            // begins, including above the first, away from the root note's
+            // own reaction/reply row.
             const isNewRootReply = depth === 1;
             return (
-              <div
-                key={reply.id}
-                ref={reply.id === focusReplyId ? focusRef : undefined}
-                className={`${isNewRootReply ? "pt-3" : ""} ${
-                  reply.id === focusReplyId
-                    ? "-mx-2 rounded-sm bg-[color-mix(in_srgb,var(--reader-accent)_8%,transparent)] px-2"
-                    : ""
-                }`}
-              >
-                {isNewRootReply && <div className="mb-3 border-t border-[var(--reader-border)]" aria-hidden="true" />}
-                <ReplyEntry reply={reply} replyingToName={replyingToName} depth={depth} ui={ui} actions={actions} />
-                {/* Same "mounts right under its own target" rule as the
-                    root composer above — indented to this reply's own
-                    depth so it visually hangs off the entry it addresses,
-                    never a fixed slot shared by every other reply. mt-3:
-                    this composer is a plain sibling of ReplyEntry inside a
-                    non-flex wrapper, so it doesn't get the list's own
-                    gap-3 between entries — without its own margin it sits
-                    flush against the reaction/reply row above it. */}
-                {isReplyingToThis && (
-                  <div className={`mt-3 ${depth === 2 ? "pl-4 sm:pl-6" : "pl-2 sm:pl-4"}`}>
-                    <NoteComposer
-                      initialText=""
-                      placeholder={`Reply to ${reply.author.pseudonym}…`}
-                      startCollapsed={false}
-                      showMemberPrompt
-                      action="reply"
-                      onCancel={() => ui.toggleComposer(reply.id)}
-                      onSave={(content, visibility) => actions.reply(reply.id, content, visibility)}
-                    />
-                  </div>
+              <div key={reply.id} className={`relative pl-8 sm:pl-10 ${isNewRootReply ? "pt-3" : ""}`}>
+                {/* Trunk through this entry and the gap-3 below it; the last
+                    entry's elbow is where the trunk ends. */}
+                {!isLast && (
+                  <span className="absolute -bottom-3 left-[15px] top-0 w-px bg-[var(--reader-border)]" aria-hidden="true" />
                 )}
+                {/* Elbow down to this reply's avatar center (16px, plus the
+                    pt-3 when there is one), across to its left edge. */}
+                <span
+                  className={`absolute left-[15px] top-0 rounded-bl-md border-b border-l border-[var(--reader-border)] ${
+                    isNewRootReply ? "h-7" : "h-4"
+                  } ${depth === 2 ? "w-[30px] sm:w-[46px]" : "w-[14px] sm:w-[22px]"}`}
+                  aria-hidden="true"
+                />
+                <div
+                  ref={reply.id === focusReplyId ? focusRef : undefined}
+                  className={
+                    reply.id === focusReplyId
+                      ? "-mx-2 rounded-sm bg-[color-mix(in_srgb,var(--reader-accent)_8%,transparent)] px-2"
+                      : undefined
+                  }
+                >
+                  <ReplyEntry reply={reply} replyingToName={replyingToName} depth={depth} ui={ui} actions={actions} />
+                  {/* Same "mounts right under its own target" rule as the
+                      root composer above — indented to this reply's own
+                      depth so it visually hangs off the entry it addresses,
+                      never a fixed slot shared by every other reply. mt-3:
+                      this composer is a plain sibling of ReplyEntry inside a
+                      non-flex wrapper, so it doesn't get the list's own
+                      gap-3 between entries — without its own margin it sits
+                      flush against the reaction/reply row above it. */}
+                  {isReplyingToThis && (
+                    <div className={`mt-3 ${depth === 2 ? "pl-4 sm:pl-6" : "pl-2 sm:pl-4"}`}>
+                      <NoteComposer
+                        initialText=""
+                        placeholder={`Reply to ${reply.author.pseudonym}…`}
+                        startCollapsed={false}
+                        showMemberPrompt
+                        action="reply"
+                        onCancel={() => ui.toggleComposer(reply.id)}
+                        onSave={(content, visibility) => actions.reply(reply.id, content, visibility)}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -319,7 +330,7 @@ export default function NoteThreadCard({
             <button
               type="button"
               onClick={() => setShowAllReplies(true)}
-              className="flex items-center gap-1.5 pl-3 text-xs font-semibold text-[var(--reader-text-muted)] hover:text-[var(--reader-text)]"
+              className="flex items-center gap-1.5 pl-8 sm:pl-10 text-xs font-semibold text-[var(--reader-text-muted)] hover:text-[var(--reader-text)]"
             >
               <ChevronRight size={14} />
               Show {hiddenReplyCount} more {hiddenReplyCount === 1 ? "reply" : "replies"}

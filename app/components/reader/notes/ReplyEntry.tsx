@@ -51,11 +51,10 @@ export default function ReplyEntry({
     // column — this is a flex item of NoteThreadCard's reply-list column,
     // and without it a long unbroken run inside NoteContent (a URL) sets
     // this reply's own minimum width to that run's full length rather than
-    // letting NoteContent's wrap utilities engage. No rail of its own — the
-    // whole list shares one continuous rail, drawn once by NoteThreadCard;
-    // a depth-2 reply (addressing another reply, not the root) just gets a
-    // little extra indent of its own, same "in reply to" convention as a
-    // flat YouTube-style thread rather than a second nested rail.
+    // letting NoteContent's wrap utilities engage. No tree lines of its own —
+    // NoteThreadCard draws the trunk and elbows; a depth-2 reply (addressing
+    // another reply, not the root) just gets a little extra indent here,
+    // which that elbow reaches into, rather than a second nested trunk.
     <div className={`flex min-w-0 flex-col gap-1.5 ${depth === 2 ? "pl-4 sm:pl-6" : ""}`}>
       {/* Same avatar-beside-just-the-name-row pairing as NoteThreadCard's
           own root layout — a reply's author gets the same identity
