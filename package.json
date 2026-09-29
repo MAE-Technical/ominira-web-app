@@ -18,6 +18,26 @@
     "metrics:verify": "bun run scripts/verify-dashboard-metrics.ts"
   },
   "dependencies": {
+    "@embedpdf/core": "2.15.1",
+    "@embedpdf/engines": "2.15.1",
+    "@embedpdf/fonts-arabic": "1.0.0",
+    "@embedpdf/fonts-hebrew": "1.0.0",
+    "@embedpdf/fonts-jp": "1.0.0",
+    "@embedpdf/fonts-kr": "1.0.0",
+    "@embedpdf/fonts-latin": "1.0.0",
+    "@embedpdf/fonts-sc": "1.0.0",
+    "@embedpdf/fonts-tc": "1.0.0",
+    "@embedpdf/models": "2.15.1",
+    "@embedpdf/pdfium": "2.15.1",
+    "@embedpdf/plugin-document-manager": "2.15.1",
+    "@embedpdf/plugin-interaction-manager": "2.15.1",
+    "@embedpdf/plugin-pan": "2.15.1",
+    "@embedpdf/plugin-render": "2.15.1",
+    "@embedpdf/plugin-scroll": "2.15.1",
+    "@embedpdf/plugin-selection": "2.15.1",
+    "@embedpdf/plugin-tiling": "2.15.1",
+    "@embedpdf/plugin-viewport": "2.15.1",
+    "@embedpdf/plugin-zoom": "2.15.1",
     "@mozilla/readability": "^0.6.0",
     "@radix-ui/react-popover": "^1.1.23",
     "@supabase/supabase-js": "^2.111.0",
@@ -37,7 +57,6 @@
     "react-dom": "19.2.4",
     "react-easy-crop": "^6.2.3",
     "react-lite-youtube-embed": "^3.7.0",
-    "react-pdf": "^11.0.0",
     "recharts": "^3.10.1",
     "web-push": "^3.6.7",
     "ws": "^8.21.3",
@@ -69,5 +88,8 @@
   "trustedDependencies": [
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "patchedDependencies": {
+    "@embedpdf/engines@2.15.1": "patches/@embedpdf%2Fengines@2.15.1.patch"
+  }
 }

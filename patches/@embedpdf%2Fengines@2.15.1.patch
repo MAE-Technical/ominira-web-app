@@ -1,0 +1,48 @@
+diff --git a/node_modules/@embedpdf/engines/.bun-tag-aa00e478787fe8d9 b/.bun-tag-aa00e478787fe8d9
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/lib/pdfium/web/worker-engine.js b/dist/lib/pdfium/web/worker-engine.js
+index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..7fc5a393268e787084d7c9f36a4051d7da4bc51c 100644
+--- a/dist/lib/pdfium/web/worker-engine.js
++++ b/dist/lib/pdfium/web/worker-engine.js
+@@ -12,9 +12,14 @@ const _RemoteExecutor = class _RemoteExecutor {
+       const response = event.data;
+       if (response.type === "ready") {
+         this.logger.debug(LOG_SOURCE$1, LOG_CATEGORY$1, "Worker is ready");
++        this.pendingRequests.delete(_RemoteExecutor.READY_TASK_ID);
+         this.readyTask.resolve(true);
+         return;
+       }
++      if (response.type === "wasmError") {
++        this.failInit(typeof response.error === "string" ? response.error : "Unknown worker initialization error");
++        return;
++      }
+       const task = this.pendingRequests.get(response.id);
+       if (!task) {
+         this.logger.warn(
+@@ -51,7 +56,17 @@ const _RemoteExecutor = class _RemoteExecutor {
+       }
+     };
+     this.logger = options.logger ?? new NoopLogger();
++    this.failInit = (message) => {
++      if (this.pendingRequests.get(_RemoteExecutor.READY_TASK_ID) !== this.readyTask) return;
++      this.logger.error(LOG_SOURCE$1, LOG_CATEGORY$1, "Worker initialization failed:", message);
++      this.pendingRequests.delete(_RemoteExecutor.READY_TASK_ID);
++      this.readyTask.reject({ code: PdfErrorCode.Initialization, message });
++    };
++    this.handleError = (event) => {
++      this.failInit(event && event.message ? event.message : "Worker failed to start");
++    };
+     this.worker.addEventListener("message", this.handleMessage);
++    this.worker.addEventListener("error", this.handleError);
+     this.readyTask = new Task();
+     this.pendingRequests.set(_RemoteExecutor.READY_TASK_ID, this.readyTask);
+     this.worker.postMessage({
+@@ -108,6 +123,7 @@ const _RemoteExecutor = class _RemoteExecutor {
+    */
+   destroy() {
+     this.worker.removeEventListener("message", this.handleMessage);
++    this.worker.removeEventListener("error", this.handleError);
+     this.pendingRequests.forEach((task, id) => {
+       if (id !== _RemoteExecutor.READY_TASK_ID) {
+         task.abort("Worker destroyed");

@@ -8,25 +8,19 @@ import type PdfDocumentView from "./PdfDocumentView";
  * The browser-only entry point for PdfDocumentView — what every route and
  * wrapper imports instead of the view itself.
  *
- * react-pdf pulls in pdfjs-dist's viewer utilities, which touch `window` and
- * `document` at *module evaluation* (`webpack://pdf.js/web/ui_utils.js`:
- * `window.requestAnimationFrame(...)`, `document.documentElement.style`). That
- * happens during SSR/prerender of anything that imports it — including a
- * "use client" component, which Next still renders on the server — so the mere
- * import crashed the reader routes with `ReferenceError: window is not defined`
- * before any of this component's own code ran. No amount of `typeof window`
- * guarding inside the view can help: the throw is in the dependency's top-level
- * code, so the import itself has to be deferred to the client, which is exactly
- * what `ssr: false` does.
+ * The viewer is browser-only through and through — a WebAssembly engine in a
+ * worker, blob URLs, pointer and viewport measurement — and there is nothing
+ * about a PDF worth rendering on the server, so the whole module is deferred to
+ * the client with `ssr: false`. That also keeps EmbedPDF out of the reader
+ * routes' initial bundle: it's fetched only when a PDF is actually opened.
  *
  * It lives in a component of its own because `dynamic(..., { ssr: false })` is
  * only allowed in a client component, while the two reader routes
  * (app/read/[slug], app/reader/[slug]) are Server Components.
  *
- * The fallback is the same blank sheet the <Document> fetch and every unpainted
- * page show (see PdfScrollPages), so "the chunk is loading", "the PDF is
- * loading" and "this page hasn't painted" are one continuous wait in one visual
- * language, with nothing in this viewer ever spinning.
+ * The fallback is the same blank sheet PdfDocumentView shows while the document
+ * downloads and opens, so "the chunk is loading" and "the PDF is loading" are one
+ * continuous wait in one visual language, with nothing in this viewer spinning.
  */
 const PdfDocumentViewClient = dynamic(() => import("./PdfDocumentView"), {
   ssr: false,

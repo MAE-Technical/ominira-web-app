@@ -4,16 +4,6 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, GalleryVertical, Minus, Plus, RectangleVertical } from "lucide-react";
 import type { PdfLayout } from "@/stores/reader-store";
 
-// Same 50%-200% range most PDF viewers (Preview, Acrobat's quick zoom,
-// Chrome's built-in viewer) offer, in 10-point steps — wide enough to read
-// small print or see a full spread without the granularity most people never
-// zoom past. Owned here rather than by the viewer because this is where zoom is
-// driven from; the viewer only holds the value.
-export const ZOOM_MIN = 0.5;
-export const ZOOM_MAX = 2;
-export const ZOOM_STEP = 0.1;
-export const ZOOM_DEFAULT = 1;
-
 // Content-sized, not `flex-1`: an edge button that stretched to fill its half of
 // the bar turned every bit of empty space beside it into a page turn — a stray
 // click anywhere near the bottom of the window silently moved the reader. The
@@ -50,18 +40,29 @@ export default function PdfPagerFooter({
   pageNumber,
   numPages,
   layout,
-  scale,
+  zoom,
   onGoToPage,
+  onStepPage,
   onLayoutChange,
-  onScaleChange,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
 }: {
   pageNumber: number;
   numPages: number;
   layout: PdfLayout;
-  scale: number;
+  /** `isCustom` is whether the reader has zoomed away from the layout's own
+   * fit (by these buttons or a pinch) — the only time the percentage is worth
+   * the room it takes, and the only time there's anything to reset. */
+  zoom: { percent: number; isCustom: boolean; canZoomIn: boolean; canZoomOut: boolean };
   onGoToPage: (page: number) => void;
+  /** Previous/next page — a step rather than an absolute page, so the viewer
+   * can count from a page turn that's still in flight. */
+  onStepPage: (delta: -1 | 1) => void;
   onLayoutChange: (layout: PdfLayout) => void;
-  onScaleChange: (scale: number) => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
 }) {
   // What's being typed, tagged with the page it was typed against. The tag is
   // how the readout follows `pageNumber` (which changes continuously as the
@@ -87,11 +88,6 @@ export default function PdfPagerFooter({
   };
 
   const isScroll = layout === "scroll";
-  const zoomPercent = Math.round(scale * 100);
-  // Rounded through hundredths so repeated steps can't accumulate float drift
-  // into a 139.99999% zoom.
-  const zoomBy = (delta: number) =>
-    onScaleChange(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((scale + delta) * 100) / 100)));
 
   return (
     <div
@@ -117,7 +113,7 @@ export default function PdfPagerFooter({
       <div className="flex min-w-0 justify-start">
         {!isScroll && (
           <button
-            onClick={() => onGoToPage(Math.max(1, pageNumber - 1))}
+            onClick={() => onStepPage(-1)}
             disabled={pageNumber <= 1}
             aria-label="Previous page"
             className={edgeButtonClass}
@@ -188,27 +184,35 @@ export default function PdfPagerFooter({
 
         <div className="flex flex-none items-center gap-0.5">
           <button
-            onClick={() => zoomBy(-ZOOM_STEP)}
-            disabled={scale <= ZOOM_MIN}
-            aria-label={`Zoom out, currently ${zoomPercent}%`}
+            onClick={onZoomOut}
+            disabled={!zoom.canZoomOut}
+            aria-label={`Zoom out, currently ${zoom.percent}%`}
             className={iconButtonClass}
           >
             <Minus size={16} />
           </button>
           <button
-            onClick={() => zoomBy(ZOOM_STEP)}
-            disabled={scale >= ZOOM_MAX}
-            aria-label={`Zoom in, currently ${zoomPercent}%`}
+            onClick={onZoomIn}
+            disabled={!zoom.canZoomIn}
+            aria-label={`Zoom in, currently ${zoom.percent}%`}
             className={iconButtonClass}
           >
             <Plus size={16} />
           </button>
-          {/* Shown only while zoom is off its default — feedback when it
-              matters, no permanent "100%" taking up room on a phone. */}
-          {zoomPercent !== 100 && (
-            <span className="hidden flex-none pl-1 text-[12px] font-semibold tabular-nums text-[var(--reader-text-subtle)] sm:inline">
-              {zoomPercent}%
-            </span>
+          {/* Shown only while zoomed off the layout's own fit — feedback when it
+              matters, no permanent "100%" taking up room on a phone — and a
+              button, since after a pinch there's otherwise no one-tap way back
+              to a page that fits. */}
+          {zoom.isCustom && (
+            <button
+              type="button"
+              onClick={onZoomReset}
+              aria-label={`Reset zoom, currently ${zoom.percent}%`}
+              title="Reset zoom"
+              className="hidden flex-none cursor-pointer rounded-md border-none bg-transparent px-1.5 py-1 text-[12px] font-semibold tabular-nums text-[var(--reader-text-subtle)] transition-colors hover:bg-[var(--reader-surface-hover)] hover:text-[var(--reader-text)] sm:inline"
+            >
+              {zoom.percent}%
+            </button>
           )}
         </div>
       </div>
@@ -216,7 +220,7 @@ export default function PdfPagerFooter({
       <div className="flex min-w-0 justify-end">
         {!isScroll && (
           <button
-            onClick={() => onGoToPage(Math.min(numPages, pageNumber + 1))}
+            onClick={() => onStepPage(1)}
             disabled={pageNumber >= numPages}
             aria-label="Next page"
             className={edgeButtonClass}

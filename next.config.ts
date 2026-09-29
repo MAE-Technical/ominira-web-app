@@ -4,18 +4,14 @@ import path from "path";
 const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
-    // pdf.js's default (modern) build calls brand-new JS APIs unpolyfilled —
-    // Map#getOrInsertComputed, Promise.try, Promise.withResolvers,
-    // Math.sumPrecise — so on anything short of the newest Safari the viewer
-    // throws a TypeError the moment react-pdf loads it. The `legacy` build is
-    // the same API with core-js polyfills. react-pdf imports the bare
-    // specifiers itself, so they have to be redirected here rather than at
-    // our own import sites. The viewer module is swapped for a shim entirely:
-    // even its legacy build has a `v`-flag regex Safari < 17 can't parse (see
-    // lib/pdf/pdfViewerShim.ts).
+    // pdf.js (used only by the upload parser, lib/book/pdfParser.ts — the
+    // reader renders with PDFium) ships a default build that calls brand-new
+    // JS APIs unpolyfilled — Map#getOrInsertComputed, Promise.try,
+    // Promise.withResolvers, Math.sumPrecise — so on anything short of the
+    // newest Safari it throws a TypeError the moment it loads. The `legacy`
+    // build is the same API with core-js polyfills.
     resolveAlias: {
       "pdfjs-dist": "pdfjs-dist/legacy/build/pdf.mjs",
-      "pdfjs-dist/web/pdf_viewer.mjs": "./lib/pdf/pdfViewerShim.ts",
     },
   },
   // `ws` (lib/audio/engines/edge.ts) has optional native addons

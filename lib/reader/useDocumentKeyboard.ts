@@ -19,7 +19,7 @@ const EASE = 0.18;
  * Desktop keyboard navigation for the single-document viewers (PDF, DOCX, web
  * article) — the keys a reader already expects from every other document viewer:
  *
- *   ← / →            previous / next page (paged PDF), else a screenful
+ *   ← / →            a screenful
  *   ↑ / ↓            scroll by a line
  *   PageUp/PageDown  scroll by a screenful
  *   Space/Shift+Space   ditto (the long-standing reading shortcut)
@@ -32,11 +32,14 @@ const EASE = 0.18;
  * keystroke aimed at a form field (the pager's page input, a note composer) or
  * carrying a modifier (⌘F, ⌘←/browser-back) is left alone.
  *
- * `onPrev`/`onNext` are optional: a viewer with real pages (the paged PDF
- * layout) hands them in and ←/→ turn pages; a reflowing one (DOCX, article, and
- * the PDF's continuous scroll, where the scroll *is* the page turn) leaves them
- * out and ←/→ fall back to scrolling a screenful, so the keys still do the
- * obvious thing everywhere.
+ * `pager` is optional: a viewer that moves in whole pages (the paged PDF layout,
+ * whose pages snap into place) hands one in, and every one of these keys turns
+ * pages instead — ←/↑/PageUp/Shift+Space back, →/↓/PageDown/Space forward,
+ * Home/End to the first/last page. It has to be all of them rather than just
+ * ←/→: a snapping container pulls any partial scroll straight back to the page
+ * it started on, so a line-by-line glide there would just fight the snap. A
+ * reflowing viewer (DOCX, article, the PDF's continuous scroll, where the scroll
+ * *is* the page turn) leaves it out and gets the scrolling behaviour above.
  *
  * Scrolling is animated here, frame by frame, rather than handed to
  * `scrollTo({ behavior: "smooth" })`. The native version restarts its animation
@@ -45,22 +48,27 @@ const EASE = 0.18;
  * stops. Keeping our own target means repeat keystrokes *accumulate* into one
  * continuous glide, which is the whole difference between paging and reading.
  */
+export type DocumentPager = {
+  prev: () => void;
+  next: () => void;
+  first: () => void;
+  last: () => void;
+};
+
 export function useDocumentKeyboard({
   scrollElement,
-  onPrev,
-  onNext,
+  pager,
 }: {
   scrollElement: HTMLElement | null;
-  onPrev?: () => void;
-  onNext?: () => void;
+  pager?: DocumentPager;
 }) {
-  // The handlers go through refs so the listener is bound once per scroll
-  // container rather than re-bound on every render of a parent that recreates
-  // these closures (PdfDocumentView's do change: they close over pageNumber).
-  const handlersRef = useRef({ onPrev, onNext });
+  // Through a ref so the listener is bound once per scroll container rather than
+  // re-bound on every render of a parent that recreates the pager (PdfDocumentView's
+  // does change: it closes over the current page).
+  const pagerRef = useRef(pager);
   useEffect(() => {
-    handlersRef.current = { onPrev, onNext };
-  }, [onPrev, onNext]);
+    pagerRef.current = pager;
+  }, [pager]);
 
   useEffect(() => {
     if (!scrollElement) return;
@@ -111,17 +119,44 @@ export function useDocumentKeyboard({
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
 
+      const pager = pagerRef.current;
+      if (pager) {
+        switch (event.key) {
+          case "ArrowLeft":
+          case "ArrowUp":
+          case "PageUp":
+            pager.prev();
+            break;
+          case "ArrowRight":
+          case "ArrowDown":
+          case "PageDown":
+            pager.next();
+            break;
+          case " ":
+            if (event.shiftKey) pager.prev();
+            else pager.next();
+            break;
+          case "Home":
+            pager.first();
+            break;
+          case "End":
+            pager.last();
+            break;
+          default:
+            return;
+        }
+        event.preventDefault();
+        return;
+      }
+
       const screenful = Math.max(LINE_STEP_PX, scrollElement.clientHeight - PAGE_OVERLAP_PX);
-      const { onPrev, onNext } = handlersRef.current;
 
       switch (event.key) {
         case "ArrowLeft":
-          if (onPrev) onPrev();
-          else glideBy(-screenful);
+          glideBy(-screenful);
           break;
         case "ArrowRight":
-          if (onNext) onNext();
-          else glideBy(screenful);
+          glideBy(screenful);
           break;
         case "ArrowUp":
           glideBy(-LINE_STEP_PX);

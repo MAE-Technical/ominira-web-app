@@ -2,9 +2,9 @@ import "./polyfills";
 import { GlobalWorkerOptions } from "pdfjs-dist";
 
 /**
- * Browser-side pdf.js setup, shared by the reader (react-pdf) and the upload
- * parser — both resolve to the same legacy pdf.js module (next.config.ts), so
- * one GlobalWorkerOptions and one worker serve both.
+ * Browser-side pdf.js setup for the upload parser (lib/book/pdfParser.ts), which
+ * resolves to the legacy pdf.js module (next.config.ts). The reader doesn't use
+ * pdf.js at all — it renders with PDFium (lib/pdf/pdfiumEngine.ts).
  *
  * `workerPort` rather than `workerSrc`: pdf.js's worker file can't be
  * polyfilled from outside, so lib/pdf/pdf.worker.ts wraps it and the bundler
