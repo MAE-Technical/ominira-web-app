@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AnnotationRange, Note } from "@/lib/api/types";
-import { useCreateNote, useUpdateNote, useDeleteNote, useToggleReaction } from "@/lib/community/useNoteMutations";
+import { useCreateNote, useUpdateNote, useDeleteNote, useToggleReaction, useToggleNoteBookmark } from "@/lib/community/useNoteMutations";
 import { topLevelNotes } from "./noteThread";
 import type { ThreadActions, ThreadUIState } from "./threadTypes";
 
@@ -50,6 +50,7 @@ export function useThreadInteraction({
   const updateNote = useUpdateNote(materialId);
   const deleteNote = useDeleteNote(materialId);
   const toggleReaction = useToggleReaction(materialId);
+  const toggleBookmark = useToggleNoteBookmark(materialId);
 
   // A live derived value, not one-time state — allNotes often starts empty
   // and fills in once its query resolves (e.g. a deep link opens this panel
@@ -98,7 +99,8 @@ export function useThreadInteraction({
     // themselves already gated (NoteComposer's own MembersOnlyPrompt for
     // reply; Edit/Delete's menu items never render for a non-owned note,
     // and a reader is never "own" while signed out — see useIsOwnNote), and
-    // ReactionButton gates itself before calling toggleReaction.
+    // ReactionButton and BookmarkButton each gate themselves before
+    // calling toggleReaction/toggleBookmark.
     reply: (parentId, content, visibility) => {
       createNote.mutate({ ranges, content, parentId, visibility }, { onError });
       onNoteAdded?.();
@@ -106,6 +108,7 @@ export function useThreadInteraction({
     saveEdit: (noteId, content, visibility) => updateNote.mutate({ noteId, content, visibility }, { onError }),
     delete: (noteId) => deleteNote.mutate(noteId, { onError }),
     toggleReaction: (noteId) => toggleReaction.mutate(noteId, { onError }),
+    toggleBookmark: (noteId) => toggleBookmark.mutate(noteId, { onError }),
   };
 
   // No-op: every root is always expanded (see expandedIds above), so

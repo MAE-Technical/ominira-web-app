@@ -3,13 +3,9 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "./navItems";
+import { NAV_ITEMS, isNavItemActive } from "./navItems";
 import { useReaderOverlayStore } from "@/stores/reader-overlay-store";
 import { useLayoutStore } from "@/stores/layout-store";
-
-function isActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 /**
  * Mobile tab bar (hidden at the same 860px breakpoint AppSidebar takes over
@@ -65,7 +61,7 @@ export default function AppBottomNav() {
       className="shell:hidden fixed left-0 right-0 bottom-0 z-40 isolate flex items-stretch select-none no-callout border-t border-[var(--reader-border)] bg-[var(--reader-surface)]/85 backdrop-blur-xl backdrop-saturate-150"
     >
       {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = isActive(pathname, href);
+        const active = isNavItemActive(pathname, href);
         return (
           <Link
             key={href}

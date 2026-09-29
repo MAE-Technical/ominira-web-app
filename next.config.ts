@@ -12,6 +12,22 @@ const nextConfig: NextConfig = {
   // mishandling it the way it did the isomorphic package this used to go
   // through (see edge.ts's own doc comment).
   serverExternalPackages: ["ws"],
+  // /reading became /shelf once it stopped being just the in-progress list
+  // and grew Saved/Finished tabs (see ShelfView). Permanent, and kept
+  // indefinitely rather than treated as a migration window: the old path is
+  // sitting in installed PWAs' caches and in whatever readers bookmarked in
+  // their own browsers, neither of which we can go and rewrite.
+  async redirects() {
+    return [
+      { source: "/reading", destination: "/shelf", permanent: true },
+      // Superseded icon URLs. Already-sent announcement emails and installed
+      // PWAs holding a stale manifest still request these.
+      { source: "/icons/icon-192.png", destination: "/icons/icon-192x192.png", permanent: true },
+      { source: "/icons/icon-512.png", destination: "/icons/icon-512x512.png", permanent: true },
+      { source: "/icon.png", destination: "/icons/icon-512x512.png", permanent: true },
+      { source: "/apple-icon.png", destination: "/icons/apple-touch-icon-180x180.png", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

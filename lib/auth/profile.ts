@@ -1,6 +1,7 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import type { Database } from "@/lib/supabase/database.types";
 import type { ReaderProfile } from "@/lib/api/types";
+import { toAvatar } from "@/lib/avatar/avatar";
 
 type ReaderRow = Database["public"]["Tables"]["readers"]["Row"];
 
@@ -18,6 +19,8 @@ export function toReaderProfile(row: ReaderRow): ReaderProfile {
     ageRange: row.age_range,
     genderIdentity: row.gender_identity,
     onboardingStatus: row.onboarding_status,
+    avatar: toAvatar(row),
+    emailAnnouncements: row.email_announcements,
     joinedAt: row.joined_at,
     updatedAt: row.updated_at,
   };

@@ -33,14 +33,18 @@ export type PillItem = {
  * rendering path.
  *
  * The track's native scrollbar is hidden (.no-scrollbar) — it read as
- * clutter riding right under the pills — in favor of one chevron flanking
- * either side of the row itself (< pills >), not floating above or over
- * the pills. Each only renders while there's actually more to scroll to in
- * that direction (tracked via the scroll/resize listener below), so the
- * track alone still fills the space at either end once there's nothing
- * further that way. A finger swipe still scrolls the track directly either
- * way — these are a discoverability aid on top of that, not a replacement
- * for it.
+ * clutter riding right under the pills. In its place: a soft edge fade
+ * (into the page background) plus a chevron button, both overlaid on top
+ * of whichever side of the track still has more pills to reveal, rather
+ * than laid out as flex siblings of the track. That's on purpose: the
+ * track's own box must never change size. It used to have the buttons as
+ * inline siblings (< pills >), which meant the track's own width changed
+ * by a button's width the instant a scroll crossed the show/hide
+ * threshold — the pills visibly snapped sideways mid-scroll. Each button
+ * is *always* mounted, just faded to invisible (opacity + pointer-events,
+ * not unmounted) when that direction has nothing left to scroll to, so
+ * nothing about the track's box ever moves — only the overlay's opacity
+ * does.
  */
 export default function PillScrollRow({ items }: { items: PillItem[] }) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -73,6 +77,19 @@ export default function PillScrollRow({ items }: { items: PillItem[] }) {
     };
   }, [items]);
 
+  // Selecting a pill navigates and remounts the row at scrollLeft 0, which
+  // left a far-right selection hidden (reads as "back to All"). Bring the
+  // active pill into view — instantly, and by scrolling the track itself
+  // (scrollIntoView could also scroll the page vertically).
+  const activeKey = items.find((item) => item.active)?.key;
+  useEffect(() => {
+    const track = trackRef.current;
+    const pill = track?.querySelector<HTMLElement>("[data-active-pill]");
+    if (!track || !pill) return;
+    const target = pill.offsetLeft - (track.clientWidth - pill.offsetWidth) / 2;
+    track.scrollTo({ left: Math.max(0, target), behavior: "instant" });
+  }, [activeKey]);
+
   function scrollBy(direction: 1 | -1) {
     const track = trackRef.current;
     if (!track) return;
@@ -80,19 +97,8 @@ export default function PillScrollRow({ items }: { items: PillItem[] }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      {canScrollLeft && (
-        <button
-          type="button"
-          onClick={() => scrollBy(-1)}
-          aria-label="Scroll left"
-          className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-[var(--reader-border)] bg-[var(--reader-surface)] text-[var(--reader-text)] cursor-pointer"
-        >
-          <ChevronLeft size={14} />
-        </button>
-      )}
-
-      <div ref={trackRef} className="no-scrollbar min-w-0 flex-1 flex gap-2 overflow-x-auto pb-1 no-callout">
+    <div className="relative min-w-0">
+      <div ref={trackRef} className="no-scrollbar flex gap-2 overflow-x-auto scroll-smooth px-1 py-1 no-callout">
         {items.map((item) => {
           const className = `flex-none whitespace-nowrap rounded-sm border px-3 py-2 text-xs font-bold cursor-pointer overflow-hidden transition-colors no-underline ${
             item.active
@@ -100,23 +106,53 @@ export default function PillScrollRow({ items }: { items: PillItem[] }) {
               : "border-[var(--reader-border)] bg-[var(--reader-surface)] text-[var(--reader-text-muted)] hover:bg-[var(--reader-surface-hover)]"
           }`;
           return (
-            <Link key={item.key} href={item.href} scroll={false} className={className} onClick={item.onClick}>
+            <Link key={item.key} href={item.href} scroll={false} className={className} onClick={item.onClick} data-active-pill={item.active || undefined}>
               {item.label}
             </Link>
           );
         })}
       </div>
 
-      {canScrollRight && (
-        <button
-          type="button"
-          onClick={() => scrollBy(1)}
-          aria-label="Scroll right"
-          className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-[var(--reader-border)] bg-[var(--reader-surface)] text-[var(--reader-text)] cursor-pointer"
-        >
-          <ChevronRight size={14} />
-        </button>
-      )}
+      {/* Fade + chevron are one visual unit per edge, both driven by the
+         same canScroll* flag and both ignoring pointer events except the
+         button itself — the fade never blocks a swipe or a click-through
+         to a pill riding near the edge underneath it. */}
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[var(--reader-bg)] to-transparent transition-opacity duration-200 ${
+          canScrollLeft ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[var(--reader-bg)] to-transparent transition-opacity duration-200 ${
+          canScrollRight ? "opacity-100" : "opacity-0"
+        }`}
+      />
+
+      <button
+        type="button"
+        onClick={() => scrollBy(-1)}
+        aria-label="Scroll left"
+        tabIndex={canScrollLeft ? 0 : -1}
+        className={`absolute left-0.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--reader-border)] bg-[var(--reader-surface-hover)] text-[var(--reader-text)] shadow-sm transition-opacity duration-200 cursor-pointer hover:border-[var(--reader-text-muted)] ${
+          canScrollLeft ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        <ChevronLeft size={16} strokeWidth={2.5} />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => scrollBy(1)}
+        aria-label="Scroll right"
+        tabIndex={canScrollRight ? 0 : -1}
+        className={`absolute right-0.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--reader-border)] bg-[var(--reader-surface-hover)] text-[var(--reader-text)] shadow-sm transition-opacity duration-200 cursor-pointer hover:border-[var(--reader-text-muted)] ${
+          canScrollRight ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        <ChevronRight size={16} strokeWidth={2.5} />
+      </button>
     </div>
   );
 }

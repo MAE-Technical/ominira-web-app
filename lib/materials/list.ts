@@ -11,6 +11,7 @@ import type { MaterialSummary } from "@/lib/api/types";
 import type { Database } from "@/lib/supabase/database.types";
 import { listCurrentReaders } from "@/lib/reader/activity";
 import { MATERIAL_SUMMARY_COLUMNS } from "./columns";
+import { toAvatar, type Avatar } from "@/lib/avatar/avatar";
 
 type MaterialRow = Database["public"]["Tables"]["materials"]["Row"];
 
@@ -77,6 +78,16 @@ function applyStatusFilter<T extends { in: (column: string, values: string[]) =>
   return query.in("status", includeUnpublished ? ["draft", "published"] : ["published"]);
 }
 
+// The library is a shelf of documents/books — "webpage" materials (from
+// from-url/route.ts's read-it-later flow) aren't a book a reader browses to,
+// so they're excluded from every library listing below, admin's included
+// (app/admin/library/page.tsx applies the same type list).
+const LIBRARY_MATERIAL_TYPES = ["book", "pdf", "docx"];
+
+export function applyLibraryTypeFilter<T extends { in: (column: string, values: string[]) => T }>(query: T) {
+  return query.in("material_type", LIBRARY_MATERIAL_TYPES);
+}
+
 function applyCategoryFilter<T extends { filter: (column: string, operator: string, value: string) => T }>(
   query: T,
   category: string
@@ -92,9 +103,11 @@ async function listByEngagement(
 ): Promise<{ items: MaterialSummary[]; nextCursor: string | null }> {
   const admin = getSupabaseAdminClient();
 
-  let materialsQuery = applyStatusFilter(
-    admin.from("materials").select(MATERIAL_SUMMARY_COLUMNS).limit(ENGAGEMENT_POOL_SIZE),
-    opts.includeUnpublished
+  let materialsQuery = applyLibraryTypeFilter(
+    applyStatusFilter(
+      admin.from("materials").select(MATERIAL_SUMMARY_COLUMNS).limit(ENGAGEMENT_POOL_SIZE),
+      opts.includeUnpublished
+    )
   );
 
   // No search branch here: listPublishedMaterials routes any query straight
@@ -147,14 +160,16 @@ async function listAlphabetically(
 ): Promise<{ items: MaterialSummary[]; nextCursor: string | null }> {
   const admin = getSupabaseAdminClient();
 
-  let query = applyStatusFilter(
-    admin
-      .from("materials")
-      .select(MATERIAL_SUMMARY_COLUMNS)
-      .order("title", { ascending: true })
-      .order("id", { ascending: true })
-      .limit(limit + 1),
-    opts.includeUnpublished
+  let query = applyLibraryTypeFilter(
+    applyStatusFilter(
+      admin
+        .from("materials")
+        .select(MATERIAL_SUMMARY_COLUMNS)
+        .order("title", { ascending: true })
+        .order("id", { ascending: true })
+        .limit(limit + 1),
+      opts.includeUnpublished
+    )
   );
 
   if (opts.category) query = applyCategoryFilter(query, opts.category);
@@ -215,12 +230,14 @@ async function listBySearch(
   const tokens = toSearchTokens(opts.search ?? "");
   if (tokens.length === 0) return { items: [], nextCursor: null };
 
-  let query = applyStatusFilter(
-    getSupabaseAdminClient()
-      .from("materials")
-      .select(MATERIAL_SUMMARY_COLUMNS)
-      .limit(SEARCH_POOL_SIZE),
-    opts.includeUnpublished
+  let query = applyLibraryTypeFilter(
+    applyStatusFilter(
+      getSupabaseAdminClient()
+        .from("materials")
+        .select(MATERIAL_SUMMARY_COLUMNS)
+        .limit(SEARCH_POOL_SIZE),
+      opts.includeUnpublished
+    )
   );
 
   for (const token of tokens) {
@@ -258,7 +275,7 @@ async function listBySearch(
  * "who's reading this" works the same whether the page came from plain
  * browse, alphabetical, top, or search.
  */
-async function withCurrentReaders(
+export async function withCurrentReaders(
   page: { items: MaterialSummary[]; nextCursor: string | null }
 ): Promise<{ items: MaterialSummary[]; nextCursor: string | null }> {
   if (page.items.length === 0) return page;
@@ -273,6 +290,51 @@ async function withCurrentReaders(
       return entry ? { ...item, currentReaders: entry.readers, currentReaderCount: entry.totalCount } : item;
     }),
   };
+}
+
+export type CategoryContributionStats = {
+  bookCount: number;
+  contributors: { readerId: string; pseudonym: string; avatar: Avatar }[];
+};
+
+/**
+ * library-contribution-ux-spec.md Step 2's end-of-category card — static
+ * count of public materials in a category, plus who contributed them.
+ * "Public" here means `visibility = 'public'`, a different axis from
+ * `status` (draft/published) — a personal upload a reader hasn't shared
+ * doesn't count toward the shared shelf's own social proof, and never
+ * surfaces its uploader. `category: null` covers the "All" pill the same
+ * way listPublishedMaterials's own `opts.category` does.
+ */
+export async function getCategoryContributionStats(category: string | null): Promise<CategoryContributionStats> {
+  const admin = getSupabaseAdminClient();
+
+  let countQuery = applyLibraryTypeFilter(
+    applyStatusFilter(admin.from("materials").select("id", { count: "exact", head: true }).eq("visibility", "public"))
+  );
+  if (category) countQuery = applyCategoryFilter(countQuery, category);
+  const { count } = await countQuery;
+
+  let uploaderQuery = applyLibraryTypeFilter(
+    applyStatusFilter(
+      admin.from("materials").select("uploaded_by").eq("visibility", "public").not("uploaded_by", "is", null)
+    )
+  );
+  if (category) uploaderQuery = applyCategoryFilter(uploaderQuery, category);
+  const { data: uploaderRows } = await uploaderQuery;
+
+  const uploaderIds = [...new Set((uploaderRows ?? []).map((row) => row.uploaded_by).filter((id): id is string => !!id))];
+
+  let contributors: CategoryContributionStats["contributors"] = [];
+  if (uploaderIds.length > 0) {
+    const { data: readerRows } = await admin
+      .from("readers")
+      .select("id, pseudonym, avatar_color, avatar_url")
+      .in("id", uploaderIds);
+    contributors = (readerRows ?? []).map((row) => ({ readerId: row.id, pseudonym: row.pseudonym, avatar: toAvatar(row) }));
+  }
+
+  return { bookCount: count ?? 0, contributors };
 }
 
 /**
@@ -295,14 +357,16 @@ export async function listPublishedMaterials(
   if (opts.sort === "alphabetical") return withCurrentReaders(await listAlphabetically(opts, limit));
   if (opts.sort === "top") return withCurrentReaders(await listByEngagement(opts, limit));
 
-  let query = applyStatusFilter(
-    getSupabaseAdminClient()
-      .from("materials")
-      .select(MATERIAL_SUMMARY_COLUMNS)
-      .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-      .limit(limit + 1),
-    opts.includeUnpublished
+  let query = applyLibraryTypeFilter(
+    applyStatusFilter(
+      getSupabaseAdminClient()
+        .from("materials")
+        .select(MATERIAL_SUMMARY_COLUMNS)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(limit + 1),
+      opts.includeUnpublished
+    )
   );
 
   if (opts.category) query = applyCategoryFilter(query, opts.category);

@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useReaderStore } from "@/stores/reader-store";
+import type { Locator } from "@/lib/reader/locator";
+import { useArticleProgress } from "@/lib/reader/useArticleProgress";
+import { useDocumentKeyboard } from "@/lib/reader/useDocumentKeyboard";
+import DocumentEndPanel from "./DocumentEndPanel";
 import { useArticleTypographyStyle } from "@/lib/reader/useArticleTypographyStyle";
 import ReaderHeader from "./ReaderHeader";
 import Loader from "../Loader";
@@ -24,20 +28,34 @@ const RAIL_INSET_PX = 16;
  * (app/read, app/reader) vs. wrapped in DocumentOverlayShell for the
  * intercepted route — `onClose` present picks the close-X, absent the
  * back-arrow.
+ *
+ * Reading progress is tracked by block index (see useArticleProgress), which
+ * only starts once the converted HTML is actually in the DOM — the refs below
+ * are what tell it so.
  */
 export default function DocxDocumentView({
+  materialId,
   title,
   sourceUrl,
+  urlLocator,
   onClose,
 }: {
+  materialId: string;
   title: string;
   sourceUrl: string;
+  /** `?block=` — a resume link's own target, which takes precedence over this
+   * device's saved position (see buildResumeHref). */
+  urlLocator?: Locator;
   onClose?: () => void;
 }) {
   const theme = useReaderStore((s) => s.theme);
   const typography = useArticleTypographyStyle();
   const [html, setHtml] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const { scrollRef, contentRef, scrollElement, getPositionNow } = useArticleProgress({ materialId, urlLocator });
+  // Arrows/PageUp/PageDown/Space/Home/End scroll the document on desktop — see
+  // the hook; with no pages to turn, ←/→ move by a screenful.
+  useDocumentKeyboard({ scrollElement });
 
   useEffect(() => {
     let cancelled = false;
@@ -68,7 +86,7 @@ export default function DocxDocumentView({
       style={{ background: "var(--reader-bg)" }}
     >
       <ReaderHeader topBarHeightPx={TOP_BAR_HEIGHT_PX} railInsetPx={RAIL_INSET_PX} onClose={onClose} title={title} />
-      <div className="flex-1 min-h-0 overflow-auto" style={{ paddingTop: TOP_BAR_HEIGHT_PX }}>
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto" style={{ paddingTop: TOP_BAR_HEIGHT_PX }}>
         <div className="mx-auto px-6 py-10" style={{ maxWidth: typography.maxWidth }}>
           {error ? (
             <p className="text-sm text-[var(--reader-text-muted)]">This document couldn&apos;t be opened.</p>
@@ -76,10 +94,17 @@ export default function DocxDocumentView({
             <Loader confined />
           ) : (
             <div
+              ref={contentRef}
               className="reader-article select-text"
               style={{ fontFamily: typography.fontFamily, fontSize: typography.fontSize, lineHeight: typography.lineHeight }}
               dangerouslySetInnerHTML={{ __html: html }}
             />
+          )}
+          {/* Only once the conversion has actually produced something to reach
+              the end *of* — the bottom of the scroll is the end of the
+              document here, same as ArticleDocumentView. */}
+          {html !== null && !error && (
+            <DocumentEndPanel materialId={materialId} title={title} getCurrentPosition={getPositionNow} />
           )}
         </div>
       </div>

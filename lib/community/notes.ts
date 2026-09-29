@@ -1,6 +1,8 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import type { Database } from "@/lib/supabase/database.types";
 import type { AnnotationRange, Note, NoteContent } from "@/lib/api/types";
+import { getBookmarkedIds } from "@/lib/bookmarks/store";
+import { toAvatar, type Avatar } from "@/lib/avatar/avatar";
 
 // Backed by `posts` (migrations/20260919_topics_and_posts.sql), not `notes`
 // — kept under the old name so the notes-reading routes (which only ever do
@@ -40,27 +42,39 @@ function contentFromRow(row: NoteRow): NoteContent {
   return { kind: "text", text: content.text! };
 }
 
-type AuthorMeta = { pseudonym: string; city: string | null };
+type AuthorMeta = { pseudonym: string; city: string | null; avatar: Avatar | null };
 
 /** snake_case posts row -> camelCase Note (api-spec.md's Shared Types,
  * unchanged even though the row is now a posts row). Author metadata,
- * topic name, and reactedByMe are looked up separately (no typed FK
- * embedding — see the helpers below) and passed in rather than queried
- * per-row, so a list of N notes costs a few extra queries, not N per note.
- * materialId/ranges are null only for a book-less discussion post — every
- * book-anchored note/reply this endpoint family reads always has both. */
-export function toNote(row: NoteRow, author: AuthorMeta, reactedByMe: boolean, topics: TopicRef[]): Note {
+ * topic name, and the caller's own reacted/bookmarked flags are looked up
+ * separately (no typed FK embedding — see the helpers below) and passed in
+ * rather than queried per-row, so a list of N notes costs a few extra
+ * queries, not N per note. materialId/ranges are null only for a book-less
+ * discussion post — every book-anchored note/reply this endpoint family
+ * reads always has both.
+ *
+ * The two per-caller flags travel as one object rather than two positional
+ * booleans: they're the same type, adjacent, and mean opposite things, so a
+ * transposed pair would type-check cleanly and silently render every note
+ * saved-but-not-reacted. */
+export function toNote(
+  row: NoteRow,
+  author: AuthorMeta,
+  flags: { reactedByMe: boolean; bookmarkedByMe: boolean },
+  topics: TopicRef[]
+): Note {
   return {
     id: row.id,
     materialId: row.material_id,
-    author: { readerId: row.reader_id, pseudonym: author.pseudonym, city: author.city },
+    author: { readerId: row.reader_id, ...author },
     ranges: (row.ranges as AnnotationRange[] | null) ?? [],
     parentId: row.parent_id,
     replyingToId: row.replying_to_id,
     content: contentFromRow(row),
     visibility: row.visibility,
     reactionCount: row.reaction_count,
-    reactedByMe,
+    reactedByMe: flags.reactedByMe,
+    bookmarkedByMe: flags.bookmarkedByMe,
     topicName: topics[0]?.name ?? null,
     topicSlug: topics[0]?.slug ?? null,
     topicNames: topics.map((t) => t.name),
@@ -81,8 +95,9 @@ export function visibleToFilter(readerId: string | undefined): string {
 export async function getAuthorsByReaderId(readerIds: string[]): Promise<Map<string, AuthorMeta>> {
   const unique = Array.from(new Set(readerIds));
   if (unique.length === 0) return new Map();
-  const { data } = await getSupabaseAdminClient().from("readers").select("id, pseudonym, city").in("id", unique);
-  return new Map((data ?? []).map((r) => [r.id, { pseudonym: r.pseudonym, city: r.city }]));
+  const { data } = await getSupabaseAdminClient().from("readers").select("id, pseudonym, city, avatar_color, avatar_url")
+    .in("id", unique);
+  return new Map((data ?? []).map((r) => [r.id, { pseudonym: r.pseudonym, city: r.city, avatar: toAvatar(r) }]));
 }
 
 export type TopicRef = { name: string; slug: string };
@@ -134,21 +149,26 @@ export async function getTopicNamesForPosts(postIds: string[]): Promise<Map<stri
 export async function getReactedNoteIds(readerId: string | undefined, noteIds: string[]): Promise<Set<string>> {
   if (!readerId || noteIds.length === 0) return new Set();
   const { data } = await getSupabaseAdminClient()
-    .from("post_reactions")
-    .select("post_id")
+    .from("reactions")
+    .select("target_id")
+    .eq("target_type", "post")
     .eq("reader_id", readerId)
-    .in("post_id", noteIds);
-  return new Set((data ?? []).map((r) => r.post_id));
+    .in("target_id", noteIds);
+  return new Set((data ?? []).map((r) => r.target_id));
 }
 
 /** Batch-hydrates a set of note rows into full Note[] — one author query,
- * one reactions query, and one topic-name query for the whole batch, in the
- * same reply/thread hydration shape every notes-reading route needs. */
+ * one reactions query, one bookmarks query, and one topic-name query for
+ * the whole batch, in the same reply/thread hydration shape every
+ * notes-reading route needs. */
 export async function hydrateNotes(rows: NoteRow[], callerId: string | undefined): Promise<Note[]> {
   if (rows.length === 0) return [];
-  const [authors, reacted, topicNamesByPost, defaultTopicNames] = await Promise.all([
+  const [authors, reacted, bookmarked, topicNamesByPost, defaultTopicNames] = await Promise.all([
     getAuthorsByReaderId(rows.map((r) => r.reader_id)),
     getReactedNoteIds(callerId, rows.map((r) => r.id)),
+    // Same batch-per-page shape as getReactedNoteIds above, and likewise a
+    // no-op empty set for a signed-out caller.
+    getBookmarkedIds(callerId, "post", rows.map((r) => r.id)),
     getTopicNamesForPosts(rows.map((r) => r.id)),
     getTopicNamesByIds(rows.map((r) => r.topic_id)),
   ]);
@@ -160,7 +180,12 @@ export async function hydrateNotes(rows: NoteRow[], callerId: string | undefined
     // default has no displayable name of its own.
     const fallbackTopic = defaultTopicNames.get(row.topic_id);
     const topics = topicNamesByPost.get(row.id) ?? (fallbackTopic ? [fallbackTopic] : []);
-    return toNote(row, authors.get(row.reader_id) ?? { pseudonym: "Unknown", city: null }, reacted.has(row.id), topics);
+    return toNote(
+      row,
+      authors.get(row.reader_id) ?? { pseudonym: "Unknown", city: null, avatar: null },
+      { reactedByMe: reacted.has(row.id), bookmarkedByMe: bookmarked.has(row.id) },
+      topics
+    );
   });
 }
 

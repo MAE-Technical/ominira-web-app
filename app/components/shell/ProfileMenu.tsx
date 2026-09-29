@@ -9,7 +9,7 @@ import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 import { useProfile } from "@/lib/auth/useProfile";
 import { useLogout } from "@/lib/auth/useLogout";
 import { pseudonymToSlug } from "@/lib/reader/profileSlug";
-import { avatarColor, avatarInitial } from "@/lib/reader/authorDisplay";
+import ReaderAvatar from "@/app/components/shared/ReaderAvatar";
 import { useReaderStore } from "@/stores/reader-store";
 
 // AppHeader's avatar trigger + account dropdown — replaces the header's old
@@ -34,7 +34,7 @@ export default function ProfileMenu() {
           <button
             type="button"
             aria-label="Account menu"
-            className="flex h-10 flex-none cursor-pointer items-center gap-1.5 rounded-sm px-2.5 text-[13px] font-semibold text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
+            className="flex h-10 flex-none cursor-pointer items-center gap-1.5 rounded-sm px-2.5 text-[13px] font-semibold text-[var(--reader-text-muted)] hover:text-[var(--reader-text)]"
           >
             <UserCircle size={18} />
             Account
@@ -75,14 +75,9 @@ export default function ProfileMenu() {
         <button
           type="button"
           aria-label="Account menu"
-          className="flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-full border-none p-0"
+          className="flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-full border-none p-0"
         >
-          <span
-            style={{ background: avatarColor(reader.pseudonym) }}
-            className="flex h-full w-full items-center justify-center rounded-full text-sm font-bold text-white"
-          >
-            {avatarInitial(reader.pseudonym)}
-          </span>
+          <ReaderAvatar pseudonym={reader.pseudonym} avatar={reader.avatar} size={32} />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -96,12 +91,7 @@ export default function ProfileMenu() {
             onClick={() => setOpen(false)}
             className="flex items-center gap-2.5 border-b border-[var(--reader-border)] px-2.5 py-2.5 no-underline hover:bg-[var(--reader-surface-hover)]"
           >
-            <span
-              style={{ background: avatarColor(reader.pseudonym) }}
-              className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-sm font-semibold text-white"
-            >
-              {avatarInitial(reader.pseudonym)}
-            </span>
+            <ReaderAvatar pseudonym={reader.pseudonym} avatar={reader.avatar} size={24} />
             <div className="min-w-0">
               <div className="truncate text-[13px] font-bold text-[var(--reader-text)]">{reader.pseudonym}</div>
               <div className="text-xs font-semibold text-[var(--reader-text-muted)]">View profile</div>
@@ -112,21 +102,18 @@ export default function ProfileMenu() {
             <Link
               href="/account"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 rounded-sm px-2.5 py-2.5 text-[12px] font-semibold text-[var(--reader-text)] no-underline hover:bg-[var(--reader-surface-hover)]"
+              className="flex items-center gap-2.5 rounded-sm px-2.5 py-2.5 text-[13px] font-bold text-[var(--reader-text-muted)] no-underline hover:bg-[var(--reader-surface-hover)]"
             >
               <Settings size={16} />
-              Account
+              Account settings
             </Link>
             <button
               type="button"
               onClick={() => setTheme(isDark ? "light" : "dark")}
-              className="flex w-full cursor-pointer items-center gap-2.5 rounded-sm border-none bg-transparent px-2.5 py-2.5 text-left text-[12px] font-semibold text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
+              className="flex w-full cursor-pointer items-center gap-2.5 rounded-sm border-none bg-transparent px-2.5 py-2.5 text-left text-[13px] font-bold text-[var(--reader-text-muted)] hover:bg-[var(--reader-surface-hover)]"
             >
-              {isDark ? <Moon size={16} /> : <Sun size={16} />}
-              {isDark ? "Dark theme" : "Light theme"}
-              <span className="ml-auto text-[11px] font-semibold text-[var(--reader-text-muted)]">
-                {isDark ? "On" : "Off"}
-              </span>
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              {isDark ? "Light mode" : "Dark mode"}
             </button>
             <div className="my-1.5 h-px bg-[var(--reader-border)]" />
             <button
@@ -136,7 +123,7 @@ export default function ProfileMenu() {
                 logout.mutate(undefined, { onSuccess: () => router.push("/") });
               }}
               disabled={logout.isPending}
-              className="flex w-full cursor-pointer items-center gap-2.5 rounded-sm border-none bg-transparent px-2.5 py-2.5 text-left text-[12px] font-semibold text-[var(--reader-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full cursor-pointer items-center gap-2.5 rounded-sm border-none bg-transparent px-2.5 py-2.5 text-left text-[13px] font-bold text-[var(--reader-accent)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <LogOut size={16} />
               {logout.isPending ? "Logging out…" : "Log out"}

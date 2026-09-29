@@ -28,10 +28,11 @@ export async function GET(request: Request) {
       if (!material) return null;
       return {
         material: toMaterialSummary(material),
-        sectionId: entry.sectionId,
-        passageIndex: entry.passageIndex,
+        locator: entry.locator,
+        mode: entry.mode,
         audioTimeMs: entry.audioTimeMs,
         progressPercent: entry.progressPercent,
+        finishedAt: entry.finishedAt,
         updatedAt: entry.updatedAt,
       };
     })

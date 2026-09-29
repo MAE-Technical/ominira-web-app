@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Reader from "@/app/components/reader/Reader";
-import PdfDocumentView from "@/app/components/reader/PdfDocumentView";
+import PdfDocumentLoader from "@/app/components/reader/PdfDocumentLoader";
 import DocxDocumentView from "@/app/components/reader/DocxDocumentView";
 import ArticleDocumentView from "@/app/components/reader/ArticleDocumentView";
 import { readerPageMetadata, loadReaderPageMaterial } from "@/lib/reader/readerPageData";
+import { locatorFromQuery } from "@/lib/reader/locator";
 
 /**
  * The real reader page every in-app entry point (ReaderLink.tsx) actually
@@ -39,6 +40,12 @@ export default async function ReaderPage({
     section?: string;
     passage?: string;
     passageIndex?: string;
+    // ?page=<n> (PDF) / ?block=<n> (DOCX, web article) — the same resume
+    // handoff ?section=&passageIndex= makes for an EPUB, in whichever
+    // addressing scheme the material's own viewer speaks. Built by
+    // buildResumeHref, parsed by locatorFromQuery.
+    page?: string;
+    block?: string;
     note?: string;
     noteId?: string;
     thread?: string;
@@ -46,18 +53,32 @@ export default async function ReaderPage({
   }>;
 }) {
   const { slug } = await params;
-  const { section, passage, passageIndex, note, noteId, thread, listen } = await searchParams;
+  const { section, passage, passageIndex, page, block, note, noteId, thread, listen } = await searchParams;
 
   const material = await loadReaderPageMaterial(slug, section);
 
+  const urlLocator = locatorFromQuery({ section, passageIndex, page, block });
+
   if (material.kind === "pdf") {
-    return <PdfDocumentView title={material.title} sourceUrl={material.sourceUrl} />;
+    return (
+      <PdfDocumentLoader materialId={material.materialId} title={material.title} sourceUrl={material.sourceUrl} urlLocator={urlLocator} />
+    );
   }
   if (material.kind === "docx") {
-    return <DocxDocumentView title={material.title} sourceUrl={material.sourceUrl} />;
+    return (
+      <DocxDocumentView materialId={material.materialId} title={material.title} sourceUrl={material.sourceUrl} urlLocator={urlLocator} />
+    );
   }
   if (material.kind === "webpage") {
-    return <ArticleDocumentView title={material.title} sourceUrl={material.sourceUrl} articleHtml={material.articleHtml} />;
+    return (
+      <ArticleDocumentView
+        materialId={material.materialId}
+        title={material.title}
+        sourceUrl={material.sourceUrl}
+        articleHtml={material.articleHtml}
+        urlLocator={urlLocator}
+      />
+    );
   }
 
   return (

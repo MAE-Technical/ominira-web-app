@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api/client";
 import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 import { notificationKeys } from "@/lib/notifications/queryKeys";
 import type { NotificationKind } from "@/lib/notifications/types";
+import type { Avatar } from "@/lib/avatar/avatar";
 
 export type NotificationItem = {
   id: string;
@@ -14,6 +15,14 @@ export type NotificationItem = {
   url: string;
   read: boolean;
   createdAt: string;
+  /** The reader who triggered it — their *current* pseudonym, resolved per
+   * request (null for broadcasts/digests, and for rows written before
+   * actor_reader_id existed). */
+  actorPseudonym: string | null;
+  actorAvatar: Avatar | null;
+  /** The reacted-to/replied-to text, frozen at notify time — quoted under
+   * the row. Null for voice notes and non-post notifications. */
+  snippet: string | null;
 };
 
 type NotificationsPage = { items: NotificationItem[]; nextCursor: string | null; unreadCount: number };

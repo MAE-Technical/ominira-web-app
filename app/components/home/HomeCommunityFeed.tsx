@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import NoResults from "@/app/components/shared/NoResults";
 import { useSearchParams } from "next/navigation";
 import SearchableAppPage from "@/app/components/shell/SearchableAppPage";
 import { communityFeedItemHref, useCommunityFeed, type CommunityFeedSort } from "@/lib/community/useCommunityFeed";
 import { useTopics } from "@/lib/community/useTopics";
 import { resolveBookThumbnailSrc } from "@/lib/materials/image";
 import FeaturedThisWeek from "@/app/components/shell/FeaturedThisWeek";
+import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 import HomeComposer from "./HomeComposer";
 import CategoryPills from "@/app/components/shell/CategoryPills";
 import HomeSortToggle from "./HomeSortToggle";
@@ -35,6 +37,7 @@ function NoteCardSkeleton() {
  * reacted first. Same page-composition shape as LibraryView (AppHeader,
  * then a page heading + a filter control, then the content). */
 export default function HomeCommunityFeed() {
+  const isAuthenticated = useIsAuthenticated();
   const [sort, setSort] = useState<CommunityFeedSort>("recent");
   const { data: topics } = useTopics();
   // The active filter lives in the URL (`?topic=<slug>`), same as Library's
@@ -58,7 +61,7 @@ export default function HomeCommunityFeed() {
       <FeaturedThisWeek />
 
       <div className="mt-1 mb-7">
-        <h1 className="m-0 font-serif text-2xl font-bold text-[var(--reader-text)]">Community posts</h1>
+        <h1 className="m-0 font-serif text-xl font-bold text-[var(--reader-text)]">Community posts</h1>
       </div>
 
       <div className="mb-10">
@@ -71,11 +74,15 @@ export default function HomeCommunityFeed() {
       </div>
 
       <div className="mx-auto max-w-[640px]">
-        <div className="mb-8">
-          <HomeComposer defaultTopicId={topicId} />
-        </div>
+        {isAuthenticated && (
+          <div className="mb-8">
+            <HomeComposer defaultTopicId={topicId} />
+          </div>
+        )}
 
-        <HomeSortToggle mode={sort} onChange={setSort} />
+        <div className="mb-3">
+          <HomeSortToggle mode={sort} onChange={setSort} />
+        </div>
 
         <div className="mt-0">
           {isLoading ? (
@@ -85,11 +92,14 @@ export default function HomeCommunityFeed() {
               ))}
             </div>
           ) : items.length === 0 ? (
-            <p className="mt-6 font-literata text-sm text-[var(--reader-text-muted)]">
-              {topicId
-                ? "Nothing here yet — be the first to share your thoughts on this topic."
-                : "No one's here yet in this view — try widening your filters, or start the thread yourself."}
-            </p>
+            <NoResults
+              className="mt-6 font-bold"
+              message={
+                topicId
+                  ? "Nothing here yet — be the first to share your thoughts on this topic."
+                  : "No one's here yet in this view — try widening your filters, or start the thread yourself."
+              }
+            />
           ) : (
             // One column of flat rows, each separated by its own bottom
             // border, at every width — no boxed/masonry treatment on desktop

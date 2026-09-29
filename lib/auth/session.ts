@@ -1,3 +1,4 @@
+import { recordActiveDay } from "@/lib/metrics/activeDays";
 import { getSupabaseAuthClient } from "@/lib/supabase/authClient";
 
 /**
@@ -6,7 +7,7 @@ import { getSupabaseAuthClient } from "@/lib/supabase/authClient";
  * (api-spec.md's Conventions); RLS policies (models-spec.md) are
  * defense-in-depth on top of it, not a substitute for it.
  */
-export async function getAuthenticatedReader(request: Request): Promise<{ readerId: string } | null> {
+export async function getAuthenticatedReader(request: Request): Promise<{ readerId: string; email: string | null } | null> {
   const header = request.headers.get("authorization") ?? request.headers.get("Authorization");
   if (!header?.startsWith("Bearer ")) return null;
   const token = header.slice("Bearer ".length).trim();
@@ -14,5 +15,17 @@ export async function getAuthenticatedReader(request: Request): Promise<{ reader
 
   const { data, error } = await getSupabaseAuthClient().auth.getUser(token);
   if (error || !data.user) return null;
-  return { readerId: data.user.id };
+  recordActiveDay(data.user.id);
+  return { readerId: data.user.id, email: data.user.email ?? null };
+}
+
+/**
+ * Whether this signed-in reader is an Ominira admin — their email is listed
+ * in the comma-separated `ADMIN_EMAILS` env var. Server-side only; decides
+ * admin upload limits (lib/materials/uploadLimits.ts).
+ */
+export function isAdminReader(reader: { email: string | null }): boolean {
+  if (!reader.email) return false;
+  const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase());
+  return admins.includes(reader.email.toLowerCase());
 }

@@ -5,7 +5,7 @@ import { useAudioStore } from "@/stores/audio-store";
 import { useReadingPositionStore } from "@/stores/reading-position-store";
 import { useNarrationStore } from "@/stores/narration-store";
 import { buildPassageIndex, buildSectionsById } from "@/lib/reader/sections";
-import { buildProgressShape, computeBookProgress } from "@/lib/reader/progress";
+import { buildEpubScale, locatorOfKind, locatorPercent, type Locator } from "@/lib/reader/locator";
 import { hasNarratableText } from "@/lib/audio/narrationText";
 import { buildNarrationIndex, type NarrationTarget } from "@/lib/audio/narrationIndex";
 import { createNarrationQueue, type NarrationQueue } from "@/lib/audio/narrationQueue";
@@ -110,15 +110,32 @@ export default function NarrationEngine() {
   const passageIndex = useMemo(() => (book ? buildPassageIndex(book.sections) : new Map()), [book]);
   const passageById = useCallback((id: string): Passage | undefined => passageIndex.get(id)?.passage, [passageIndex]);
   const narrationIndex = useMemo(() => (book ? buildNarrationIndex(book) : undefined), [book]);
-  const progressShape = useMemo(() => (book ? buildProgressShape(book) : null), [book]);
-  // Persisted alongside every position write below so reading-position-
-  // store's local mirror (and, once synced, the server's own
-  // CurrentReadingEntry.progressPercent) always reflects listen-mode
-  // progress too, not just plain reading's own useReadingProgress writes.
-  const progressPercentFor = useCallback(
-    (position: { sectionId: string; passageIndex: number }) =>
-      progressShape ? Math.round(computeBookProgress(progressShape, position) * 100) : 0,
-    [progressShape]
+  const progressScale = useMemo(() => (book ? buildEpubScale(book) : undefined), [book]);
+  /**
+   * Records where listening has got to, in the same one-record-per-material
+   * shape plain reading writes (stores/reading-position-store.ts) — so the
+   * local mirror, and once synced the server's own
+   * CurrentReadingEntry.progressPercent, reflect listen-mode progress too,
+   * not just useReadingProgress's own writes.
+   *
+   * `mode: "listen"` is what tells every resume affordance downstream that
+   * this reader left by the listening door and should be sent back through
+   * it; `audioTimeMs` refines the position further *within* the located
+   * passage, which is why it's carried alongside the locator rather than
+   * being part of it.
+   */
+  const persistListenPosition = useCallback(
+    (sectionId: string, passageIndex: number, audioTimeMs: number) => {
+      if (!materialId) return;
+      const locator: Locator = { kind: "epub", sectionId, passageIndex };
+      setPosition(materialId, {
+        locator,
+        mode: "listen",
+        audioTimeMs,
+        progressPercent: locatorPercent(progressScale, locator),
+      });
+    },
+    [materialId, setPosition, progressScale]
   );
 
   // The one piece of state everything else in this file is derived from or
@@ -234,10 +251,7 @@ export default function NarrationEngine() {
       }
       const section = sectionsById.get(next.sectionId);
       const passageIndex = section?.passages.findIndex((p) => p.id === next.passageId) ?? -1;
-      if (passageIndex >= 0) {
-        const position = { sectionId: next.sectionId, passageIndex, audioTimeMs: 0 };
-        setPosition(materialId, position, progressPercentFor(position));
-      }
+      if (passageIndex >= 0) persistListenPosition(next.sectionId, passageIndex, 0);
       setTarget(next);
       if (opts?.explicit) setExplicitJumpSeq((n) => n + 1);
       // Marks the new target's clip protected from eviction *synchronously*
@@ -252,7 +266,7 @@ export default function NarrationEngine() {
       // this is the fix for exactly the hang that produced.
       if (book) touchClip(book.slug, next.passageId, next.chunkIndex, voice);
     },
-    [materialId, sectionsById, setPosition, progressPercentFor, stopCurrentAudio, book, voice]
+    [materialId, sectionsById, persistListenPosition, stopCurrentAudio, book, voice]
   );
 
   // Resolves where to start once a book becomes "now playing" — resumes
@@ -283,7 +297,10 @@ export default function NarrationEngine() {
     const bookKey = `${book.slug}:${materialId}`;
     if (resumeResolvedForRef.current === bookKey) return;
     if (!narrationIndex) return;
-    const stored = getPosition(materialId);
+    // Only an EPUB locator can name a passage to resume narration from; a
+    // position saved by another format's viewer is simply not addressable
+    // here, and falls through to the book's first narratable passage below.
+    const stored = locatorOfKind(getPosition(materialId)?.locator, "epub");
     const storedSection = stored ? sectionsById.get(stored.sectionId) : undefined;
     const storedPassage = storedSection?.passages[stored?.passageIndex ?? -1];
     // Falls back to the book's actual first narratable passage — not
@@ -649,10 +666,7 @@ export default function NarrationEngine() {
   useEffect(() => {
     if (!book || !materialId || !isNarrating || !audioSection || !currentPlayingPassageId) return;
     const passageIndex = audioSection.passages.findIndex((p) => p.id === currentPlayingPassageId);
-    if (passageIndex >= 0) {
-      const position = { sectionId: audioSection.id, passageIndex, audioTimeMs: audioCurrentTimeMs };
-      setPosition(materialId, position, progressPercentFor(position));
-    }
+    if (passageIndex >= 0) persistListenPosition(audioSection.id, passageIndex, audioCurrentTimeMs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book?.id, materialId, isNarrating, currentPlayingPassageId, audioSection?.id]);
 

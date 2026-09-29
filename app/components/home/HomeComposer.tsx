@@ -2,9 +2,10 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Mic, Upload } from "lucide-react";
+import { PaperclipIcon, Mic } from "lucide-react";
 import { useProfile } from "@/lib/auth/useProfile";
-import { avatarColor, avatarInitial, comradeName } from "@/lib/reader/authorDisplay";
+import { comradeName } from "@/lib/reader/authorDisplay";
+import ReaderAvatar from "@/app/components/shared/ReaderAvatar";
 import { useTopics } from "@/lib/community/useTopics";
 import TopicPickerTrigger, { TopicChips } from "@/app/components/home/TopicPicker";
 import LinkPreviewCard from "@/app/components/shared/LinkPreviewCard";
@@ -13,7 +14,7 @@ import { useUploadBook } from "@/lib/materials/useUploadBook";
 import { useAttachmentMetadataEditor } from "@/lib/materials/useAttachmentMetadataEditor";
 import { ACCEPTED_FILE_TYPES, MAX_FILE_SIZE_BYTES, MAX_FILES, formatBytes } from "@/lib/materials/uploadLimits";
 import { apiFetch, errorMessage } from "@/lib/api/client";
-import AttachmentPreviewCard from "@/app/components/materials/AttachmentPreviewCard";
+import DocumentPreviewCard from "@/app/components/materials/DocumentPreviewCard";
 import { useCreateNote } from "@/lib/community/useNoteMutations";
 
 // Matches NoteComposer's own `sm:` breakpoint decision (see that
@@ -30,7 +31,7 @@ const MOBILE_TEXTAREA_MAX_HEIGHT = 320;
 const MOBILE_TEXTAREA_MIN_HEIGHT = 120;
 
 // Accepted formats/caps live in lib/materials/uploadLimits.ts, shared with
-// the library's AddBookButton — "Add a book" is really "attach files",
+// the library's AddBookModal — "Add a book" is really "attach files",
 // already stretched to cover whatever lib/materials/useUploadBook's
 // pipeline can parse: EPUB and PDF fully, DOCX metadata-only (title/author
 // if the file has them set — see lib/book/docxParser.ts's own doc comment
@@ -54,10 +55,11 @@ type FileAttachment = {
   status: "parsing" | "uploading" | "done" | "error";
   error?: string;
   materialId?: string;
-  // Only set when a real cover image is actually available (today: PDF's
-  // rasterized first page — see useUploadBook's onThumbnail). EPUB and DOCX
-  // never produce one, so the preview shows no cover at all for those
-  // rather than a generic placeholder icon.
+  // Only set when a real cover image is actually available: PDF's
+  // rasterized first page, or an EPUB's own declared cover (see
+  // useUploadBook's onThumbnail). DOCX has no cover concept, and not every
+  // EPUB declares one — those just fall back to DocumentPreviewCard's own
+  // generic placeholder icon instead of a real cover.
   coverUrl?: string;
   // Seeded from useUploadBook's `onMetadata` guess once parsing finishes —
   // "" (and the input showing `file.name` as a placeholder) until then. The
@@ -141,8 +143,6 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
   const createPost = useCreateNote(attachedMaterialId);
 
   const displayName = comradeName(profile?.pseudonym ?? "Reader");
-  const initial = avatarInitial(displayName);
-  const color = avatarColor(displayName);
 
   // Every distinct link currently in the draft gets its own live preview
   // (capped, see extractLinks) — same detection the posted note will
@@ -332,12 +332,7 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
         }}
         className="flex w-full cursor-text items-center gap-2.5 rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] px-3.5 py-4.5 text-left"
       >
-        <span
-          style={{ background: color }}
-          className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-[13px] font-bold text-white"
-        >
-          {initial}
-        </span>
+        <ReaderAvatar pseudonym={profile?.pseudonym ?? "Reader"} avatar={profile?.avatar} size={32} />
         <span className="flex-1 text-[13px] font-medium text-[var(--reader-text-muted)]">Share a thought</span>
         <Mic size={17} className="text-[var(--reader-text-subtle)]" />
       </button>
@@ -360,7 +355,7 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
   const filePreviews = files.length > 0 && (
     <div className="flex flex-col gap-2">
       {files.map((attachment, i) => (
-        <AttachmentPreviewCard
+        <DocumentPreviewCard
           key={`${attachment.file.name}-${i}`}
           file={attachment.file}
           status={attachment.status}
@@ -420,12 +415,7 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
   const body = (
     <>
       <div className="flex flex-none items-center gap-2.5 border-b border-[var(--reader-border)] px-4 py-3">
-        <span
-          style={{ background: color }}
-          className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-[12px] font-bold text-white"
-        >
-          {initial}
-        </span>
+        <ReaderAvatar pseudonym={profile?.pseudonym ?? "Reader"} avatar={profile?.avatar} size={28} />
         <span className="text-[13px] font-semibold text-[var(--reader-text)]">{displayName}</span>
       </div>
       {createPost.isError && (
@@ -446,8 +436,8 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
               minHeight: isDesktop ? 70 : MOBILE_TEXTAREA_MIN_HEIGHT,
               maxHeight: isDesktop ? DESKTOP_TEXTAREA_MAX_HEIGHT : MOBILE_TEXTAREA_MAX_HEIGHT,
             }}
-            className={`w-full resize-none overflow-y-auto border-none bg-transparent outline-none placeholder:text-[var(--reader-text-subtle)] ${
-              isDesktop ? "text-[13px] font-medium text-[var(--reader-text)]" : "text-base leading-relaxed text-[var(--reader-text)]"
+            className={`w-full resize-none overflow-y-auto border-none bg-transparent outline-none placeholder:text-[var(--reader-text-muted)] ${
+              isDesktop ? "text-[13px] font-semibold text-[var(--reader-text)]" : "text-base leading-relaxed text-[var(--reader-text)]"
             }`}
           />
 
@@ -463,11 +453,11 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={files.length >= MAX_FILES}
-            aria-label="Add files"
-            title={files.length > 0 ? `Add files (${files.length}/${MAX_FILES})` : "Add files"}
+            aria-label="Add document"
+            title={files.length > 0 ? `Add document (${files.length}/${MAX_FILES})` : "Add document"}
             className="relative flex h-8 w-8 flex-none cursor-pointer items-center justify-center rounded-full text-[var(--reader-text-muted)] hover:bg-[var(--reader-surface-hover)] disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
           >
-            <Upload size={17} />
+            <PaperclipIcon size={17} />
             {files.length > 0 && (
               <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-[var(--reader-surface)] px-1 text-[9px] font-bold leading-[13px] text-[var(--reader-text-subtle)]">
                 {files.length}/{MAX_FILES}

@@ -132,7 +132,7 @@ export default function LinkPreviewCard({ url, dismissible, onDismiss }: { url: 
               <ArrowUpRight
                 aria-hidden="true"
                 size={16}
-                className="text-[var(--color-app-text-muted)] opacity-0 transition-opacity group-hover:opacity-100"
+                className="text-[var(--color-app-text-muted)] opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
               />
             )}
           </div>

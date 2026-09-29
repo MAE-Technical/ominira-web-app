@@ -3,7 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Tag, X } from "lucide-react";
-import type { Topic } from "@/lib/community/useTopics";
+
+/**
+ * The minimal shape either caller needs — community topics
+ * (lib/community/useTopics.ts's `Topic`, which also carries `slug`/
+ * `post_count`) or the library composer's plain category strings
+ * (AddBookModal maps each one to `{ id: category, name: category }`, a
+ * category being its own identifier). Both structurally satisfy this, so
+ * one picker UI serves two different underlying concepts without either
+ * caller reimplementing the chips/popover interaction — see AddBookModal's
+ * own doc comment for why topics and categories stay separate data even
+ * though they now share this one picker.
+ */
+export type PickableItem = { id: string; name: string };
 
 /**
  * `selectedIds`'s own order is the only place "which topic is the default"
@@ -14,9 +26,13 @@ import type { Topic } from "@/lib/community/useTopics";
  * the current default promotes whichever was picked next. That's what the
  * "Default" badge on the first chip is for — it has to stay legible which
  * one a reader is about to bump into that role before they remove it.
+ *
+ * Callers with no such default concept (the category picker) just never
+ * read anything into that ordering — it's harmless, not meaningful, for
+ * them.
  */
-function resolveSelectedTopics(topics: Topic[], selectedIds: string[]): Topic[] {
-  return selectedIds.map((id) => topics.find((t) => t.id === id)).filter((t): t is Topic => Boolean(t));
+function resolveSelectedTopics(topics: PickableItem[], selectedIds: string[]): PickableItem[] {
+  return selectedIds.map((id) => topics.find((t) => t.id === id)).filter((t): t is PickableItem => Boolean(t));
 }
 
 /**
@@ -31,7 +47,7 @@ export function TopicChips({
   selectedIds,
   onChange,
 }: {
-  topics: Topic[];
+  topics: PickableItem[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
 }) {
@@ -52,6 +68,7 @@ export function TopicChips({
           {/* {i === 0 && <span className="text-[9px] font-bold uppercase tracking-wide text-brand-500">Current ·</span>} */}
           {topic.name}
           <button
+            type="button"
             onClick={() => onChange(selectedIds.filter((id) => id !== topic.id))}
             aria-label={`Remove ${topic.name}`}
             className="flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full text-current opacity-60 hover:opacity-100"
@@ -77,7 +94,7 @@ export default function TopicPickerTrigger({
   selectedIds,
   onChange,
 }: {
-  topics: Topic[];
+  topics: PickableItem[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
 }) {
@@ -117,6 +134,7 @@ export default function TopicPickerTrigger({
   return (
     <div ref={containerRef} className="relative">
       <button
+        type="button"
         ref={triggerRef}
         onClick={() => (open ? setOpen(false) : openPopover())}
         className="flex h-[26px] flex-none cursor-pointer items-center gap-1 rounded-full border border-dashed border-[var(--reader-border)] px-2.5 text-[12px] font-bold text-[var(--reader-text-muted)] hover:bg-[var(--reader-surface-hover)]"
@@ -144,6 +162,7 @@ export default function TopicPickerTrigger({
                 Tag every topic this fits — the first one picked is the default it posts under.
               </p> */}
               <button
+                type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close"
                 className="flex h-5 w-5 flex-none cursor-pointer items-center justify-center rounded-full text-[var(--reader-text-subtle)] hover:bg-[var(--reader-surface-hover)]"
@@ -156,6 +175,7 @@ export default function TopicPickerTrigger({
                 const active = selectedIds.includes(topic.id);
                 return (
                   <button
+                    type="button"
                     key={topic.id}
                     onClick={() => toggle(topic.id)}
                     className="flex w-full cursor-pointer items-center justify-between gap-2 border-b border-[var(--reader-border)] px-3.5 py-2.5 text-left text-[12px] font-bold text-[var(--reader-text)] last:border-b-0 hover:bg-[var(--reader-surface-hover)]"

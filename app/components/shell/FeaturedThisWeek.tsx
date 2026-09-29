@@ -34,7 +34,7 @@ export default function FeaturedThisWeek() {
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {books!.map(({ material }) => (
-            <Link key={material.id} href={`/book/${material.slug}`} className="group block w-[150px] flex-none no-underline">
+            <Link key={material.id} href={`/library/${material.slug}`} className="group block w-[150px] flex-none no-underline">
               <div className="h-[225px] w-[150px] overflow-hidden rounded-sm border border-[var(--reader-border)] shadow-md">
                 <BookCover src={resolveBookCoverSrc(material)} alt={material.title} className="h-full w-full" />
               </div>

@@ -33,13 +33,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ mate
 }
 
 /**
- * A reader editing their own upload's title/author — the same "reader can
- * always fix a bad auto-detected guess" affordance the attachment preview
- * in HomeComposer/AddBookButton exposes inline (lib/materials/
- * useUploadBook.ts's `onMetadata` guess is only ever a starting point, not
- * the final word). Same ownership check as DELETE below: only the reader
- * who uploaded this material may edit it — never the editorial catalog's
- * `PATCH /api/admin/materials/[materialId]`, which has no such restriction.
+ * A reader editing their own upload's title/author/visibility/categories —
+ * the same "reader can always fix a bad auto-detected guess" affordance the
+ * attachment preview in HomeComposer/AddBookModal exposes inline
+ * (lib/materials/useUploadBook.ts's `onMetadata` guess is only ever a
+ * starting point, not the final word). `visibility` and `categories` cover
+ * the composer's per-book Private/Share-with-everyone pill and category tags
+ * (library-contribution-ux-spec.md Step 4) — `visibility` is the same field
+ * useUploadBook's initial upload POST sets; `categories` has no equivalent
+ * there (the upload route never touches it), so this route is the only place
+ * a reader upload's categories get set. Both are editable through this same
+ * queue-until-materialId-exists path (lib/materials/
+ * useAttachmentMetadataEditor.ts) rather than a parallel one. `categories`
+ * validation mirrors the admin route's own (`/api/admin/materials/
+ * [materialId]`) — plain strings, not required to come from the curated
+ * config list (lib/categories/config.ts), same as an admin can tag a book
+ * with an ad hoc category today. `coverSource` is the same reversible
+ * own/openlibrary/google switch admin's editor already exposes (see
+ * migrations/20260829_materials_cover_source.sql) — only ever meaningful
+ * once lib/materials/enrichMaterial.ts's background pass has actually
+ * populated an alternate to switch to; AddBookModal's edit mode only shows
+ * the picker once at least one alternate source exists. Same ownership check as DELETE
+ * below: only the reader who uploaded this material may edit it — never the
+ * editorial catalog's `PATCH /api/admin/materials/[materialId]`, which has
+ * no such restriction.
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ materialId: string }> }) {
   const reader = await getAuthenticatedReader(request);
@@ -52,9 +69,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return validationError("A JSON body is required.");
-  const { title, author } = body as { title?: unknown; author?: unknown };
+  const { title, author, visibility, categories, coverSource } = body as {
+    title?: unknown;
+    author?: unknown;
+    visibility?: unknown;
+    categories?: unknown;
+    coverSource?: unknown;
+  };
 
-  const update: { title?: string; author?: string } = {};
+  const update: {
+    title?: string;
+    author?: string;
+    visibility?: "personal" | "public";
+    categories?: string[];
+    cover_source?: "own" | "openlibrary" | "google";
+  } = {};
   if (title !== undefined) {
     if (typeof title !== "string" || !title.trim()) return validationError("A title is required.", "title");
     update.title = title.trim();
@@ -63,6 +92,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
     if (typeof author !== "string") return validationError("Author must be a string.", "author");
     update.author = author.trim();
   }
+  if (visibility !== undefined) {
+    if (visibility !== "personal" && visibility !== "public") {
+      return validationError("Visibility must be \"personal\" or \"public\".", "visibility");
+    }
+    update.visibility = visibility;
+  }
+  if (categories !== undefined) {
+    const valid =
+      Array.isArray(categories) &&
+      categories.length <= 30 &&
+      categories.every((c) => typeof c === "string" && c.trim().length > 0 && c.trim().length <= 80);
+    if (!valid) return validationError("Categories must be a list of short strings.", "categories");
+    update.categories = categories.map((c) => (c as string).trim());
+  }
+  if (coverSource !== undefined) {
+    if (coverSource !== "own" && coverSource !== "openlibrary" && coverSource !== "google") {
+      return validationError("coverSource must be \"own\", \"openlibrary\", or \"google\".", "coverSource");
+    }
+    update.cover_source = coverSource;
+  }
   if (Object.keys(update).length === 0) return validationError("Nothing to update.");
 
   const admin = getSupabaseAdminClient();
@@ -70,11 +119,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
     .from("materials")
     .update(update)
     .eq("id", row.id)
-    .select("id, slug, title, author")
+    .select("id, slug, title, author, cover_source")
     .single();
   if (error || !material) return notFound();
 
-  return NextResponse.json({ materialId: material.id, slug: material.slug, title: material.title, author: material.author });
+  return NextResponse.json({
+    materialId: material.id,
+    slug: material.slug,
+    title: material.title,
+    author: material.author,
+    coverSource: material.cover_source,
+  });
 }
 
 /**

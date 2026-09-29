@@ -5,3 +5,7 @@
 
 export { parseEpub, slugify } from "./document";
 export type { ParsedBook, ParseEpubOptions } from "./document";
+// Re-exported so a caller that already has `coverPath` (ParsedBook's own
+// field) can pull that one asset's raw bytes back out of the same archive
+// for a preview thumbnail, without re-parsing the whole EPUB a second time.
+export { ZipReader } from "./zip";

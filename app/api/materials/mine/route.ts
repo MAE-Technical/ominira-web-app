@@ -23,6 +23,7 @@ export async function GET(request: Request) {
     .from("materials")
     .select(MATERIAL_SUMMARY_COLUMNS)
     .eq("uploaded_by", reader.readerId)
+    .in("material_type", ["book", "pdf", "docx"])
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ items: [] });

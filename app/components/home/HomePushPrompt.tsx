@@ -5,6 +5,7 @@ import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 import { useWebPush } from "@/lib/push/useWebPush";
 import { PUSH_PROMPT_COOLDOWN_MS, PUSH_PROMPT_LONG_COOLDOWN_MS, usePushPromptStore } from "@/stores/push-prompt-store";
 import { PLATFORM_NAME } from "@/lib/config/platform";
+import AppIcon from "@/app/components/pwa/AppIcon";
 
 /**
  * The soft ask before the browser's own native permission dialog — styled
@@ -66,7 +67,7 @@ export default function HomePushPrompt() {
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-[280px] overflow-hidden rounded-2xl bg-white text-center shadow-xl">
         <div className="px-5 pt-6 pb-5">
-          <img src="/icons/icon-192.png" alt="" className="mx-auto mb-3 h-14 w-14 rounded-xl object-cover object-[center_20%]" />
+          <AppIcon size={56} className="mx-auto mb-3" />
           <p className="m-0 text-[15px] font-semibold leading-snug text-sand-950">
             &ldquo;{PLATFORM_NAME}&rdquo; Would Like to Send You Notifications
           </p>

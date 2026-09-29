@@ -2,35 +2,30 @@
 
 import { useEffect } from "react";
 import { useReaderStore } from "@/stores/reader-store";
+import { APP_BG, setThemeColor } from "@/lib/pwa/boot";
 
-// Mounted once at the root layout (alongside NarrationEngine/NowPlayingBar)
-// so the reader's light/dark preference — previously scoped to Reader.tsx's
-// own subtree — applies everywhere the --reader-* tokens are used, e.g. the
-// shared Loader shown on every route's loading.tsx, not just inside the
-// reader itself. `display: contents` keeps this wrapper out of the layout
-// box tree entirely; only the data-reader-theme attribute (and the CSS
-// custom properties it scopes) is what actually does anything here.
+// Mounted once at the root layout. The theme itself is put on <html> by
+// lib/pwa/boot.ts's inline <head> script before the first paint, straight
+// from the persisted reader prefs — every --reader-* token (and html/body's
+// own background, globals.css) cascades from there. This component only
+// keeps <html> in step when the reader toggles the theme afterwards.
+//
+// It deliberately does NOT wrap children in its own data-reader-theme div
+// or write the store's pre-rehydration value anywhere: before rehydrate()
+// the store holds the "light" default, and scoping that onto the tree (or
+// onto <html>) was exactly what flashed light over a dark launch.
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const theme = useReaderStore((s) => s.theme);
-
   useEffect(() => {
+    const unsubscribe = useReaderStore.subscribe((state, prev) => {
+      if (state.theme === prev.theme) return;
+      const root = document.documentElement;
+      root.setAttribute("data-reader-theme", state.theme);
+      // The launch splash owns the chrome colour until it fades out.
+      if (!root.hasAttribute("data-splash")) setThemeColor(APP_BG[state.theme]);
+    });
     useReaderStore.persist.rehydrate();
+    return unsubscribe;
   }, []);
 
-  // Custom properties only cascade to descendants, and <html>/<body> are
-  // ANCESTORS of this div — so html/body's own background (globals.css)
-  // could never see --reader-bg through the div's attribute alone. Setting
-  // it on the root element too closes that gap: anywhere the shell's own
-  // background doesn't fully cover the viewport (overscroll bounce, a
-  // short/uncovered page) now shows the right theme's canvas instead of
-  // always falling back to the fixed light cream.
-  useEffect(() => {
-    document.documentElement.setAttribute("data-reader-theme", theme);
-  }, [theme]);
-
-  return (
-    <div data-reader-theme={theme} className="contents">
-      {children}
-    </div>
-  );
+  return children;
 }

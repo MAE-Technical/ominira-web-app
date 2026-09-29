@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, type ReactElement, useState } from "react";
+import { memo, type ReactElement, type ReactNode, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { ImagePassageBlock, MarkedText, PassageText, type NoteLookup } from "./PassageContent";
 import type { BookDocument, Passage, Section, TableCell } from "@/lib/book/schema";
@@ -65,6 +65,11 @@ type BookContentProps = {
    * narration — critical on mobile where the per-paragraph play control is
    * hidden (see globals.css). */
   trackNarrationWords?: boolean;
+  /** Rendered at the very bottom of the *last* spine section's content — the
+   * end of the book, where DocumentEndPanel lives (Reader.tsx builds it). A
+   * node rather than a render prop, and memoized by the caller, so it doesn't
+   * defeat this component's own memo() on every parent render. */
+  endSlot?: ReactNode;
   /** Whether the active paragraph control represents pause rather than
    * play. This only flips on play/pause, nowhere near the per-word timing
    * frequency that would defeat this component's memoization. */
@@ -117,8 +122,10 @@ const BookContent = memo(function BookContent({
   currentPlayingPassageId,
   trackNarrationWords,
   isNarrationPlaying,
+  endSlot,
 }: BookContentProps) {
   const firstSectionId = orderedSections[0]?.id;
+  const lastSectionId = orderedSections[orderedSections.length - 1]?.id;
   const section = orderedSections[activeIndex];
   const [revealedPassageId, setRevealedPassageId] = useState<string | null>(null);
 
@@ -563,6 +570,8 @@ const BookContent = memo(function BookContent({
                 </div>
               ))
             : passageNodes}
+
+          {section.id === lastSectionId && endSlot}
         </div>
       </div>
 

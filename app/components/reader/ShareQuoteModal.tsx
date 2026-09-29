@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Download, Share, X } from "lucide-react";
 import { domToBlob } from "modern-screenshot";
 import { PLATFORM_HOST, PLATFORM_NAME } from "@/lib/config/platform";
+import { SPLASH_MARK } from "@/lib/config/brand-assets";
 
 type Props = {
   quote: string;
@@ -166,9 +167,9 @@ export default function ShareQuoteModal({ quote, author, bookTitle, onClose }: P
                 glance in a social feed thumbnail, not just up close. */}
             <div aria-hidden="true" className="flex flex-none items-center gap-2.5 pt-5">
               <img
-                src="/icons/source/mark-tight-transparent.png"
+                src={SPLASH_MARK.light}
                 alt=""
-                width={38}
+                width={32}
                 height={31}
                 className="h-[31px] w-auto"
               />

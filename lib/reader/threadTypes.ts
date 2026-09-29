@@ -38,4 +38,10 @@ export type ThreadActions = {
   saveEdit: (noteId: string, content: NoteContent, visibility: NoteVisibility) => void;
   delete: (noteId: string) => void;
   toggleReaction: (noteId: string) => void;
+  /** Save/unsave this post (migrations/20261003_bookmarks.sql). Sits
+   * beside toggleReaction rather than being reached directly from the card
+   * for the same reason every other write here does: one bundled prop, and
+   * one place (useThreadInteraction) that binds the thread's own
+   * materialId into each mutation. */
+  toggleBookmark: (noteId: string) => void;
 };

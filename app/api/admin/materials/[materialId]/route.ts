@@ -11,6 +11,7 @@ const UpdateMaterialSchema = z.object({
   language: z.string().trim().max(80).nullable().optional(),
   materialType: z.string().trim().min(1).max(80).optional(),
   status: z.enum(["published", "unpublished"]).optional(),
+  visibility: z.enum(["personal", "public"]).optional(),
   publishedYear: z.number().int().min(0).max(3000).nullable().optional(),
   pageCountEstimate: z.number().int().min(1).max(100_000).nullable().optional(),
   categories: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
@@ -36,6 +37,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
   // materials table stores that state as "draft". Keep the API vocabulary
   // user-facing without sending a value rejected by the database check.
   if (input.status !== undefined) update.status = input.status === "unpublished" ? "draft" : "published";
+  if (input.visibility !== undefined) update.visibility = input.visibility;
   if (input.publishedYear !== undefined) update.published_year = input.publishedYear;
   if (input.pageCountEstimate !== undefined) update.page_count_estimate = input.pageCountEstimate;
   if (input.categories !== undefined) update.categories = input.categories;

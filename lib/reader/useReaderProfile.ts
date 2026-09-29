@@ -5,15 +5,12 @@ import { apiFetch } from "@/lib/api/client";
 import { useSessionStore } from "@/stores/session-store";
 import type { FeedItem } from "@/lib/community/feed";
 import type { MaterialSummary } from "@/lib/api/types";
+import type { Avatar } from "@/lib/avatar/avatar";
 
 export type ReaderProfileStats = { notes: number; reading: number; reactions: number };
 
 export type ReaderProfileCurrentlyReading = {
-  material: Pick<
-    MaterialSummary,
-    | "id" | "slug" | "title" | "author" | "cover" | "thumbnail"
-    | "googleCoverUrl" | "googleThumbnailUrl" | "openlibraryCoverUrl" | "openlibraryThumbnailUrl" | "coverSource"
-  >;
+  material: MaterialSummary;
   /** Only populated for `isSelf` — see lib/reader/profile.ts's own doc
    * comment on why a visitor never gets someone else's exact progress. */
   progressPercent: number | null;
@@ -35,12 +32,20 @@ export type ReaderProfileHighlight = {
  * see ReaderProfileView.
  */
 export type ReaderProfilePage = {
-  reader: { id: string; pseudonym: string; city: string | null; country: string | null; joinedAt: string };
+  reader: {
+    id: string;
+    pseudonym: string;
+    avatar: Avatar;
+    city: string | null;
+    country: string | null;
+    joinedAt: string;
+  };
   isSelf: boolean;
   stats: ReaderProfileStats;
   currentlyReading: ReaderProfileCurrentlyReading[];
   publicNotes: FeedItem[];
   highlights: ReaderProfileHighlight[] | null;
+  contributions: MaterialSummary[];
 };
 
 /** `GET /api/readers/{slug}`. Public — works signed out — but its response

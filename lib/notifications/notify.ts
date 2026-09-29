@@ -13,6 +13,12 @@ export type NotifyPayload = {
   tag?: string;
   icon?: string;
   badge?: string;
+  // In-app-only enrichment (Notifications page): who triggered this, and a
+  // frozen copy of the text it was about. Neither travels in the push
+  // payload — a push only ever shows title/body — so they're written to the
+  // `notifications` row and dropped before sendToReader.
+  actorReaderId?: string;
+  snippet?: string | null;
 };
 
 // The one place a reader-targeted event becomes both an in-app row and a
@@ -22,14 +28,17 @@ export type NotifyPayload = {
 // awaited into an API response, same spirit as lib/push/send.ts.
 export async function notifyReader(readerId: string, payload: NotifyPayload) {
   const admin = getSupabaseAdminClient();
+  const { actorReaderId, snippet, ...push } = payload;
   await admin.from("notifications").insert({
     reader_id: readerId,
     kind: payload.kind,
     title: payload.title,
     body: payload.body,
     url: payload.url,
+    actor_reader_id: actorReaderId ?? null,
+    snippet: snippet ?? null,
   });
-  void sendToReader(readerId, payload);
+  void sendToReader(readerId, push);
 }
 
 const NOTIFY_ALL_BATCH_SIZE = 500;
@@ -41,14 +50,18 @@ const NOTIFY_ALL_BATCH_SIZE = 500;
 // separate recipient lists on purpose.
 export async function notifyAllReaders(payload: Omit<NotifyPayload, "kind" | "tag">) {
   const admin = getSupabaseAdminClient();
-  let from = 0;
+  // Keyset-paged on id — an unordered offset range isn't guaranteed stable
+  // across pages, so readers could be skipped or notified twice.
+  let after: string | null = null;
   for (;;) {
-    const { data } = await admin.from("readers").select("id").range(from, from + NOTIFY_ALL_BATCH_SIZE - 1);
+    let query = admin.from("readers").select("id").order("id").limit(NOTIFY_ALL_BATCH_SIZE);
+    if (after) query = query.gt("id", after);
+    const { data } = await query;
     if (!data?.length) break;
     await admin.from("notifications").insert(
       data.map((reader) => ({ reader_id: reader.id, kind: "broadcast" as const, title: payload.title, body: payload.body, url: payload.url }))
     );
     if (data.length < NOTIFY_ALL_BATCH_SIZE) break;
-    from += NOTIFY_ALL_BATCH_SIZE;
+    after = data[data.length - 1].id;
   }
 }

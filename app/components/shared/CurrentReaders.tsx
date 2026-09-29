@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BookOpen, ChevronRight, Headphones } from "lucide-react";
-import { avatarColor, avatarInitial, comradeName } from "@/lib/reader/authorDisplay";
+import { comradeName } from "@/lib/reader/authorDisplay";
+import ReaderAvatar from "@/app/components/shared/ReaderAvatar";
 import { pseudonymToSlug } from "@/lib/reader/profileSlug";
 import { formatTimeAgo } from "@/lib/reader/timeAgo";
 import PulseDot from "./PulseDot";
+import type { CurrentReaderSummary } from "@/lib/api/types";
 
-type Reader = { readerId: string; pseudonym: string; audioTimeMs: number | null; updatedAt: string };
+type Reader = CurrentReaderSummary;
 type Props = { readers: Reader[]; totalCount: number };
 
 /**
@@ -122,7 +124,7 @@ export function ReadingRoomModal({ readers, totalCount, onClose }: Props & { onC
         <div className="om-scroll flex-1 overflow-y-auto px-3 py-2">
           {readers.map((r) => {
             const displayName = comradeName(r.pseudonym);
-            const ModeIcon = r.audioTimeMs !== null ? Headphones : BookOpen;
+            const ModeIcon = r.mode === "listen" ? Headphones : BookOpen;
             return (
               <Link
                 key={r.readerId}
@@ -130,12 +132,7 @@ export function ReadingRoomModal({ readers, totalCount, onClose }: Props & { onC
                 onClick={onClose}
                 className="flex items-center gap-3 rounded-sm px-1 py-[11px] no-underline hover:bg-[var(--reader-surface-hover)]"
               >
-                <span
-                  style={{ background: avatarColor(displayName) }}
-                  className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-[11px] font-semibold text-white"
-                >
-                  {avatarInitial(displayName)}
-                </span>
+                <ReaderAvatar pseudonym={r.pseudonym} avatar={r.avatar} size={30} />
                 <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[var(--reader-text)]">
                   {displayName}
                 </span>

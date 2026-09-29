@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* The warm wash over every cover-like image (book covers, photo avatars) —
+   one brand-tinted multiply layer, so photos sit in the same palette as the
+   rest of the page. Absolutely fills its (relative) parent. */
+@utility cover-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgb(190 64 13 / 0.16);
+  mix-blend-mode: multiply;
+}
+
 @theme {
   /* The one desktop-shell breakpoint the whole app hinges layout on — the
      sidebar rail appears, ChaptersDrawer/notes panels push sideways instead
@@ -81,10 +92,8 @@ html,
 body {
   height: 100%;
   margin: 0;
-  /* --reader-bg isn't defined until ThemeProvider's effect sets
-     data-reader-theme on <html> post-mount (see its own comment) — the
-     fallback is what SSR/first paint uses in the meantime, same neutral
-     as before. */
+  /* data-reader-theme is on <html> before first paint (lib/pwa/boot.ts);
+     the fallback only covers a page with scripts disabled. */
   background: var(--reader-bg, var(--color-sand-50));
   /* Kills the gray flash Safari/Android paint on every tap — standard PWA
      polish, doubly relevant once this ships inside a WKWebView via
@@ -636,4 +645,58 @@ body {
 .reader-article img {
   max-width: 100%;
   height: auto;
+}
+
+/* PWA launch splash (app/components/pwa/AppSplashScreen.tsx). Rendered on
+   every page but only displayed while lib/pwa/boot.ts has put data-splash
+   on <html> — decided before first paint, so it never pops in late or
+   changes theme mid-display. Backgrounds match the icon set's own canvases
+   (cream / black) and the manifest background_color, so the OS launch
+   screen hands off to it without a colour jump. The mark is a CSS
+   background so only the active theme's file is ever downloaded. */
+html[data-splash] .app-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  /* Beats the component's inline display:none default. */
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.75rem;
+  padding-bottom: 6svh;
+  background: #faf6f0;
+  color: #14110e;
+  transition: opacity 300ms ease-out;
+}
+html[data-splash="out"] .app-splash {
+  opacity: 0;
+  pointer-events: none;
+}
+html[data-reader-theme="dark"] .app-splash {
+  background: #000000;
+  color: #faf6f0;
+}
+.app-splash-mark {
+  width: 160px;
+  aspect-ratio: 480 / 467;
+  background: var(--splash-mark-light) center / contain no-repeat;
+}
+html[data-reader-theme="dark"] .app-splash-mark {
+  background-image: var(--splash-mark-dark);
+}
+.app-splash-tagline {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Theme-paired assets that must be right on first paint (e.g.
+   SplashArtwork): render both, let <html>'s theme pick — a store-driven
+   choice would show the light one until reader-store rehydrates. */
+html[data-reader-theme="dark"] .theme-light-only,
+html:not([data-reader-theme="dark"]) .theme-dark-only {
+  display: none;
 }

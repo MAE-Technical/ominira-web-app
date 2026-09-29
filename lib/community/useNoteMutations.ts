@@ -4,6 +4,7 @@ import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-q
 import { apiFetch } from "@/lib/api/client";
 import { materialKeys } from "@/lib/materials/queryKeys";
 import { communityKeys } from "@/lib/community/queryKeys";
+import { bookmarkKeys } from "@/lib/bookmarks/useBookmarks";
 import { makeTempId } from "@/lib/api/optimisticId";
 import { useProfile } from "@/lib/auth/useProfile";
 import { useSessionStore } from "@/stores/session-store";
@@ -30,6 +31,12 @@ type ReactableFeedPage = { items: ReactableFeedItem[]; nextCursor: string | null
 
 function flipReaction(note: Note): Note {
   return { ...note, reactedByMe: !note.reactedByMe, reactionCount: note.reactionCount + (note.reactedByMe ? -1 : 1) };
+}
+
+/** No counter to move alongside it, unlike flipReaction — a bookmark is
+ * private, so the flag is the whole of its state. */
+function flipBookmark(note: Note): Note {
+  return { ...note, bookmarkedByMe: !note.bookmarkedByMe };
 }
 
 /** Shared plumbing for every direct feed patch below: runs `patchItem` over
@@ -118,6 +125,18 @@ function patchReactionInFeeds(queryClient: QueryClient, materialId: string | nul
   );
 }
 
+/** patchReactionInFeeds' bookmark twin — same root-or-reply search across
+ * every home-feed sort and every book-notes-tab sort. */
+function patchBookmarkInFeeds(queryClient: QueryClient, materialId: string | null, noteId: string) {
+  patchFeeds(queryClient, materialId, (item) =>
+    item.note.id === noteId
+      ? { ...item, note: flipBookmark(item.note) }
+      : item.replies.some((r) => r.id === noteId)
+        ? { ...item, replies: item.replies.map((r) => (r.id === noteId ? flipBookmark(r) : r)) }
+        : item
+  );
+}
+
 export type CreateNoteInput = {
   ranges: AnnotationRange[];
   content: NoteContent;
@@ -180,7 +199,12 @@ export function useCreateNote(materialId: string | null) {
       const optimistic: Note = {
         id: tempId,
         materialId,
-        author: { readerId: readerId ?? "", pseudonym: profile?.pseudonym ?? "", city: profile?.city ?? null },
+        author: {
+          readerId: readerId ?? "",
+          pseudonym: profile?.pseudonym ?? "",
+          city: profile?.city ?? null,
+          avatar: profile?.avatar ?? null,
+        },
         ranges: input.ranges,
         parentId: rootId,
         replyingToId: target?.parentId ? input.parentId! : null,
@@ -188,6 +212,7 @@ export function useCreateNote(materialId: string | null) {
         visibility: input.visibility ?? "public",
         reactionCount: 0,
         reactedByMe: false,
+        bookmarkedByMe: false,
         topicName: target?.topicName ?? null,
         topicSlug: target?.topicSlug ?? null,
         topicNames: target?.topicNames ?? [],
@@ -310,6 +335,44 @@ export function useToggleReaction(materialId: string | null) {
     onSuccess: (result, noteId) => {
       cache.set((old) => old.map((n) => (n.id === noteId ? { ...n, ...result } : n)));
       invalidateFanoutQueries(queryClient, materialId);
+    },
+  });
+}
+
+/** `POST /api/bookmarks` for a post — useToggleReaction's private twin,
+ * and deliberately its exact shape (optimistic flip in this material's own
+ * note list plus both feeds, invalidate-and-refetch on failure) rather
+ * than anything cleverer: the two controls sit side by side in the same
+ * action row, so they have to feel identical under the same flaky network.
+ *
+ * Unlike the reaction, this also invalidates the Saved shelf — a post
+ * bookmarked here has to appear (or vanish) there, and reconstructing its
+ * full FeedItem client-side to insert by hand isn't worth it for a list
+ * the reader usually isn't looking at. */
+export function useToggleNoteBookmark(materialId: string | null) {
+  const queryClient = useQueryClient();
+  const cache = localNotesCache(queryClient, materialId);
+  return useMutation({
+    mutationFn: (noteId: string) =>
+      apiFetch<{ bookmarked: boolean }>("/bookmarks", { json: { targetType: "post", targetId: noteId } }),
+    onMutate: async (noteId) => {
+      await cache.cancel();
+      await queryClient.cancelQueries({ queryKey: communityKeys.feedPrefix });
+      if (materialId) await queryClient.cancelQueries({ queryKey: materialKeys.notesFeedPrefix(materialId) });
+      const previous = cache.get();
+      cache.set((old) => old.map((n) => (n.id === noteId ? flipBookmark(n) : n)));
+      patchBookmarkInFeeds(queryClient, materialId, noteId);
+      return { previous };
+    },
+    onError: (_err, _noteId, context) => {
+      cache.restore(context?.previous);
+      invalidateFanoutQueries(queryClient, materialId);
+    },
+    onSuccess: (result, noteId) => {
+      const patch = { bookmarkedByMe: result.bookmarked };
+      cache.set((old) => old.map((n) => (n.id === noteId ? { ...n, ...patch } : n)));
+      updateNoteInFeeds(queryClient, materialId, noteId, patch);
+      queryClient.invalidateQueries({ queryKey: bookmarkKeys.saved("post") });
     },
   });
 }

@@ -8,8 +8,8 @@ import { contentToColumns, hydrateNotes, insertPostTopics, resolveTopicIdForNewT
 import { enrichFeedItems } from "@/lib/community/feed";
 import type { AnnotationRange, NoteContent } from "@/lib/api/types";
 import { notifyReader } from "@/lib/notifications/notify";
-import { noteInteractionUrl } from "@/lib/notifications/noteTarget";
 import { comradeName } from "@/lib/reader/authorDisplay";
+import { notificationSnippet } from "@/lib/notifications/snippet";
 
 type Sort = "recent" | "top" | "trending";
 type TopCursor = { reactionCount: number; createdAt: string; id: string };
@@ -286,20 +286,25 @@ export async function POST(request: Request) {
           admin.from("materials").select("slug, title").eq("id", materialId).maybeSingle(),
         ]);
         if (!replyMaterial) return;
-        const url = await noteInteractionUrl({
-          materialSlug: replyMaterial.slug,
-          ranges: ranges ?? [],
-          rootNoteId: replyRootNoteId!,
-        });
+        // The reply itself — /post/[id] resolves a reply to its root thread
+        // and focuses it. Same url for the in-app row and the push.
+        const url = `/post/${data.id}`;
         const actorName = actor?.pseudonym ? comradeName(actor.pseudonym) : "A comrade";
+        // What they actually said, not an instruction to go read it — same
+        // rule as the reaction notification. A voice reply has no text, so
+        // it says so instead.
+        const replyText = (data.content as { text?: string } | null)?.text ?? null;
+        const quoted = notificationSnippet(replyText);
         const payload = {
           kind: "reply" as const,
           title: `💬 ${actorName} replied to your note`,
-          body: `Tap to view in ${replyMaterial.title}`,
+          body: quoted ? `“${quoted}”` : `A voice reply on ${replyMaterial.title}`,
           url,
+          // The full reply text, frozen at fire time — the in-app row has
+          // room for more of it than a push body does.
+          actorReaderId: reader.readerId,
+          snippet: replyText,
           tag: `note-reply-${replyRootNoteId}`,
-          icon: "/icons/icon-192.png",
-          badge: "/icons/icon-192.png",
         };
         await Promise.all(replyRecipientReaderIds.map((recipientId) => notifyReader(recipientId, payload)));
       } catch (err) {

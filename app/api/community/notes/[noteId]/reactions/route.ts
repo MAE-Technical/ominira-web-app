@@ -3,9 +3,8 @@ import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import { getAuthenticatedReader } from "@/lib/auth/session";
 import { notFound, unauthorized } from "@/lib/api/errors";
 import { notifyReader } from "@/lib/notifications/notify";
-import { noteInteractionUrl } from "@/lib/notifications/noteTarget";
 import { comradeName } from "@/lib/reader/authorDisplay";
-import type { AnnotationRange } from "@/lib/api/types";
+import { notificationSnippet } from "@/lib/notifications/snippet";
 
 export async function POST(request: Request, { params }: { params: Promise<{ noteId: string }> }) {
   const reader = await getAuthenticatedReader(request);
@@ -16,22 +15,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
 
   const { data: note } = await admin
     .from("posts")
-    .select("id, reaction_count, reader_id, parent_id, material_id, ranges")
+    .select("id, reaction_count, reader_id, material_id, content")
     .eq("id", noteId)
     .maybeSingle();
   if (!note) return notFound();
 
   const { data: existing } = await admin
-    .from("post_reactions")
-    .select("post_id")
-    .eq("post_id", noteId)
+    .from("reactions")
+    .select("target_id")
+    .eq("target_type", "post")
+    .eq("target_id", noteId)
     .eq("reader_id", reader.readerId)
     .maybeSingle();
 
   if (existing) {
-    await admin.from("post_reactions").delete().eq("post_id", noteId).eq("reader_id", reader.readerId);
+    await admin
+      .from("reactions")
+      .delete()
+      .eq("target_type", "post")
+      .eq("target_id", noteId)
+      .eq("reader_id", reader.readerId);
   } else {
-    await admin.from("post_reactions").insert({ post_id: noteId, reader_id: reader.readerId });
+    await admin.from("reactions").insert({ target_type: "post", target_id: noteId, reader_id: reader.readerId });
     // Fire-and-forget — never let a push failure affect the reaction response.
     // No self-notification when reacting to your own note.
     if (note.reader_id !== reader.readerId) {
@@ -41,21 +46,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ not
           admin.from("materials").select("slug, title").eq("id", note.material_id!).maybeSingle(),
         ]);
         if (!material) return;
-        const rootNoteId = note.parent_id ?? note.id;
-        const url = await noteInteractionUrl({
-          materialSlug: material.slug,
-          ranges: (note.ranges as unknown as AnnotationRange[] | null) ?? [],
-          rootNoteId,
-        });
+        // The reacted-to note's own page — in-app row and push share this
+        // one url, and it opens the thread itself rather than loading a
+        // whole book to reach one note (the page links on into the reader).
+        const url = `/post/${note.id}`;
         const actorName = actor?.pseudonym ? comradeName(actor.pseudonym) : "A comrade";
+        // The reacted-to note's own words — what was reacted to says far
+        // more than "tap to view in <book>" ever did, on a lock screen and
+        // in the feed row alike. A voice note has none, so it falls back to
+        // naming the book.
+        const noteText = (note.content as { text?: string } | null)?.text ?? null;
+        const quoted = notificationSnippet(noteText);
         await notifyReader(note.reader_id, {
           kind: "reaction",
           title: `✊🏾 ${actorName} reacted to your note`,
-          body: `Tap to view in ${material.title ?? material.slug}`,
+          body: quoted ? `“${quoted}”` : `Your voice note on ${material.title ?? material.slug}`,
           url,
+          // The full text, frozen at fire time, so the in-app row can show
+          // more of it than a push body has room for.
+          actorReaderId: reader.readerId,
+          snippet: noteText,
           tag: `note-reaction-${noteId}`,
-          icon: "/icons/icon-192.png",
-          badge: "/icons/icon-192.png",
         });
       })();
     }

@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
-import { MATERIAL_SUMMARY_COLUMNS } from "@/lib/materials/columns";
-import { parseGoogleMetaData, parseOpenLibraryMetaData } from "@/lib/materials/providerMeta";
 import { getAuthenticatedReader } from "@/lib/auth/session";
 import { forbidden, notFound, unauthorized, validationError } from "@/lib/api/errors";
 import { contentToColumns, hydrateNotes, type NoteRow, type PostKind } from "@/lib/community/notes";
+import { enrichFeedItems } from "@/lib/community/feed";
 import { STORAGE_BUCKET, objectPathFromPublicUrl } from "@/lib/storage/config";
 import type { NoteContent } from "@/lib/api/types";
 import type { Database } from "@/lib/supabase/database.types";
 
+/** One thread, in the same `FeedItem` shape the home feed ships — so
+ * /post/[id] renders through the very same NoteCard the feed does, with no
+ * second enrichment path to keep in sync (this route used to hand-roll its
+ * own, minus the excerpt, which is exactly the drift enrichFeedItems exists
+ * to prevent).
+ *
+ * Asking for a *reply* returns its root thread with `focusId` set to that
+ * reply: a reply has no standalone page of its own — it's only ever read in
+ * its thread — and that's what a reply notification links to.
+ */
 export async function GET(request: Request, { params }: { params: Promise<{ noteId: string }> }) {
   const { noteId } = await params;
   const reader = await getAuthenticatedReader(request);
@@ -17,36 +26,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ note
   const { data: row } = await admin.from("posts").select("*").eq("id", noteId).maybeSingle();
   // Same rule as the per-material feed: a private note is only visible to its
   // own author — 404, not 403, so existence of a private note is never leaked.
-  if (!row || !row.material_id || (row.visibility !== "public" && row.reader_id !== reader?.readerId)) return notFound();
+  if (!row || (row.visibility !== "public" && row.reader_id !== reader?.readerId)) return notFound();
 
-  const { data: material } = await admin.from("materials").select(`${MATERIAL_SUMMARY_COLUMNS}, json_storage_path`).eq("id", row.material_id).maybeSingle();
-  if (!material) return notFound();
+  let rootRow = row as NoteRow;
+  if (row.parent_id) {
+    const { data: parent } = await admin.from("posts").select("*").eq("id", row.parent_id).maybeSingle();
+    if (!parent || (parent.visibility !== "public" && parent.reader_id !== reader?.readerId)) return notFound();
+    rootRow = parent as NoteRow;
+  }
 
-  const { data: replyRows } = await admin.from("posts").select("*").eq("parent_id", noteId).order("created_at", { ascending: true });
-  const visibleReplies = ((replyRows ?? []) as NoteRow[]).filter((r) => r.visibility === "public" || r.reader_id === reader?.readerId);
+  const [item] = await enrichFeedItems([rootRow], reader?.readerId);
+  if (!item) return notFound();
 
-  const hydratedById = new Map((await hydrateNotes([row, ...visibleReplies], reader?.readerId)).map((n) => [n.id, n]));
-
-  const google = parseGoogleMetaData(material.google_meta_data);
-  const openlibrary = parseOpenLibraryMetaData(material.openlibrary_meta_data);
-
-  return NextResponse.json({
-    note: hydratedById.get(row.id)!,
-    replies: visibleReplies.map((r) => hydratedById.get(r.id)!),
-    material: {
-      id: material.id,
-      slug: material.slug,
-      title: material.title,
-      author: material.author,
-      cover: material.cover_url,
-      thumbnail: material.thumbnail_url,
-      googleCoverUrl: google.coverUrl,
-      googleThumbnailUrl: google.thumbnailUrl,
-      openlibraryCoverUrl: openlibrary.coverUrl,
-      openlibraryThumbnailUrl: openlibrary.thumbnailUrl,
-      coverSource: material.cover_source,
-    },
-  });
+  return NextResponse.json({ ...item, focusId: row.parent_id ? row.id : null });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ noteId: string }> }) {

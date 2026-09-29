@@ -58,3 +58,15 @@ export function useCommunityFeed(sort: CommunityFeedSort, topicId: string | null
       ),
   });
 }
+
+/** One thread by id — `GET /api/community/notes/{noteId}`, which answers in
+ * the same `FeedItem` shape as the feed above, so /post/[id] renders it
+ * with the same NoteCard. Asking for a reply returns its root thread with
+ * `focusId` naming the reply, since that's what a reply notification links
+ * to. */
+export function usePostThread(noteId: string) {
+  return useQuery({
+    queryKey: communityKeys.thread(noteId),
+    queryFn: () => apiFetch<FeedItem & { focusId: string | null }>(`/community/notes/${encodeURIComponent(noteId)}`),
+  });
+}

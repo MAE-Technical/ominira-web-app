@@ -10,4 +10,4 @@ export const MATERIAL_SUMMARY_COLUMNS =
  * rather than adding a second, narrower column list just for that one
  * route. */
 export const MATERIAL_DETAIL_COLUMNS =
-  `${MATERIAL_SUMMARY_COLUMNS}, narrator_count, json_storage_path, article_html_storage_path, source_url, status, updated_at`;
+  `${MATERIAL_SUMMARY_COLUMNS}, narrator_count, json_storage_path, article_html_storage_path, source_url, status, updated_at, reaction_count`;

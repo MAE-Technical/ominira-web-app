@@ -1,24 +1,20 @@
 "use client";
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+import StatusPage, { statusActionClass } from "@/app/components/shared/StatusPage";
+
+// error.message is deliberately not shown — in production Next replaces
+// server errors with a generic digest string that means nothing to a reader.
+export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <div className="w-full h-screen flex flex-col items-center justify-center gap-3 bg-sand-50 text-center px-6">
-      <h1 className="text-xl font-semibold font-serif text-sand-950">
-        This book couldn&apos;t be loaded
-      </h1>
-      <p className="text-sm text-sand-600 max-w-md">{error.message}</p>
-      <button
-        onClick={reset}
-        className="mt-2 px-4 py-2 rounded-sm bg-brand-500 text-white text-sm font-medium cursor-pointer border-none"
-      >
-        Try again
-      </button>
-    </div>
+    <StatusPage
+      title="Something went wrong"
+      action={
+        <button type="button" onClick={reset} className={statusActionClass}>
+          Try again
+        </button>
+      }
+    >
+      This page couldn&apos;t be loaded. It&apos;s usually temporary — try again in a moment.
+    </StatusPage>
   );
 }

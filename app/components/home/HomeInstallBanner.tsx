@@ -9,6 +9,7 @@ import {
 } from "@/stores/install-banner-store";
 import { useLayoutStore } from "@/stores/layout-store";
 import InstallModal from "@/app/components/pwa/InstallModal";
+import AppIcon from "@/app/components/pwa/AppIcon";
 
 /**
  * The one install surface — a single bar fixed to the very top of the
@@ -91,7 +92,7 @@ export default function HomeInstallBanner() {
         style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.625rem)" }}
         className="fixed left-0 right-0 top-0 z-50 flex items-center gap-3 bg-black px-4 pb-2.5 shadow-md shell:left-[var(--app-sidebar-w)]"
       >
-        <img src="/icons/icon-192.png" alt="" className="h-7 w-7 flex-none rounded-xs object-cover object-[center_20%]" />
+        <AppIcon size={28} />
         <span className="min-w-0 flex-1 text-[13px] font-bold leading-snug text-white">
           Install the Ominira app on your phone, tablet or desktop computer
         </span>

@@ -11,6 +11,12 @@ export type GoogleMetaData = {
   coverUrl: string | null;
   thumbnailUrl: string | null;
   description: string | null;
+  /** The matched volume's own title/author — carried along purely so
+   * lib/materials/enrichMaterial.ts can backfill a material's own (empty)
+   * title/author column from it. Not read anywhere else: display always
+   * goes through the material's own canonical title/author, never these. */
+  title: string | null;
+  author: string | null;
 };
 
 /** Shape written by scripts/generate-material-openlibrary-metadata.ts. */
@@ -18,6 +24,9 @@ export type OpenLibraryMetaData = {
   coverUrl: string | null;
   thumbnailUrl: string | null;
   description: string | null;
+  /** Same backfill-only purpose as GoogleMetaData.author above — OpenLibrary's
+   * `jscmd=data` response carries authors too. */
+  author: string | null;
 };
 
 function str(value: unknown): string | null {
@@ -32,6 +41,8 @@ export function parseGoogleMetaData(json: Json | null | undefined): GoogleMetaDa
     coverUrl: str(obj.coverUrl),
     thumbnailUrl: str(obj.thumbnailUrl),
     description: str(obj.description),
+    title: str(obj.title),
+    author: str(obj.author),
   };
 }
 
@@ -41,5 +52,6 @@ export function parseOpenLibraryMetaData(json: Json | null | undefined): OpenLib
     coverUrl: str(obj.coverUrl),
     thumbnailUrl: str(obj.thumbnailUrl),
     description: str(obj.description),
+    author: str(obj.author),
   };
 }

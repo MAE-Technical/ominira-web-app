@@ -73,7 +73,7 @@ export default function BookPreview({
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-[12px] font-semibold text-[var(--color-app-text)]">{title}</span>
         {author && <span className="truncate text-[11px] text-[var(--color-app-text-secondary)]">{author}</span>}
-        {section && <span className="truncate text-[11px] text-[var(--color-app-text-secondary)]">{section}</span>}
+        {section && <span className="truncate text-[12px] font-medium text-[var(--color-app-text-secondary)]">{section}</span>}
         {formatLabel && (
           <span className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-app-text-muted)]">
             {formatLabel}
@@ -83,7 +83,7 @@ export default function BookPreview({
       <ArrowUpRight
         aria-hidden="true"
         size={16}
-        className="flex-none text-[var(--color-app-text-muted)] opacity-0 transition-opacity group-hover:opacity-100"
+        className="flex-none text-[var(--color-app-text-muted)] opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
       />
     </div>
   );

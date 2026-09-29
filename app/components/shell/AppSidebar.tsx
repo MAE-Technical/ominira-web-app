@@ -4,14 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
-import { NAV_ITEMS } from "./navItems";
+import { NAV_ITEMS, isNavItemActive } from "./navItems";
 import BrandMark from "./BrandMark";
 import { useReaderOverlayStore } from "@/stores/reader-overlay-store";
 import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
-
-function isActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 /**
  * Persistent desktop nav rail — hidden below the same 860px breakpoint
@@ -52,12 +48,12 @@ export default function AppSidebar() {
         aria-label="Ominira home"
         className="flex-none px-4 pt-[18px] pb-3.5 no-underline"
       >
-        <BrandMark />
+        <BrandMark withMark />
       </Link>
 
       <nav className="flex-1 min-h-0 overflow-y-auto px-2.5 pt-2 flex flex-col gap-2">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href);
+          const active = isNavItemActive(pathname, href);
           return (
             <Link
               key={href}

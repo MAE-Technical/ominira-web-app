@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { BookDocument, Section } from "@/lib/book/schema";
 import { resolveSpineTarget } from "@/lib/reader/sections";
-import { readLocalPositionSync, useReadingPositionStore, type Position } from "@/stores/reading-position-store";
+import { locatorOfKind, sameLocator, type Locator } from "@/lib/reader/locator";
+import { useReadingPositionStore } from "@/stores/reading-position-store";
+import { resolveResumeLocator } from "@/lib/reader/progressTracking";
 
 /**
  * Resolves the exact {sectionId, passageIndex} the reader should actually
- * land on — this device's own last-known position (`readLocalPositionSync`,
- * synchronous, no store hydration to wait on) unless `targetSectionId`
+ * land on — this device's own last-known position (`resolveResumeLocator`,
+ * synchronous localStorage, no store hydration to wait on) unless `targetSectionId`
  * (`?section=`, a chapter link) overrides it, resolved through
  * `resolveSpineTarget` since it can legitimately name a pure navigation
  * label with no spine slot of its own. Returns `null` when neither source
@@ -17,8 +19,8 @@ import { readLocalPositionSync, useReadingPositionStore, type Position } from "@
  * carousel's own default state already sits).
  *
  * Called exactly once per mount (see `resumeTargetRef` below) rather than
- * separately by each of useResumeScroll's three steps — `readLocalPositionSync`
- * reads *live* localStorage, and this device's own saved position keeps
+ * separately by each of useResumeScroll's three steps — the underlying
+ * `readLocalPositionSync` reads *live* localStorage, and this device's own saved position keeps
  * moving in real time while a book is playing (NarrationEngine's own
  * position-persist effect writes it on every passage/section advance, even
  * while the reader itself isn't mounted). Re-reading it independently in a
@@ -30,17 +32,22 @@ import { readLocalPositionSync, useReadingPositionStore, type Position } from "@
  * agree on exactly what resume meant here") — this is what actually makes
  * that true.
  */
+type EpubLocator = Extract<Locator, { kind: "epub" }>;
+
 function resolveInitialTarget(
   book: BookDocument,
   materialId: string,
   targetSectionId: string | undefined,
   targetPassageIndex: number | undefined
-): { sectionId: string; passageIndex: number } | null {
+): EpubLocator | null {
   if (targetSectionId) {
+    // A `?section=` target can legitimately name a pure navigation label with
+    // no spine slot of its own, hence resolveSpineTarget rather than using it
+    // as a locator directly.
     const sectionId = resolveSpineTarget(targetSectionId, book.sections, book.spine);
-    return sectionId ? { sectionId, passageIndex: targetPassageIndex ?? 0 } : null;
+    return sectionId ? { kind: "epub", sectionId, passageIndex: targetPassageIndex ?? 0 } : null;
   }
-  return readLocalPositionSync(materialId) ?? null;
+  return resolveResumeLocator(materialId, "epub", undefined) ?? null;
 }
 
 /**
@@ -134,7 +141,7 @@ export function useResumeScroll({
   // independently) is what actually keeps steps 1 and 2 pointed at the same
   // target while narration keeps advancing this device's saved position in
   // the background.
-  const resumeTargetRef = useRef<{ sectionId: string; passageIndex: number } | null>(null);
+  const resumeTargetRef = useRef<EpubLocator | null>(null);
 
   // Step 1 — see this hook's own doc comment.
   const hasAppliedInitialSectionRef = useRef(false);
@@ -154,7 +161,7 @@ export function useResumeScroll({
   // scrolling within it. Reads step 1's own frozen resumeTargetRef rather
   // than resolving again, so the two steps are guaranteed to agree on
   // exactly what "resume" meant here.
-  const usedPositionRef = useRef<{ sectionId: string; passageIndex: number } | null>(null);
+  const usedPositionRef = useRef<EpubLocator | null>(null);
   const hasScrolledInitialRef = useRef(false);
   const [initialScrollDone, setInitialScrollDone] = useState(false);
   useEffect(() => {
@@ -200,10 +207,9 @@ export function useResumeScroll({
     if (targetSectionId || !positionSourceReady) return; // a chapter-link jump never gets second-guessed by resume
     hasReconciledRef.current = true;
 
-    const stored: Position | undefined = getPosition(materialId);
+    const stored = locatorOfKind(getPosition(materialId)?.locator, "epub");
     if (!stored) return;
-    const used = usedPositionRef.current;
-    if (used && used.sectionId === stored.sectionId && used.passageIndex === stored.passageIndex) return;
+    if (sameLocator(usedPositionRef.current ?? undefined, stored)) return;
 
     const sectionIndex = orderedSections.findIndex((s) => s.id === stored.sectionId);
     if (sectionIndex < 0) return;

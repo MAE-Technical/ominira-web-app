@@ -61,7 +61,7 @@ export default function ReplyEntry({
           own root layout — a reply's author gets the same identity
           treatment as a top-level note's, not a scaled-down one. */}
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-        <AuthorAvatar name={reply.author.pseudonym} />
+        <AuthorAvatar name={reply.author.pseudonym} avatar={reply.author.avatar} />
         <div className="min-w-0 flex-1">
           <AuthorRow
             name={reply.author.pseudonym}

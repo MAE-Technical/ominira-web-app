@@ -101,6 +101,12 @@ export const FONT_FAMILY_LABELS: Record<FontFamily, string> = {
 // What "Reset to default" in the style panel restores — kept as a single
 // source of truth so the reset button can't drift from the store's own
 // initial values.
+/** How PdfDocumentView lays out a document: one page at a time with a pager,
+ * or every page in one continuous scroll. A durable reader preference rather
+ * than per-document state — someone who prefers scrolling prefers it for the
+ * next PDF too. */
+export type PdfLayout = "paged" | "scroll";
+
 export const READER_PREF_DEFAULTS = {
   fontSizeScale: 40,
   // Literata — Google's serif designed specifically for on-screen book
@@ -111,6 +117,10 @@ export const READER_PREF_DEFAULTS = {
   theme: "light" as Theme,
   lineSpacingScale: 60,
   contentWidthScale: 60,
+  // Paged by default: it's what a PDF is (fixed pages), it costs one page of
+  // rendering instead of a virtualised list, and continuous scroll is one tap
+  // away in the footer for anyone who wants it.
+  pdfLayout: "paged" as PdfLayout,
 };
 
 type ReaderState = {
@@ -120,12 +130,14 @@ type ReaderState = {
   theme: Theme;
   lineSpacingScale: number;
   contentWidthScale: number;
+  pdfLayout: PdfLayout;
 
   setFontSizeScale: (n: number) => void;
   setFontFamily: (f: FontFamily) => void;
   setTheme: (t: Theme) => void;
   setLineSpacingScale: (n: number) => void;
   setContentWidthScale: (n: number) => void;
+  setPdfLayout: (layout: PdfLayout) => void;
   resetToDefaults: () => void;
 };
 
@@ -139,6 +151,7 @@ export const useReaderStore = create<ReaderState>()(
       setTheme: (theme) => set({ theme }),
       setLineSpacingScale: (n) => set({ lineSpacingScale: clampScale(n) }),
       setContentWidthScale: (n) => set({ contentWidthScale: clampScale(n) }),
+      setPdfLayout: (pdfLayout) => set({ pdfLayout }),
       resetToDefaults: () => set({ ...READER_PREF_DEFAULTS }),
     }),
     {
@@ -189,12 +202,16 @@ export const useReaderStore = create<ReaderState>()(
         // migration touches, but at runtime it carries every persisted
         // field (untouched ones like fontFamily pass through via the same
         // object reference) — the target shape zustand actually wants.
+        // pdfLayout needs no migration case: a persisted blob from before it
+        // existed simply lacks the key, and persist's shallow merge leaves the
+        // store's own default in place.
         return state as unknown as {
           fontSizeScale: number;
           fontFamily: FontFamily;
           theme: Theme;
           lineSpacingScale: number;
           contentWidthScale: number;
+          pdfLayout: PdfLayout;
         };
       },
       // Same SSR-hydration-mismatch reasoning as highlights-store: theme
@@ -210,6 +227,7 @@ export const useReaderStore = create<ReaderState>()(
         theme: s.theme,
         lineSpacingScale: s.lineSpacingScale,
         contentWidthScale: s.contentWidthScale,
+        pdfLayout: s.pdfLayout,
       }),
     }
   )

@@ -11,8 +11,8 @@ export default function SelectField({ label, id, className = "", children, ...pr
       <div className="relative">
         <select
           id={selectId}
-          className={`w-full appearance-none rounded-sm border border-sand-300 bg-white px-4 py-3 pr-10 text-[13px] outline-none transition-colors focus:border-brand-400 ${
-            props.defaultValue === "" ? "text-sand-400" : "text-[var(--reader-text)]"
+          className={`w-full appearance-none rounded-sm border border-sand-300 bg-[var(--reader-surface)] px-4 py-2.5 pr-10 text-[13px] leading-5 font-medium outline-none transition-colors focus:border-brand-400 ${
+            (props.value ?? props.defaultValue) === "" ? "text-sand-400" : "text-[var(--reader-text)]"
           } ${className}`}
           {...props}
         >

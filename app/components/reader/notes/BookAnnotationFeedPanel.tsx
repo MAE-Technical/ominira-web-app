@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import NoResults from "@/app/components/shared/NoResults";
 import type { FeedEntry } from "@/lib/reader/annotationFeed";
 import type { AnnotationFeedFilter, FeedItem } from "@/lib/reader/useBookAnnotationFeed";
 import type { Note } from "@/lib/api/types";
@@ -266,16 +267,19 @@ export default function BookAnnotationFeedPanel({
         // details' identical tab bar uses via its own container border
         // instead.
         <div className="px-5">
-          <UnderlineTabs options={FILTER_OPTIONS} selected={filter} onSelect={onFilterChange} />
+          <UnderlineTabs options={FILTER_OPTIONS} value={filter} onChange={(next) => onFilterChange(next as AnnotationFeedFilter)} />
         </div>
       }
     >
       {items.length === 0 ? (
-        <p className="mt-4 py-1 font-serif text-sm text-[var(--reader-text-muted)]">
-          {filter === "notes"
-            ? "No notes in this book yet — be the first to say something."
-            : "You have no private highlights in this book"}
-        </p>
+        <NoResults
+          className="mt-4 py-1 font-serif"
+          message={
+            filter === "notes"
+              ? "No notes in this book yet — be the first to say something."
+              : "You have no private highlights in this book"
+          }
+        />
       ) : (
         // pt-4 — PanelShell's own body has no top padding by default (its
         // bottom padding is for scroll clearance above the footer, not a

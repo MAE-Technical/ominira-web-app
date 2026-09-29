@@ -25,7 +25,7 @@ export async function readerPageMetadata(slug: string): Promise<Metadata> {
   try {
     material = await getMaterialDetail(slug);
   } catch {
-    return { title: "Book not found" };
+    return { title: "Not found" };
   }
   const { title, author, description } = material;
   const desc = description || `${title} by ${author} — read or listen on ${PLATFORM_NAME}.`;

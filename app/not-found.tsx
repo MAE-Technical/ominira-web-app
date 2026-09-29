@@ -1,10 +1,9 @@
+import StatusPage from "@/app/components/shared/StatusPage";
+
 export default function NotFound() {
   return (
-    <div className="w-full h-screen flex flex-col items-center justify-center gap-2 bg-sand-50 text-center px-6">
-      <h1 className="text-xl font-semibold font-serif text-sand-950">Page not found</h1>
-      <p className="text-sm text-sand-600">
-        We couldn&apos;t find anything at this address.
-      </p>
-    </div>
+    <StatusPage title="This page doesn't exist">
+      The link may be broken, or the page may have been moved or removed.
+    </StatusPage>
   );
 }

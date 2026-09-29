@@ -1,11 +1,13 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
-import type { CurrentReadingEntry } from "@/lib/api/types";
+import type { CurrentReaderSummary, CurrentReadingEntry } from "@/lib/api/types";
+import { isLocator, type Locator, type ReaderMode } from "@/lib/reader/locator";
 import { CURRENT_READERS_DISPLAY_CAP } from "./constants";
+import { toAvatar } from "@/lib/avatar/avatar";
 
 type ActivityInput = {
   materialId: string;
-  sectionId: string;
-  passageIndex: number;
+  locator: Locator;
+  mode: ReaderMode;
   audioTimeMs: number | null;
   progressPercent: number;
 };
@@ -23,13 +25,68 @@ export async function saveReaderActivity(readerId: string, entry: ActivityInput)
       {
         reader_id: readerId,
         material_id: entry.materialId,
-        section_id: entry.sectionId,
-        passage_index: entry.passageIndex,
+        locator: entry.locator,
+        mode: entry.mode,
         audio_time_ms: entry.audioTimeMs,
         progress_percent: entry.progressPercent,
       },
       { onConflict: "reader_id,material_id" }
     );
+  return !error;
+}
+
+/**
+ * Marks one material finished for one reader, or un-marks it —
+ * `PUT /api/auth/me/finished`'s only write.
+ *
+ * A full upsert rather than an update: a reader can finish a material with no
+ * position row yet (a short article read in one screenful), so the locator
+ * comes along to create it. Conversely `saveReaderActivity` above never names
+ * `finished_at`, which is what keeps the two paths from clobbering each other —
+ * a position write can't clear a finish, and this can't rewind a position.
+ */
+export async function setReaderActivityFinished(
+  readerId: string,
+  entry: { materialId: string; finished: boolean; locator: Locator; mode: ReaderMode; progressPercent: number }
+): Promise<boolean> {
+  const { error } = await getSupabaseAdminClient()
+    .from("reader_activities")
+    .upsert(
+      {
+        reader_id: readerId,
+        material_id: entry.materialId,
+        locator: entry.locator,
+        mode: entry.mode,
+        progress_percent: entry.progressPercent,
+        finished_at: entry.finished ? new Date().toISOString() : null,
+      },
+      { onConflict: "reader_id,material_id" }
+    );
+  return !error;
+}
+
+/**
+ * Drops one reader's activity in one material entirely — `DELETE
+ * /api/auth/me/reading-position`, the Shelf page's per-row remove.
+ *
+ * A real delete, not a `dismissed_at` flag: position and finish live in the
+ * same row, so hiding it while keeping progress would mean every read of
+ * this table carrying a "is this one still on the shelf" filter, and the
+ * row silently reappearing the next time the reader opened the material.
+ * Removing means removing — the material itself is untouched and still in
+ * the library, it just no longer claims a slot on their shelf.
+ *
+ * Scoped by `reader_id` as well as `material_id` (not just the composite
+ * key's material half), so a forged materialId can only ever delete the
+ * caller's own row. Absent-is-success: a repeated or raced delete is the
+ * outcome the caller asked for either way.
+ */
+export async function deleteReaderActivity(readerId: string, materialId: string): Promise<boolean> {
+  const { error } = await getSupabaseAdminClient()
+    .from("reader_activities")
+    .delete()
+    .eq("reader_id", readerId)
+    .eq("material_id", materialId);
   return !error;
 }
 
@@ -46,27 +103,27 @@ export async function listReaderActivities(readerId: string): Promise<CurrentRea
     .order("updated_at", { ascending: false });
   if (error || !data) return [];
 
-  return data.map((row) => ({
-    materialId: row.material_id,
-    sectionId: row.section_id,
-    passageIndex: row.passage_index,
-    audioTimeMs: row.audio_time_ms,
-    progressPercent: row.progress_percent,
-    updatedAt: row.updated_at,
-  }));
+  // A row whose locator doesn't validate is dropped rather than surfaced as a
+  // resume target nothing can act on — see isLocator's own comment on why every
+  // jsonb boundary validates instead of casting.
+  return data.flatMap((row) =>
+    isLocator(row.locator)
+      ? [{
+          materialId: row.material_id,
+          locator: row.locator,
+          mode: row.mode,
+          audioTimeMs: row.audio_time_ms,
+          progressPercent: row.progress_percent,
+          finishedAt: row.finished_at,
+          updatedAt: row.updated_at,
+        }]
+      : []
+  );
 }
 
-export type CurrentReaderSnippet = {
-  readerId: string;
-  pseudonym: string;
-  /** Non-null iff this reader's most recent activity on the material was via
-   * audio (NarrationEngine always writes audioTimeMs, even 0ms, the moment
-   * playback starts — same signal BookDetailView's own "hasListened" uses
-   * for the viewer's own position). Drives the roster's reading/listening
-   * mode icon. */
-  audioTimeMs: number | null;
-  updatedAt: string;
-};
+/** Alias for the API-contract shape (lib/api/types.ts) — kept as a local name
+ * because this module is where the roster is actually assembled. */
+export type CurrentReaderSnippet = CurrentReaderSummary;
 
 /**
  * "Who's currently reading/listening to each of these materials" — a book
@@ -95,17 +152,22 @@ export async function listCurrentReaders(
 
   const { data: activityRows, error } = await getSupabaseAdminClient()
     .from("reader_activities")
-    .select("reader_id, material_id, audio_time_ms, updated_at")
+    .select("reader_id, material_id, mode, updated_at")
     .in("material_id", materialIds)
+    // A reader who's finished a material isn't "currently" reading/listening
+    // to it any more — their row otherwise lingers here forever (nothing else
+    // ever deletes a reader_activities row), which is what let a finished
+    // reader keep showing in the presence line/reading-room roster.
+    .is("finished_at", null)
     .order("updated_at", { ascending: false });
   if (error || !activityRows || activityRows.length === 0) return result;
 
   // materialId -> every active reader's row, most recently updated first
   // (preserved from the query's own order() above).
-  type ActivityRow = { readerId: string; audioTimeMs: number | null; updatedAt: string };
+  type ActivityRow = { readerId: string; mode: ReaderMode; updatedAt: string };
   const rowsByMaterial = new Map<string, ActivityRow[]>();
   for (const row of activityRows) {
-    const entry: ActivityRow = { readerId: row.reader_id, audioTimeMs: row.audio_time_ms, updatedAt: row.updated_at };
+    const entry: ActivityRow = { readerId: row.reader_id, mode: row.mode, updatedAt: row.updated_at };
     const list = rowsByMaterial.get(row.material_id);
     if (list) list.push(entry);
     else rowsByMaterial.set(row.material_id, [entry]);
@@ -120,16 +182,18 @@ export async function listCurrentReaders(
 
   const { data: readerRows } = await getSupabaseAdminClient()
     .from("readers")
-    .select("id, pseudonym")
+    .select("id, pseudonym, avatar_color, avatar_url")
     .in("id", [...neededReaderIds]);
-  const pseudonymById = new Map((readerRows ?? []).map((r) => [r.id, r.pseudonym]));
+  const readerById = new Map((readerRows ?? []).map((r) => [r.id, r]));
 
   for (const [materialId, rows] of rowsByMaterial) {
     const readers = rows
       .slice(0, cap)
       .map((row) => {
-        const pseudonym = pseudonymById.get(row.readerId);
-        return pseudonym ? { readerId: row.readerId, pseudonym, audioTimeMs: row.audioTimeMs, updatedAt: row.updatedAt } : null;
+        const reader = readerById.get(row.readerId);
+        return reader
+          ? { readerId: row.readerId, pseudonym: reader.pseudonym, avatar: toAvatar(reader), mode: row.mode, updatedAt: row.updatedAt }
+          : null;
       })
       // Guards a reader row deleted between the two queries above — the
       // same edge case the backfill's own `where exists` guarded for.

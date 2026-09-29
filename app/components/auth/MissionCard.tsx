@@ -45,11 +45,11 @@ const MissionCard = forwardRef<HTMLDivElement, { className?: string }>(function 
               than stretched full-width — two compact buttons read as a
               caption's CTAs, not a form. */}
           <div className="flex flex-row flex-wrap gap-3">
-            <AuthButton variant="solid" fullWidth={false} onClick={() => router.push("/auth/signup")}>
-              Join us
-            </AuthButton>
             <AuthButton variant="outline" fullWidth={false} onClick={() => router.push("/auth/login")}>
               Log in
+            </AuthButton>
+            <AuthButton variant="solid" fullWidth={false} onClick={() => router.push("/auth/signup")}>
+              Join us
             </AuthButton>
           </div>
         </div>

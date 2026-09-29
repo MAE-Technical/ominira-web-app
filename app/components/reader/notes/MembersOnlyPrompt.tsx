@@ -3,13 +3,14 @@
 import { X } from "lucide-react";
 import Link from "next/link";
 
-export type MembersOnlyAction = "highlight" | "note" | "reply" | "react";
+export type MembersOnlyAction = "highlight" | "note" | "reply" | "react" | "bookmark";
 
 const COPY: Record<MembersOnlyAction, string> = {
   highlight: "Only members can highlight passages.",
   note: "Only members can add notes.",
   reply: "Only members can reply.",
-  react: "Only members can react to notes.",
+  react: "Only members can react.",
+  bookmark: "Only members can save things for later.",
 };
 
 /** The one signed-out gate every write affordance shows instead of

@@ -2,12 +2,19 @@
 
 import { useRef } from "react";
 import { apiFetch } from "@/lib/api/client";
+import type { CoverSource } from "@/lib/materials/image";
 
-type MetadataEdit = { title?: string; author?: string };
+type MetadataEdit = {
+  title?: string;
+  author?: string;
+  visibility?: "personal" | "public";
+  categories?: string[];
+  coverSource?: CoverSource;
+};
 
 /**
  * Shared save path behind the attachment preview's editable title/author
- * fields (HomeComposer and AddBookButton both use this — see
+ * fields (HomeComposer and AddBookModal both use this — see
  * lib/materials/useUploadBook.ts's `onMetadata` doc comment for why editing
  * doesn't change what the in-flight upload itself sends). A reader can
  * start editing the moment the parsed guess appears, before `materialId`
@@ -23,7 +30,14 @@ export function useAttachmentMetadataEditor() {
       pendingRef.current.set(file, { ...pendingRef.current.get(file), ...edit });
       return;
     }
-    apiFetch(`/materials/${materialId}`, { method: "PATCH", json: edit }).catch(() => {});
+    // Best-effort — the caller's own local state already reflects the edit
+    // optimistically, same as every other field this hook commits. Logged
+    // rather than fully silent, so a real failure (auth, validation, a
+    // dropped connection) is at least visible in devtools instead of
+    // looking like the edit was accepted but silently never persisted.
+    apiFetch(`/materials/${materialId}`, { method: "PATCH", json: edit }).catch((err) =>
+      console.error(`Could not save material ${materialId}:`, err)
+    );
   }
 
   // Called once a still-in-flight attachment's upload resolves — applies
@@ -32,7 +46,9 @@ export function useAttachmentMetadataEditor() {
     const pending = pendingRef.current.get(file);
     if (!pending) return;
     pendingRef.current.delete(file);
-    apiFetch(`/materials/${materialId}`, { method: "PATCH", json: pending }).catch(() => {});
+    apiFetch(`/materials/${materialId}`, { method: "PATCH", json: pending }).catch((err) =>
+      console.error(`Could not save material ${materialId}:`, err)
+    );
   }
 
   function forget(file: File) {

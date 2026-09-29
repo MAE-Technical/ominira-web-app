@@ -3,6 +3,23 @@
 // snake_case ever reaches the client (api-spec.md's Conventions).
 
 import type { CoverSource } from "@/lib/materials/image";
+import type { Locator, ReaderMode } from "@/lib/reader/locator";
+import type { Avatar } from "@/lib/avatar/avatar";
+
+/**
+ * One comrade currently reading or listening to a material — the roster entry
+ * shape shared by MaterialSummary, MaterialDetail and lib/reader/activity.ts's
+ * own listCurrentReaders (defined once here, since it's an API contract).
+ */
+export type CurrentReaderSummary = {
+  readerId: string;
+  pseudonym: string;
+  avatar: Avatar;
+  /** Whether their most recent activity was reading or listening — drives the
+   * roster's mode icon. */
+  mode: ReaderMode;
+  updatedAt: string;
+};
 
 export type AnnotationRange = { passageId: string; start: number; end: number };
 
@@ -44,10 +61,8 @@ export type MaterialSummary = {
    * lib/reader/activity.ts's listCurrentReaders. Empty on a MaterialSummary
    * `toMaterialSummary` built directly (its own safe default) — only
    * `listPublishedMaterials`/`getMaterialDetail` actually enrich this.
-   * `audioTimeMs` non-null means their most recent activity was listening,
-   * not reading — drives the roster's mode icon.
    */
-  currentReaders: { readerId: string; pseudonym: string; audioTimeMs: number | null; updatedAt: string }[];
+  currentReaders: CurrentReaderSummary[];
   /** Real count of active readers — may exceed currentReaders.length once
    * the display cap kicks in; that gap is exactly the UI's "+N more". */
   currentReaderCount: number;
@@ -63,7 +78,7 @@ export type Note = {
    * your mind" posts, `thread_type: 'discussion'` with no attached book) —
    * every book-anchored note/reply still always has one. */
   materialId: string | null;
-  author: { readerId: string; pseudonym: string; city: string | null };
+  author: { readerId: string; pseudonym: string; city: string | null; avatar: Avatar | null };
   ranges: AnnotationRange[];
   parentId: string | null;
   replyingToId: string | null;
@@ -71,6 +86,10 @@ export type Note = {
   visibility: NoteVisibility;
   reactionCount: number;
   reactedByMe: boolean;
+  /** Whether the caller has saved this post (migrations/20261003_bookmarks
+   * .sql). No matching count: unlike a reaction, a bookmark is private, so
+   * there's no public total to carry. False for a signed-out caller. */
+  bookmarkedByMe: boolean;
   /** The post's default topic name — always topicNames[0] (migrations/
    * 20260919_topics_and_posts.sql's required topic_id), null only if the
    * topic lookup itself failed. Surfaced so AuthorRow can show "· in
@@ -106,17 +125,25 @@ export type Highlight = {
 };
 
 /**
- * One `reader_activities` row (migrations/20260831_reader_activities.sql) — a
- * reader's position in one material, text and/or audio. Not embedded on
- * ReaderProfile (nothing read that field; see GET /api/auth/me/continue-reading
- * for the enriched, sorted view of these).
+ * One `reader_activities` row — a reader's position in one material, in any
+ * format (`locator`, see lib/reader/locator.ts) and either mode. Not embedded
+ * on ReaderProfile (nothing read that field; see
+ * GET /api/auth/me/continue-reading for the enriched, sorted view of these).
  */
 export type CurrentReadingEntry = {
   materialId: string;
-  sectionId: string;
-  passageIndex: number;
+  locator: Locator;
+  mode: ReaderMode;
+  /** Playback offset within the located passage — only ever set in listen
+   * mode, and only once a clip has actually played. */
   audioTimeMs: number | null;
+  /** 0-100, computed from `locator` by whoever wrote it (`locatorPercent`).
+   * Never reaches 100 on its own — see `positionPercent`/`finishedAt`. */
   progressPercent: number;
+  /** When this reader explicitly marked the material finished, or null.
+   * Completion is its own fact, not a threshold on `progressPercent` (see
+   * lib/reader/locator.ts's positionPercent). */
+  finishedAt: string | null;
   updatedAt: string;
 };
 
@@ -153,6 +180,9 @@ export type ReaderProfile = {
   /** Free text, capped at 40 chars — no fixed list of options (lib/auth/profile.ts). */
   genderIdentity: string | null;
   onboardingStatus: "pending_survey" | "pending_welcome" | "active";
+  avatar: Avatar;
+  /** Opted in to admin email announcements (off by default). */
+  emailAnnouncements: boolean;
   joinedAt: string;
   updatedAt: string;
 };

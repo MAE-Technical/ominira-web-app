@@ -1,17 +1,20 @@
-const CACHE_NAME = "ominira-shell-v8";
+// Bumped whenever a precached file changes — activate() then drops every
+// older cache, so installed apps pick up the new icon set / splash marks.
+const CACHE_NAME = "ominira-shell-v11";
 // Launch artwork is part of the PWA shell, not page content: it needs to be
 // available before a network request can complete on a cold app start. Cache
-// both themes because the reader preference is restored client-side.
+// both themes because the reader preference is restored client-side. Paths
+// mirror lib/config/brand-assets.ts (a service worker can't import it).
 const APP_SHELL = [
   "/",
   "/manifest.json",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
+  "/icons/icon-192x192.png",
+  "/icons/icon-512x512.png",
+  "/icons/icon-192-maskable.png",
   "/icons/icon-512-maskable.png",
-  "/images/splash/light-accent.svg",
-  "/images/splash/light-illustration-new.svg",
-  "/images/splash/dark-accent.svg",
-  "/images/splash/dark-illustration-new.svg",
+  "/icons/badge-96.png",
+  "/icons/mark-light.webp",
+  "/icons/mark-dark.webp",
 ];
 
 self.addEventListener("install", (event) => {
@@ -60,9 +63,10 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(payload.title, {
       body: payload.body,
       tag: payload.tag,
-      // Original Ominira mark (reverted from black-background variant).
-      icon: payload.icon || "/icons/icon-192.png",
-      badge: payload.badge || "/icons/icon-192.png",
+      icon: payload.icon || "/icons/icon-192x192.png",
+      // Android draws the badge from its alpha channel only — an opaque
+      // square icon would render as a solid white block in the status bar.
+      badge: payload.badge || "/icons/badge-96.png",
       data: { url: payload.url },
       vibrate: [100, 50, 100],
       timestamp: Date.now(),

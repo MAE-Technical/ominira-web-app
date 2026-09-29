@@ -1,50 +1,38 @@
 "use client";
 
-export type TabOption<T extends string> = { value: T; label: string };
-
 /**
- * The underline-tab look for a page/panel-level "which whole view" switch —
- * a plain text label with only the active tab's own bottom border colored
- * in, `-mb-px` so that 2px border sits on the same baseline as whichever
- * shared 1px divider the caller draws under the whole row, rather than this
- * component drawing that baseline itself (BookDetailView wraps this in its
- * own `border-b` container; the reader's note panel relies on PanelShell's
- * own subheader divider instead) — same trick, two different callers
- * supplying the shared line for their own layout reasons.
- *
- * Distinct from PillGroup (this app's other shared filter control, bordered/
- * filled pills) — reserved for a top-level "which whole view" switch (book
- * details' Table of contents/Community notes, the reader's own Public
- * notes/Your highlights), not for narrowing one list among several peer
- * filters (category pills, feed sort), which stays PillGroup's job.
+ * Shared underline-tab bar: brand-colored active tab with a bottom border,
+ * muted inactive tabs. Originally Shelf's reading/saved/finished switcher
+ * (three views of one page, not a filter — hence tabs, not CategoryPills);
+ * now also backs Home's popular/latest sort row, which used to be its own
+ * plain text-link style before the two were unified.
  */
 export default function UnderlineTabs<T extends string>({
   options,
-  selected,
-  onSelect,
+  value,
+  onChange,
 }: {
-  options: TabOption<T>[];
-  selected: T;
-  onSelect: (value: T) => void;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
 }) {
   return (
-    <div className="flex gap-6">
-      {options.map((opt) => {
-        const active = opt.value === selected;
-        return (
-          <button
-            key={opt.value}
-            onClick={() => onSelect(opt.value)}
-            className={`-mb-px cursor-pointer border-b-2 bg-transparent px-0.5 pb-3 text-[12px] font-semibold transition-colors ${
-              active
-                ? "border-[var(--reader-text)] text-[var(--reader-text)]"
-                : "border-transparent text-[var(--reader-text-subtle)] hover:text-[var(--reader-text-muted)]"
-            }`}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
+    <div className="flex gap-6 border-b border-[var(--reader-border)]">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          aria-current={value === option.value ? "page" : undefined}
+          className={`-mb-px cursor-pointer border-x-0 border-t-0 border-b-2 bg-transparent px-0.5 pb-2.5 text-[13px] font-bold transition-colors ${
+            value === option.value
+              ? "border-brand-500 text-brand-500"
+              : "border-transparent text-[var(--reader-text-muted)] hover:text-[var(--reader-text)]"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }

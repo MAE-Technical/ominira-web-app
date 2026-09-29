@@ -42,6 +42,7 @@ export async function getFeaturedBooks(): Promise<FeaturedBook[]> {
     .from("materials")
     .select(MATERIAL_SUMMARY_COLUMNS)
     .eq("status", "published")
+    .in("material_type", ["book", "pdf", "docx"])
     .in("id", ids);
 
   const bySummaryId = new Map((data ?? []).map((row) => [row.id, toMaterialSummary(row)]));

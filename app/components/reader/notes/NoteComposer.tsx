@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { RefObject } from "react";
-import { ArrowRight, Globe, Loader2, Lock, Mic, Pause, Play, Square, X } from "lucide-react";
+import { ArrowRight, Eye, Loader2, Lock, Mic, Pause, Play, Square, X } from "lucide-react";
 import { LiveWaveform, WaveformBars } from "../Waveform";
 import { formatSeconds, useMeasuredWidth, useWaveformBars } from "./noteAudioUtils";
 import { useVoiceRecorder } from "./useVoiceRecorder";
@@ -12,6 +12,7 @@ import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 import { useNoteVisibilityStore } from "@/stores/noteVisibilityStore";
 import type { NoteVisibility } from "@/lib/api/types";
 import MembersOnlyPrompt, { type MembersOnlyAction } from "./MembersOnlyPrompt";
+import Tooltip from "../Tooltip";
 
 // Matches Tailwind's own `sm:` breakpoint (640px) — this is the one place
 // that breakpoint has to be a real JS decision rather than a CSS class:
@@ -39,6 +40,13 @@ const MOBILE_MAX_TEXTAREA_HEIGHT = 320;
 // it always has.
 const MOBILE_MIN_TEXTAREA_HEIGHT = 120;
 const DESKTOP_MAX_TEXTAREA_HEIGHT = 260;
+// Desktop used to start at a single line (min 0 — whatever `rows={1}` gave
+// it) and grow from there; a reader asked for the expanded box to open
+// roomier by default instead of looking like a one-line input that happens
+// to grow, matching the "obviously a real writing space" reasoning
+// MOBILE_MIN_TEXTAREA_HEIGHT already uses, just not as tall as the
+// full-screen mobile overlay affords.
+const DESKTOP_MIN_TEXTAREA_HEIGHT = 96;
 
 /** The text/voice composer — shared by every composing surface in the
  * thread panel: a brand-new top-level note, a reply to a note or another
@@ -190,18 +198,23 @@ export default function NoteComposer({
     if (!el) return;
     el.style.height = "auto";
     const max = isDesktop ? DESKTOP_MAX_TEXTAREA_HEIGHT : MOBILE_MAX_TEXTAREA_HEIGHT;
-    const min = isDesktop ? 0 : MOBILE_MIN_TEXTAREA_HEIGHT;
+    const min = isDesktop ? DESKTOP_MIN_TEXTAREA_HEIGHT : MOBILE_MIN_TEXTAREA_HEIGHT;
     el.style.height = `${Math.min(Math.max(el.scrollHeight, min), max)}px`;
   }, [isDesktop]);
 
   // Re-measures whenever the textarea (re)appears — on mount (so an existing
-  // long note starts already expanded, no flash of a clipped single line)
-  // and whenever `mode` swings back to "idle" (the textarea unmounts while
+  // long note starts already expanded, no flash of a clipped single line),
+  // whenever `mode` swings back to "idle" (the textarea unmounts while
   // recording/reviewing a voice draft, so its inline height is lost and
-  // needs recomputing once it returns).
+  // needs recomputing once it returns), and whenever `expanded` itself flips
+  // true — the pill-to-textarea swap is what actually mounts the element on
+  // a composer that started collapsed, and without `expanded` in this list
+  // that first mount never got measured at all: the textarea just sat at
+  // its natural single-line height until something else (typing) happened
+  // to call resizeTextarea again.
   useLayoutEffect(() => {
     resizeTextarea();
-  }, [resizeTextarea, recorder.mode]);
+  }, [resizeTextarea, recorder.mode, expanded]);
 
   // Expanding from the idle pill (focus, or the pill's own mic button)
   // should land the cursor straight in the textarea, same as tapping into
@@ -346,19 +359,16 @@ export default function NoteComposer({
   // label (which state it's *in*, not just an on/off position) since
   // there's no separate text anywhere else in either layout saying so.
   const visibilityToggle = (
-    <button
-      type="button"
-      onClick={toggleVisibility}
-      title={
-        visibility === "public"
-          ? "Visible to everyone — tap to make this just for you"
-          : "Only visible to you — tap to make this public"
-      }
-      className="flex flex-none items-center gap-1 rounded-full border border-[var(--reader-border)] bg-transparent px-2.5 py-1 text-[11px] font-semibold text-[var(--reader-text-muted)] cursor-pointer hover:text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
-    >
-      {visibility === "public" ? <Globe size={12} /> : <Lock size={12} />}
-      {visibility === "public" ? "Public" : "Private"}
-    </button>
+    <Tooltip label={visibility === "public" ? "Visible to everyone — tap to make this just for you": "Only visible to you — tap to make this public"} side="top">
+      <button
+        type="button"
+        onClick={toggleVisibility}
+        className="flex flex-none items-center gap-1 rounded-full border border-[var(--reader-border)] bg-transparent px-2.5 py-1 text-[11px] font-semibold text-[var(--reader-text-muted)] cursor-pointer hover:text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
+      >
+        {visibility === "public" ? <Eye size={12} /> : <Lock size={12} />}
+        {visibility === "public" ? "Public" : "Private"}
+      </button>
+    </Tooltip>
   );
 
   // A membership prompt is feedback for a deliberate attempt to reply, not
@@ -388,12 +398,12 @@ export default function NoteComposer({
         <input
           onFocus={() => setExpanded(true)}
           placeholder={placeholder}
-          className="flex-1 rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface-hover)] px-3.5 py-2 text-[13px] font-medium text-[var(--reader-text)] outline-none placeholder:text-[var(--reader-text-muted)]"
+          className="flex-1 rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface-hover)] px-3.5 py-3 text-[13px] font-medium text-[var(--reader-text)] outline-none placeholder:text-[var(--reader-text-muted)]"
         />
         <button
           onClick={handlePillMic}
           title="Record a voice note"
-          className="flex h-8.5 w-8.5 flex-none items-center justify-center rounded-full border-none bg-[var(--reader-surface-hover)] text-[var(--reader-text-muted)] cursor-pointer hover:text-[var(--reader-text)]"
+          className="flex h-10.5 w-10.5 flex-none items-center justify-center rounded-full border-none bg-[var(--reader-surface-hover)] text-[var(--reader-text-muted)] cursor-pointer hover:text-[var(--reader-text)]"
         >
           <Mic size={15} />
         </button>
@@ -470,7 +480,7 @@ export default function NoteComposer({
             onBlur={() => setIsFocused(false)}
             placeholder={placeholder}
             rows={1}
-            className="om-scroll w-full resize-none border-none outline-none bg-transparent text-[13px] font-medium text-[var(--reader-text)] placeholder:text-[var(--reader-text-muted)]"
+            className="om-scroll w-full resize-none border-none outline-none bg-transparent text-[13px] font-semibold text-[var(--reader-text)] placeholder:text-[var(--reader-text-muted)]"
             style={{ maxHeight: DESKTOP_MAX_TEXTAREA_HEIGHT, overflowY: "auto" }}
           />
         )}

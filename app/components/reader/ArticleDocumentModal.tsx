@@ -2,6 +2,7 @@
 
 import DocumentOverlayShell from "./DocumentOverlayShell";
 import ArticleDocumentView from "./ArticleDocumentView";
+import type { DocumentModalProps } from "./documentModalProps";
 
 /** The intercepted-route wrapper for ArticleDocumentView — see
  * PdfDocumentModal's doc comment for why this thin client wrapper exists
@@ -9,18 +10,24 @@ import ArticleDocumentView from "./ArticleDocumentView";
  * children directly). */
 export default function ArticleDocumentModal({
   slug,
+  materialId,
   title,
   sourceUrl,
+  urlLocator,
   articleHtml,
-}: {
-  slug: string;
-  title: string;
-  sourceUrl: string;
-  articleHtml: string;
-}) {
+}: DocumentModalProps & { articleHtml: string }) {
   return (
     <DocumentOverlayShell slug={slug}>
-      {(onClose) => <ArticleDocumentView title={title} sourceUrl={sourceUrl} articleHtml={articleHtml} onClose={onClose} />}
+      {(onClose) => (
+        <ArticleDocumentView
+          materialId={materialId}
+          title={title}
+          sourceUrl={sourceUrl}
+          articleHtml={articleHtml}
+          urlLocator={urlLocator}
+          onClose={onClose}
+        />
+      )}
     </DocumentOverlayShell>
   );
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { listPublishedMaterials } from "@/lib/materials/list";
+import { getCategoryContributionStats, listPublishedMaterials } from "@/lib/materials/list";
 import LibraryView from "@/app/components/shell/LibraryView";
 import { getCategories } from "@/lib/categories/config";
 import { resolveCategoryFromSlug } from "@/lib/categories/slug";
@@ -21,11 +21,11 @@ export default async function LibraryPage({
   const categories = await getCategories();
   const initialCategory = resolveCategoryFromSlug(categories, q);
 
-  const { items, nextCursor } = await listPublishedMaterials({
-    limit: 50,
-    sort: "alphabetical",
-    category: initialCategory === "All" ? undefined : initialCategory,
-  });
+  const categoryFilter = initialCategory === "All" ? undefined : initialCategory;
+  const [{ items, nextCursor }, contributionStats] = await Promise.all([
+    listPublishedMaterials({ limit: 50, sort: "alphabetical", category: categoryFilter }),
+    getCategoryContributionStats(categoryFilter ?? null),
+  ]);
   // Same direct, no-HTTP-hop call GET /api/materials itself makes — see
   // listPublishedMaterials's own doc comment. First page only (50, the
   // endpoint's own default limit) in alphabetical order (`sort:
@@ -44,6 +44,7 @@ export default async function LibraryPage({
       initialNextCursor={nextCursor}
       categories={categories}
       category={initialCategory}
+      contributionStats={contributionStats}
     />
   );
 }

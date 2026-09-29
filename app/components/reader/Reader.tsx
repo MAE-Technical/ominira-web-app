@@ -10,6 +10,7 @@ import FootnotePopover from "./FootnotePopover";
 import ShareQuoteModal from "./ShareQuoteModal";
 import type { NoteLookup } from "./PassageContent";
 import BookContent from "./BookContent";
+import DocumentEndPanel from "./DocumentEndPanel";
 import ReaderHeader from "./ReaderHeader";
 import NotesFeedFab from "./NotesFeedFab";
 import ChaptersDrawer from "./ChaptersDrawer";
@@ -28,7 +29,6 @@ import {
   useReaderStore,
 } from "@/stores/reader-store";
 import { useReadingPositionStore } from "@/stores/reading-position-store";
-import { useSessionStore, isSessionValid } from "@/stores/session-store";
 import { useLayoutStore } from "@/stores/layout-store";
 import { useAudioStore } from "@/stores/audio-store";
 import { useNarrationStore } from "@/stores/narration-store";
@@ -40,7 +40,7 @@ import { useProgressiveText } from "@/lib/reader/useProgressiveText";
 import { useReadingProgress } from "@/lib/reader/useReadingProgress";
 import { useTextAnnotations } from "@/lib/reader/useTextAnnotations";
 import { useBookAnnotationFeed } from "@/lib/reader/useBookAnnotationFeed";
-import { useContinueReading } from "@/lib/auth/useContinueReading";
+import { useServerPositionReady } from "@/lib/reader/useServerPositionReady";
 import { quoteForRanges } from "@/lib/reader/annotationSelection";
 import { sectionLabel } from "@/lib/reader/sectionHeading";
 
@@ -273,27 +273,13 @@ export default function Reader({
       .then(() => setHydrated(true));
   }, []);
 
-  // Seeds reading-position-store's local mirror from the server (see
-  // useContinueReading's own doc comment) for a reader who opened this book
-  // directly rather than via the home feed's Continue Reading rail. Its
-  // `isFetched` (below, via serverPositionReady) is what useResumeScroll
-  // actually waits on — the hydration side effect alone isn't enough on a
-  // device/browser with no local write of its own for this book yet (a
-  // second device, a fresh profile, cleared site data): without waiting for
-  // this to land too, resume would already have committed to "nothing to
-  // resume" off the still-empty local store before this request ever
-  // arrived, the same class of race hasHydrated below guards against for
-  // the local store itself.
-  const continueReadingQuery = useContinueReading();
-  const sessionHasHydrated = useSessionStore((s) => s.hasHydrated);
-  const session = useSessionStore((s) => s.session);
-  const isAuthenticated = sessionHasHydrated && isSessionValid(session);
-  // False (i.e. "keep waiting") until we can actually say one way or the
-  // other whether there's server data to fold in: either this device
-  // confirmed there's no reader session at all to fetch one for, or the
-  // fetch itself has completed (success or failure — a dropped request
-  // shouldn't hold the reader open forever; local data is still there).
-  const serverPositionReady = sessionHasHydrated && (!isAuthenticated || continueReadingQuery.isFetched);
+  // Seeds reading-position-store's local mirror from the server and reports
+  // when that has actually had its chance to land — what useResumeScroll
+  // waits on, and shared with every other surface that resumes (see the
+  // hook's own doc comment). A device with no local write of its own for this
+  // book yet (a second device, a fresh profile, cleared site data) would
+  // otherwise commit to "nothing to resume" before the request ever arrived.
+  const serverPositionReady = useServerPositionReady();
 
   const fontSize = fontSizePxFromScale(fontSizeScale);
   const lineHeight = lineHeightFromScale(lineSpacingScale);
@@ -503,7 +489,7 @@ export default function Reader({
   // dropped the reader back at the chapter's first passage. This tracks
   // scroll position within the active section instead (skipping entirely
   // while isListen, which keeps owning its own audio-offset-aware writes).
-  useReadingProgress({
+  const { getPositionNow } = useReadingProgress({
     book,
     materialId,
     mode: isListen ? "listen" : "read",
@@ -512,6 +498,15 @@ export default function Reader({
     getSlideEl,
     resumeReady,
   });
+
+  // The end of the book, rendered at the bottom of the last spine section's
+  // content by BookContent. Memoized because BookContent is `memo()`d — a
+  // fresh element identity on every render of this (very busy) component
+  // would defeat that memoization for the whole content tree.
+  const endSlot = useMemo(
+    () => <DocumentEndPanel materialId={materialId} title={book.metadata.title} getCurrentPosition={getPositionNow} />,
+    [materialId, book.metadata.title, getPositionNow]
+  );
 
   // Podcast-style auto-advance (spec.md): the narration engine (global,
   // book-agnostic) owns the actual position/audio-clock advance — this
@@ -1044,6 +1039,7 @@ export default function Reader({
               contentTopPad={contentTopPad}
               contentBottomPad={contentBottomPad}
               orderedSections={orderedSections}
+              endSlot={endSlot}
               notesIndexSectionId={notesIndexSectionId}
               notesIndexGroups={notesIndexGroups}
               getAnnotations={getAnnotations}

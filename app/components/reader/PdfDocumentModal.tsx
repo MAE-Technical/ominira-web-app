@@ -1,7 +1,8 @@
 "use client";
 
 import DocumentOverlayShell from "./DocumentOverlayShell";
-import PdfDocumentView from "./PdfDocumentView";
+import PdfDocumentLoader from "./PdfDocumentLoader";
+import type { DocumentModalProps } from "./documentModalProps";
 
 /**
  * The intercepted-route wrapper for PdfDocumentView — mirrors ReaderModal's
@@ -13,10 +14,12 @@ import PdfDocumentView from "./PdfDocumentView";
  * fine; the Server Component page only ever passes this plain, serializable
  * props (no function values).
  */
-export default function PdfDocumentModal({ slug, title, sourceUrl }: { slug: string; title: string; sourceUrl: string }) {
+export default function PdfDocumentModal({ slug, materialId, title, sourceUrl, urlLocator }: DocumentModalProps) {
   return (
     <DocumentOverlayShell slug={slug}>
-      {(onClose) => <PdfDocumentView title={title} sourceUrl={sourceUrl} onClose={onClose} />}
+      {(onClose) => (
+        <PdfDocumentLoader materialId={materialId} title={title} sourceUrl={sourceUrl} urlLocator={urlLocator} onClose={onClose} />
+      )}
     </DocumentOverlayShell>
   );
 }

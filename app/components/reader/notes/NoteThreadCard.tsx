@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, EllipsisVertical } from "lucide-react";
 import type { Note } from "@/lib/api/types";
 import { useIsOwnNote } from "@/lib/reader/currentAuthor";
@@ -9,6 +9,7 @@ import AuthorRow from "./AuthorRow";
 import NoteContent from "./NoteContent";
 import ReactionButton from "./ReactionButton";
 import ReplyButton from "./ReplyButton";
+import BookmarkButton from "@/app/components/shared/BookmarkButton";
 import NoteComposer from "./NoteComposer";
 import HighlightCard from "./HighlightCard";
 import EntryMenu from "./EntryMenu";
@@ -43,6 +44,7 @@ export default function NoteThreadCard({
   replies,
   expanded,
   initialShowAll,
+  focusReplyId,
   onToggleExpand,
   ui,
   actions,
@@ -65,6 +67,11 @@ export default function NoteThreadCard({
   /** When deep-linked from a notification, show all replies immediately
    * instead of collapsed to 2. */
   initialShowAll?: boolean;
+  /** The one reply a deep link came for (a reply notification names the
+   * reply, not the thread): it's scrolled into view and washed once on
+   * mount, and the thread opens uncollapsed so it can't be hiding behind
+   * "Show N more". */
+  focusReplyId?: string;
   onToggleExpand: () => void;
   ui: ThreadUIState;
   actions: ThreadActions;
@@ -73,7 +80,14 @@ export default function NoteThreadCard({
   const isEditing = ui.editingId === note.id;
   const isMenuOpen = ui.activeMenuFor === note.id;
   const isReplyingToRoot = ui.activeComposerFor === note.id && ui.editingId === null;
-  const [showAllReplies, setShowAllReplies] = useState(initialShowAll ?? false);
+  const [showAllReplies, setShowAllReplies] = useState(initialShowAll ?? Boolean(focusReplyId));
+  const focusRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    // "center", not the default "start": a reply landing flush against the
+    // top of the viewport reads as the beginning of the thread rather than
+    // as one entry inside it.
+    if (focusReplyId) focusRef.current?.scrollIntoView({ block: "center" });
+  }, [focusReplyId]);
   const visibleReplies = showAllReplies ? replies : replies.slice(0, COLLAPSED_REPLY_COUNT);
   const hiddenReplyCount = Math.max(0, replies.length - visibleReplies.length);
 
@@ -87,7 +101,7 @@ export default function NoteThreadCard({
           Everything else (header/quote, body, reactions) runs the full
           width below, not indented under the avatar. */}
       <div className="flex min-w-0 items-center gap-1 sm:gap-3">
-        <AuthorAvatar name={note.author.pseudonym} />
+        <AuthorAvatar name={note.author.pseudonym} avatar={note.author.avatar} />
         <div className="min-w-0 flex-1">
           <AuthorRow
             name={note.author.pseudonym}
@@ -190,6 +204,30 @@ export default function NoteThreadCard({
                 ui.toggleComposer(note.id);
               }}
             />
+
+            {/* ml-auto, not part of the react/reply cluster: those two are
+                what a reader does *to* the conversation, this is what they
+                do with it for themselves. Pushed to the row's trailing
+                edge so it reads as a separate, private act — and it stays
+                countless on purpose (see BookmarkButton), which is also
+                what keeps it from looking like a third social metric
+                sitting next to two real ones.
+
+                Hidden on your own post, same rule 1 BookListRow applies to
+                your own uploads: your posts are already collected on your
+                profile, so saving one is an offer to do something that's
+                already true. Unlike a book row this stays unconditionally
+                visible otherwise (rule 3) — a post has no detail page to
+                fall back to, so hover-reveal here would leave it
+                unsavable on touch entirely. */}
+            {!own && (
+              <BookmarkButton
+                saved={note.bookmarkedByMe}
+                onToggle={() => actions.toggleBookmark(note.id)}
+                size="small"
+                className="ml-auto"
+              />
+            )}
           </div>
 
           {/* Mounts right here, under the root note's own action row — not
@@ -231,8 +269,26 @@ export default function NoteThreadCard({
               : undefined;
             const depth = replyingToName ? 2 : 1;
             const isReplyingToThis = ui.activeComposerFor === reply.id && ui.editingId === null;
+            // Each depth-1 reply starts a fresh little sub-thread of its own
+            // (itself plus whichever depth-2 replies address it) — a
+            // border-top demarcates where one of those groups ends and the
+            // next begins. Applies from the very first entry too, to
+            // separate the reply list as a whole from the root note's own
+            // reaction/reply row above it. Sized to the reply's own identity
+            // row (avatar through the ellipsis menu), not the full card
+            // width like NoteCard's own post-to-post border-b.
+            const isNewRootReply = depth === 1;
             return (
-              <div key={reply.id}>
+              <div
+                key={reply.id}
+                ref={reply.id === focusReplyId ? focusRef : undefined}
+                className={`${isNewRootReply ? "pt-3" : ""} ${
+                  reply.id === focusReplyId
+                    ? "-mx-2 rounded-sm bg-[color-mix(in_srgb,var(--reader-accent)_8%,transparent)] px-2"
+                    : ""
+                }`}
+              >
+                {isNewRootReply && <div className="mb-3 border-t border-[var(--reader-border)]" aria-hidden="true" />}
                 <ReplyEntry reply={reply} replyingToName={replyingToName} depth={depth} ui={ui} actions={actions} />
                 {/* Same "mounts right under its own target" rule as the
                     root composer above — indented to this reply's own

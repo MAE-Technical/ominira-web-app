@@ -14,7 +14,8 @@
     "materials:thumbnails": "bun run scripts/generate-material-thumbnails.ts",
     "materials:cover-src": "bun run scripts/generate-material-cover-src.ts",
     "materials:google": "bun run scripts/generate-material-google-metadata.ts",
-    "materials:openlibrary": "bun run scripts/generate-material-openlibrary-metadata.ts"
+    "materials:openlibrary": "bun run scripts/generate-material-openlibrary-metadata.ts",
+    "metrics:verify": "bun run scripts/verify-dashboard-metrics.ts"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
@@ -34,8 +35,10 @@
     "pdfjs-dist": "^6.3.289",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-easy-crop": "^6.2.3",
     "react-lite-youtube-embed": "^3.7.0",
     "react-pdf": "^11.0.0",
+    "recharts": "^3.10.1",
     "web-push": "^3.6.7",
     "ws": "^8.21.3",
     "zod": "^4.4.3",

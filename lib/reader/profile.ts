@@ -1,6 +1,7 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import { MATERIAL_SUMMARY_COLUMNS } from "@/lib/materials/columns";
 import { toMaterialSummary } from "@/lib/materials/summary";
+import { applyLibraryTypeFilter, withCurrentReaders } from "@/lib/materials/list";
 import { loadBookDocuments } from "@/lib/materials/bookDocuments";
 import { resolveExcerpt } from "@/lib/community/excerpt";
 import { enrichFeedItems, type FeedItem } from "@/lib/community/feed";
@@ -9,6 +10,7 @@ import { resolveReaderBySlug } from "./profileSlug";
 import { listReaderActivities } from "./activity";
 import type { AnnotationRange, MaterialSummary } from "@/lib/api/types";
 import type { Database } from "@/lib/supabase/database.types";
+import { toAvatar, type Avatar } from "@/lib/avatar/avatar";
 
 type HighlightRow = Database["public"]["Tables"]["highlights"]["Row"];
 
@@ -23,17 +25,16 @@ export class ReaderNotFoundError extends Error {
 // isn't needed for any reader on this app today, capped so one very
 // prolific comrade's profile can't balloon the response indefinitely.
 const PROFILE_PUBLIC_NOTES_CAP = 20;
-const PROFILE_CURRENTLY_READING_CAP = 6;
 const PROFILE_HIGHLIGHTS_CAP = 30;
+const PROFILE_CONTRIBUTIONS_CAP = 30;
 
 export type ReaderProfileStats = { notes: number; reading: number; reactions: number };
 
 export type ReaderProfileCurrentlyReading = {
-  material: Pick<
-    MaterialSummary,
-    | "id" | "slug" | "title" | "author" | "cover" | "thumbnail"
-    | "googleCoverUrl" | "googleThumbnailUrl" | "openlibraryCoverUrl" | "openlibraryThumbnailUrl" | "coverSource"
-  >;
+  /** The full summary (already what toMaterialSummary builds below), so the
+   * profile renders these through the same BookListRow as every other book
+   * list rather than a bespoke cover-only row. */
+  material: MaterialSummary;
   /** Only populated for `isSelf` — how far into a book someone else is
    * stays private; a visitor sees *which* books a reader has open, never
    * their exact progress in one. */
@@ -48,7 +49,14 @@ export type ReaderProfileHighlight = {
 };
 
 export type ReaderProfilePage = {
-  reader: { id: string; pseudonym: string; city: string | null; country: string | null; joinedAt: string };
+  reader: {
+    id: string;
+    pseudonym: string;
+    avatar: Avatar;
+    city: string | null;
+    country: string | null;
+    joinedAt: string;
+  };
   /** Whether this bundle was resolved for the profile's own owner (matched
    * by auth token, not by slug — see getReaderProfilePage's `viewerId`).
    * Drives ReaderProfileView's self-vs-public chrome and which tab set
@@ -61,6 +69,12 @@ export type ReaderProfilePage = {
    * at all (migrations/migration.sql), always private to their author, so
    * a public request never even queries them. */
   highlights: ReaderProfileHighlight[] | null;
+  /** library-contribution-ux-spec.md Step 5's "what they've contributed" —
+   * `materials` rows where `uploaded_by = reader.id` and
+   * `visibility = 'public'`. Visible to any viewer, same as publicNotes;
+   * a reader's private/personal uploads never surface on their own public
+   * profile. */
+  contributions: MaterialSummary[];
 };
 
 /** highlights rows -> quote-only cards (no note content — a bare highlight
@@ -108,7 +122,7 @@ export async function getReaderProfilePage(slug: string, viewerId: string | unde
   const isSelf = viewerId === readerRow.id;
 
   const admin = getSupabaseAdminClient();
-  const [{ data: ownPublicNotes }, activities, { data: rootNoteRows }] = await Promise.all([
+  const [{ data: ownPublicNotes }, activities, { data: rootNoteRows }, { data: contributionRows }] = await Promise.all([
     // id + reaction_count only, unbounded — this reader's own note-writing
     // stays small enough (dozens, not thousands) that summing in app code
     // is cheaper than round-tripping through a DB-side aggregate for it.
@@ -124,6 +138,13 @@ export async function getReaderProfilePage(slug: string, viewerId: string | unde
       .eq("visibility", "public")
       .order("created_at", { ascending: false })
       .limit(PROFILE_PUBLIC_NOTES_CAP),
+    // Same type filter as every library listing — a "webpage" read-it-later
+    // save was never added *to the library*, whatever its visibility.
+    applyLibraryTypeFilter(
+      admin.from("materials").select(MATERIAL_SUMMARY_COLUMNS).eq("uploaded_by", readerRow.id).eq("visibility", "public")
+    )
+      .order("created_at", { ascending: false })
+      .limit(PROFILE_CONTRIBUTIONS_CAP),
   ]);
 
   const stats: ReaderProfileStats = {
@@ -134,21 +155,31 @@ export async function getReaderProfilePage(slug: string, viewerId: string | unde
 
   const publicNotes = await enrichFeedItems((rootNoteRows ?? []) as NoteRow[], viewerId);
 
-  const currentlyReadingActivities = activities.slice(0, PROFILE_CURRENTLY_READING_CAP);
-  let currentlyReading: ReaderProfileCurrentlyReading[] = [];
+  // Every in-progress activity, uncapped — a finished one belongs to the
+  // Shelf's Finished tab, not "currently reading".
+  const currentlyReadingActivities = activities.filter((a) => !a.finishedAt);
+  let readingMaterials: MaterialSummary[] = [];
   if (currentlyReadingActivities.length > 0) {
     const { data: materials } = await admin
       .from("materials")
       .select(MATERIAL_SUMMARY_COLUMNS)
       .in("id", currentlyReadingActivities.map((a) => a.materialId));
-    const materialsById = new Map((materials ?? []).map((m) => [m.id, toMaterialSummary(m)]));
-    currentlyReading = currentlyReadingActivities
-      .map((activity) => {
-        const material = materialsById.get(activity.materialId);
-        return material ? { material, progressPercent: isSelf ? activity.progressPercent : null } : null;
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    readingMaterials = (materials ?? []).map(toMaterialSummary);
   }
+
+  // One batched presence lookup across both lists, so each renders as the
+  // same BookListRow a library listing does, "reading now" line included.
+  const { items: enriched } = await withCurrentReaders({
+    items: [...readingMaterials, ...(contributionRows ?? []).map(toMaterialSummary)],
+    nextCursor: null,
+  });
+  const enrichedById = new Map(enriched.map((m) => [m.id, m]));
+  const contributions = enriched.slice(readingMaterials.length);
+
+  const currentlyReading: ReaderProfileCurrentlyReading[] = currentlyReadingActivities.flatMap((activity) => {
+    const material = enrichedById.get(activity.materialId);
+    return material ? [{ material, progressPercent: isSelf ? activity.progressPercent : null }] : [];
+  });
 
   let highlights: ReaderProfileHighlight[] | null = null;
   if (isSelf) {
@@ -165,6 +196,7 @@ export async function getReaderProfilePage(slug: string, viewerId: string | unde
     reader: {
       id: readerRow.id,
       pseudonym: readerRow.pseudonym,
+      avatar: toAvatar(readerRow),
       city: readerRow.city,
       country: readerRow.country,
       joinedAt: readerRow.joined_at,
@@ -174,5 +206,6 @@ export async function getReaderProfilePage(slug: string, viewerId: string | unde
     currentlyReading,
     publicNotes,
     highlights,
+    contributions,
   };
 }

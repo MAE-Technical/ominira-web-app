@@ -5,6 +5,7 @@ import PdfDocumentModal from "@/app/components/reader/PdfDocumentModal";
 import DocxDocumentModal from "@/app/components/reader/DocxDocumentModal";
 import ArticleDocumentModal from "@/app/components/reader/ArticleDocumentModal";
 import { loadReaderMaterial, MaterialNotFoundError } from "@/lib/reader/loadReaderMaterial";
+import { locatorFromQuery } from "@/lib/reader/locator";
 import { getMaterialDetail } from "@/lib/materials/detail";
 import { PLATFORM_NAME } from "@/lib/config/platform";
 
@@ -22,7 +23,7 @@ export async function generateMetadata({
   try {
     material = await getMaterialDetail(slug);
   } catch {
-    return { title: "Book not found" };
+    return { title: "Not found" };
   }
   const { title, author, description } = material;
   const desc = description || `${title} by ${author} — read or listen on ${PLATFORM_NAME}.`;
@@ -44,10 +45,21 @@ export default async function ReadBookModalPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ section?: string; passage?: string; note?: string; noteId?: string; thread?: string }>;
+  // ?page=/?block= are the non-EPUB resume targets — see app/read/[slug]'s
+  // own searchParams comment.
+  searchParams: Promise<{
+    section?: string;
+    passageIndex?: string;
+    page?: string;
+    block?: string;
+    passage?: string;
+    note?: string;
+    noteId?: string;
+    thread?: string;
+  }>;
 }) {
   const { slug } = await params;
-  const { section, passage, note, noteId, thread } = await searchParams;
+  const { section, passageIndex, page, block, passage, note, noteId, thread } = await searchParams;
 
   let material;
   try {
@@ -59,16 +71,19 @@ export default async function ReadBookModalPage({
     throw err;
   }
 
-  if (material.kind === "pdf") {
-    return <PdfDocumentModal slug={slug} title={material.title} sourceUrl={material.sourceUrl} />;
-  }
-  if (material.kind === "docx") {
-    return <DocxDocumentModal slug={slug} title={material.title} sourceUrl={material.sourceUrl} />;
-  }
-  if (material.kind === "webpage") {
-    return (
-      <ArticleDocumentModal slug={slug} title={material.title} sourceUrl={material.sourceUrl} articleHtml={material.articleHtml} />
-    );
+  // Every single-document viewer's wrapper takes the same props
+  // (DocumentModalProps), so they're built once here rather than per branch.
+  if (material.kind !== "book") {
+    const documentProps = {
+      slug,
+      materialId: material.materialId,
+      title: material.title,
+      sourceUrl: material.sourceUrl,
+      urlLocator: locatorFromQuery({ section, passageIndex, page, block }),
+    };
+    if (material.kind === "pdf") return <PdfDocumentModal {...documentProps} />;
+    if (material.kind === "docx") return <DocxDocumentModal {...documentProps} />;
+    return <ArticleDocumentModal {...documentProps} articleHtml={material.articleHtml} />;
   }
 
   return (

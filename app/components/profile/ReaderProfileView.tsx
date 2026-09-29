@@ -3,97 +3,106 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Globe } from "lucide-react";
 import { useReaderProfile, type ReaderProfilePage } from "@/lib/reader/useReaderProfile";
-import { avatarColor, avatarInitial, comradeName } from "@/lib/reader/authorDisplay";
+import { comradeName } from "@/lib/reader/authorDisplay";
+import ReaderAvatar from "@/app/components/shared/ReaderAvatar";
 import { resolveBookThumbnailSrc } from "@/lib/materials/image";
 import { communityFeedItemHref } from "@/lib/community/useCommunityFeed";
+import type { MaterialSummary } from "@/lib/api/types";
 import Loader from "@/app/components/Loader";
-import BookCover from "@/app/components/shared/BookCover";
 import UnderlineTabs from "@/app/components/UnderlineTabs";
-import ShareButton from "@/app/components/book/ShareButton";
+import DetailHeader from "@/app/components/shared/DetailHeader";
+import NoResults from "@/app/components/shared/NoResults";
+import BookListRow from "@/app/components/shell/BookListRow";
 import QuoteCard from "@/app/components/reader/notes/QuoteCard";
 import NoteCard from "@/app/components/reader/notes/NoteCard";
 
-type Tab = "notes" | "highlights";
-const TAB_OPTIONS: { value: Tab; label: string }[] = [
-  { value: "notes", label: "Public notes" },
-  { value: "highlights", label: "Your highlights" },
+type Tab = "posts" | "highlights";
+// A visitor still gets the tab bar, just with the one tab they're allowed to
+// see — the page keeps the same shape whoever's looking, rather than the
+// posts list swapping between a tab and a bare heading.
+const SELF_TABS: { value: Tab; label: string }[] = [
+  { value: "posts", label: "Posts" },
+  { value: "highlights", label: "Highlights" },
 ];
+const PUBLIC_TABS = SELF_TABS.slice(0, 1);
+
+/** Avatar beside name + city — Profile Page.dc.html's left-aligned identity
+ * block, minus its share button, which lives in DetailHeader's row above
+ * instead (same place a material page puts it). The owner also gets a plain
+ * "Edit profile" link through to account settings — the mirror of that
+ * page's own "View profile" link back here. */
+function ProfileIdentity({ reader, isSelf }: { reader: ReaderProfilePage["reader"]; isSelf: boolean }) {
+  return (
+    <div className="flex items-center gap-4 pt-2 pb-6">
+      <ReaderAvatar pseudonym={reader.pseudonym} avatar={reader.avatar} size={64} />
+      <div className="flex min-w-0 flex-col gap-1">
+        <h1 className="m-0 truncate text-[15px] font-semibold text-[var(--reader-text)]">
+          {comradeName(reader.pseudonym)}
+        </h1>
+        {reader.city && reader.country && (
+          <span className="text-[13px] font-medium text-[var(--reader-text-muted)]">
+            {reader.city}, {reader.country}
+          </span>
+        )}
+        {isSelf && (
+          <Link
+            href="/account"
+            className="mt-1.5 text-xs font-semibold text-[var(--reader-accent)]"
+          >
+            Edit profile
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function StatRow({ stats }: { stats: ReaderProfilePage["stats"] }) {
   const cells: { label: string; value: number }[] = [
-    { label: "Notes", value: stats.notes },
-    { label: "Reading", value: stats.reading },
-    { label: "Reactions", value: stats.reactions },
+    { label: "Books started", value: stats.reading },
+    { label: "Posts", value: stats.notes },
+    // { label: "Reactions", value: stats.reactions },
   ];
   return (
-    <div className="flex divide-x divide-[var(--reader-border)] rounded-md border border-[var(--reader-border)]">
+    <div className="flex gap-8 border-y border-[var(--reader-border)] py-4">
       {cells.map((cell) => (
-        <div key={cell.label} className="flex-1 p-3.5 text-center">
-          <div className="font-serif text-[22px] font-semibold text-[var(--reader-accent)]">{cell.value}</div>
-          <div className="mt-1 text-[13px] font-semibold text-[var(--reader-text-subtle)]">{cell.label}</div>
+        <div key={cell.label} className="flex flex-col gap-0.5">
+          <span className="text-xl font-bold text-[var(--reader-text)]">{cell.value}</span>
+          <span className="text-xs font-medium text-[var(--reader-text-muted)]">{cell.label}</span>
         </div>
       ))}
     </div>
   );
 }
 
-/** The identity hero + stat row + currently-reading shelf — Concept A/2a's
- * "Dossier stack" direction (Claude Design project 5eb1f985, `Reader
- * Profile Concepts.dc.html`), the one combined direction that pass landed
- * on: 1a's identity/stat block with 1g's catalog-row "Currently reading"
- * list (avatar-less cover + title/author + thin progress bar) rather than
- * 1a's own horizontal cover shelf. */
-function CurrentlyReadingSection({ items }: { items: ReaderProfilePage["currentlyReading"] }) {
+/** Currently reading and contributions — plain BookListRows in the same
+ * 1-col mobile / 2-col desktop grid as the Library and Shelf, so a book here
+ * behaves exactly as it would anywhere else (the viewer's own progress and
+ * save state, the "reading now" line). Headings are small eyebrow labels,
+ * the same quiet style LibraryView uses, not page-level serif titles. */
+function BookSection({ title, items, emptyText }: { title: string; items: MaterialSummary[]; emptyText?: string }) {
+  if (items.length === 0 && !emptyText) return null;
   return (
-    <div className="mt-10">
-      <div className="mt-7 mb-5">
-        <h1 className="m-0 font-serif text-lg font-bold text-[var(--reader-text)]">Currently reading</h1>
-      </div>
+    <section className="mt-8">
+      <h2 className="m-0 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--reader-text-subtle)]">{title}</h2>
       {items.length === 0 ? (
-        <div className="rounded-md border border-[var(--reader-border)] px-4 py-5 text-center text-sm font-medium text-[var(--reader-text-muted)]">
-          Not reading anything yet — open a book to begin.
-        </div>
+        <NoResults className="mt-3 mb-0" message={emptyText!} />
       ) : (
-        <div className="flex flex-col gap-3.5">
-          {items.map(({ material, progressPercent }) => (
-            <Link
-              key={material.id}
-              href={`/book/${material.slug}`}
-              className="flex items-center gap-3 no-underline"
-            >
-              <BookCover
-                src={resolveBookThumbnailSrc(material)}
-                alt={material.title}
-                className="h-16 w-11 flex-none rounded-xs"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-semibold text-[var(--reader-text)]">{material.title}</div>
-                <div className="truncate text-xs font-medium text-[var(--reader-text-muted)]">{material.author}</div>
-                {/* progressPercent is only ever non-null for `isSelf` — a
-                    visitor sees which books someone has open, never how far
-                    into them (see ReaderProfilePage's own doc comment). */}
-                {progressPercent !== null && (
-                  <div className="mt-1.5 h-[3px] rounded-full bg-[var(--reader-surface-hover)]">
-                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${progressPercent}%` }} />
-                  </div>
-                )}
-              </div>
-            </Link>
+        <div className="grid grid-cols-1 shell:grid-cols-2 shell:gap-x-10">
+          {items.map((material) => (
+            <BookListRow key={material.id} material={material} />
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-function PublicNotesList({ items, emptyText }: { items: ReaderProfilePage["publicNotes"]; emptyText: string }) {
-  if (items.length === 0) {
-    return <p className="mt-1 mb-0 font-literata text-sm text-[var(--reader-text-muted)]">{emptyText}</p>;
-  }
+function PostsList({ items, emptyText }: { items: ReaderProfilePage["publicNotes"]; emptyText: string }) {
+  if (items.length === 0) return <NoResults className="mt-4 mb-0" message={emptyText} />;
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col">
       {items.map((item) => (
         <NoteCard
           key={item.note.id}
@@ -119,23 +128,14 @@ function PublicNotesList({ items, emptyText }: { items: ReaderProfilePage["publi
   );
 }
 
-/** Self-view only, "highlight just the quote card" — a bare highlight has
- * no note attached to it, so unlike PublicNotesList's full NoteCard reuse
- * (reply/react/edit thread and all), each entry here is just the
- * quoted passage in the same QuoteCard every other quote in this app
- * renders in, plus which book it's from. Never interactive, never shown to
- * a visitor — see ReaderProfileView's own doc comment on why this tab
- * doesn't exist at all outside self-view. */
+/** Self-view only — a bare highlight has no note attached, so each entry is
+ * just the quoted passage in the same QuoteCard every other quote in this
+ * app renders in, plus which book it's from. Never shown to a visitor
+ * (highlights are always private; the server doesn't even query them). */
 function HighlightsList({ items }: { items: ReaderProfilePage["highlights"] }) {
-  if (!items || items.length === 0) {
-    return (
-      <p className="mt-1 mb-0 font-literata text-sm text-[var(--reader-text-muted)]">
-        No private highlights yet
-      </p>
-    );
-  }
+  if (!items || items.length === 0) return <NoResults className="mt-4 mb-0" message="No private highlights yet" />;
   return (
-    <div className="flex flex-col gap-3">
+    <div className="mt-4 flex flex-col gap-3">
       {items.map((highlight) => (
         <QuoteCard key={highlight.id}>
           <div className="flex flex-col gap-1.5">
@@ -151,27 +151,22 @@ function HighlightsList({ items }: { items: ReaderProfilePage["highlights"] }) {
 }
 
 /**
- * A reader's public dossier — implements Claude Design project 5eb1f985's
- * `Reader Profile Concepts.dc.html`, the "combined direction" pass landed
- * on (identity/stats from concept 1a + catalog-row reading list from 1g),
- * reached via CurrentReaders.tsx's roster links and any future pseudonym
- * byline. Fetched client-side (useReaderProfile) rather than server-rendered
- * like BookDetailView, since which chrome to show — self vs. public — is a
- * function of the *viewer's* own signed-in identity, which only ever lives
- * client-side here (session-store, not a cookie session — see
- * useReaderProfile's own doc comment).
+ * A reader's public profile — follows Profile Page.dc.html's direction
+ * (ui-mockups/): left-aligned identity, a plain stat row, then the lists.
+ * Back/share come from DetailHeader, the same row a material page uses;
+ * where that page puts its bookmark in the `action` slot, a profile has
+ * nothing to save, so the slot stays empty — the owner's "Edit profile" link
+ * lives in ProfileIdentity instead.
  *
- * Public notes and highlights are NOT the mock's own two stacked sections —
- * per this feature's own brief, they're tabbed exactly like the reader's
- * in-book "Notes & highlights" panel (BookAnnotationFeedPanel), just with
- * one difference: a visitor only ever sees "Public notes", full stop, no
- * tab control at all (there's nothing else they're allowed to see) —
- * "My highlights" only exists as a tab once `isSelf` is true.
+ * Fetched client-side (useReaderProfile) rather than server-rendered like
+ * MaterialDetailView, since which chrome to show — self vs. public — is a
+ * function of the *viewer's* own signed-in identity, which only ever lives
+ * client-side here (see useReaderProfile's own doc comment).
  */
 export default function ReaderProfileView({ slug }: { slug: string }) {
   const router = useRouter();
   const { data, isLoading, isError } = useReaderProfile(slug);
-  const [tab, setTab] = useState<Tab>("notes");
+  const [tab, setTab] = useState<Tab>("posts");
 
   if (isLoading) {
     return (
@@ -194,80 +189,41 @@ export default function ReaderProfileView({ slug }: { slug: string }) {
     );
   }
 
-  const { reader, isSelf, stats, currentlyReading, publicNotes, highlights } = data;
+  const { reader, isSelf, stats, currentlyReading, publicNotes, highlights, contributions } = data;
   const displayName = comradeName(reader.pseudonym);
 
   return (
-    <div className="pb-12 shell:mx-auto shell:max-w-2xl">
-      <div className="flex items-center gap-3 py-3.5">
-        <button
-          type="button"
-          onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
-          aria-label="Back"
-          className="flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-md border border-[var(--reader-border)] bg-transparent text-[var(--reader-text)] transition-colors hover:bg-[var(--reader-surface-hover)]"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <span className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-[var(--reader-text)]">
-          {isSelf ? "My profile" : displayName}
-        </span>
-        <ShareButton title={displayName} text={`${displayName} on Ominira`} ariaLabel="Share this profile" />
-      </div>
+    <div className="pb-12 shell:mx-auto shell:max-w-4xl">
+      <DetailHeader
+        onBack={() => (window.history.length > 1 ? router.back() : router.push("/"))}
+        shareAction={{ title: displayName, text: `${displayName} on Ominira`, ariaLabel: "Share this profile" }}
+      />
 
-      <div className="flex flex-col items-center gap-2 py-4 text-center">
-        <span
-          style={{ background: avatarColor(reader.pseudonym) }}
-          className="flex h-[72px] w-[72px] flex-none items-center justify-center rounded-full font-serif text-[28px] font-semibold text-white"
-        >
-          {avatarInitial(reader.pseudonym)}
-        </span>
-        <div className="font-serif text-2xl font-semibold text-[var(--reader-text)]">{displayName}</div>
-        {reader.city && reader.country && (
-          <div className="flex items-center gap-1.5 text-sm font-medium text-[var(--reader-text-muted)]">
-            <Globe size={14} className="text-[var(--reader-text-subtle)]" />
-            {reader.city}, {reader.country}
-          </div>
-        )}
-        {isSelf && (
-          <Link
-            href="/account"
-            className="mt-1 rounded-sm border border-[var(--reader-border)] px-4 py-1.5 text-xs font-semibold text-[var(--reader-text)] no-underline transition-colors hover:bg-[var(--reader-surface-hover)]"
-          >
-            Edit profile
-          </Link>
-        )}
-      </div>
-
+      <ProfileIdentity reader={reader} isSelf={isSelf} />
       <StatRow stats={stats} />
-      <CurrentlyReadingSection items={currentlyReading} />
 
-      <div className="mt-10 pt-6">
-        {isSelf ? (
-          <>
-            <div className="mb-5 border-b border-[var(--reader-border)]">
-              <UnderlineTabs options={TAB_OPTIONS} selected={tab} onSelect={setTab} />
-            </div>
-            {tab === "notes" ? (
-              <PublicNotesList
-                items={publicNotes}
-                emptyText="You haven't shared a public note yet — leave one on a highlight while reading and it'll show up here."
-              />
-            ) : (
-              <HighlightsList items={highlights} />
-            )}
-          </>
-        ) : (
-          <>
-            <div className="mt-1 mb-5">
-              <h1 className="m-0 font-serif text-lg font-bold text-[var(--reader-text)]">Public notes</h1>
-            </div>
-            <PublicNotesList
-              items={publicNotes}
-              emptyText="No public notes yet"
-            />
-          </>
-        )}
+      <BookSection
+        title="Currently reading"
+        items={currentlyReading.map((entry) => entry.material)}
+        emptyText="Not reading anything yet."
+      />
+      <BookSection title="Contributed to the library" items={contributions} />
+
+      <div className="mt-10 mb-2">
+        <UnderlineTabs options={isSelf ? SELF_TABS : PUBLIC_TABS} value={tab} onChange={setTab} />
       </div>
+      {tab === "posts" ? (
+        <PostsList
+          items={publicNotes}
+          emptyText={
+            isSelf
+              ? "You haven't shared a public post yet — leave one on a highlight while reading and it'll show up here."
+              : "No public posts yet"
+          }
+        />
+      ) : (
+        <HighlightsList items={highlights} />
+      )}
     </div>
   );
 }

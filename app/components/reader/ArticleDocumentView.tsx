@@ -1,6 +1,10 @@
 "use client";
 
 import { useReaderStore } from "@/stores/reader-store";
+import type { Locator } from "@/lib/reader/locator";
+import { useArticleProgress } from "@/lib/reader/useArticleProgress";
+import { useDocumentKeyboard } from "@/lib/reader/useDocumentKeyboard";
+import DocumentEndPanel from "./DocumentEndPanel";
 import { useArticleTypographyStyle } from "@/lib/reader/useArticleTypographyStyle";
 import ReaderHeader from "./ReaderHeader";
 
@@ -21,20 +25,34 @@ const RAIL_INSET_PX = 16;
  * lives in ReaderHeader itself via its `sourceUrl` prop, since the extracted
  * copy is deliberately a stripped derivative, not a replacement for the
  * source.
+ *
+ * Reading progress is tracked by block index, the same way DocxDocumentView
+ * does it (see useArticleProgress) — the two render identically, so they share
+ * one implementation rather than each approximating it.
  */
 export default function ArticleDocumentView({
+  materialId,
   title,
   sourceUrl,
   articleHtml,
+  urlLocator,
   onClose,
 }: {
+  materialId: string;
   title: string;
   sourceUrl: string;
   articleHtml: string;
+  /** `?block=` — a resume link's own target, which takes precedence over this
+   * device's saved position (see buildResumeHref). */
+  urlLocator?: Locator;
   onClose?: () => void;
 }) {
   const theme = useReaderStore((s) => s.theme);
   const typography = useArticleTypographyStyle();
+  const { scrollRef, contentRef, scrollElement, getPositionNow } = useArticleProgress({ materialId, urlLocator });
+  // Arrows/PageUp/PageDown/Space/Home/End scroll the document on desktop — see
+  // the hook; with no pages to turn, ←/→ move by a screenful.
+  useDocumentKeyboard({ scrollElement });
 
   return (
     <div
@@ -49,13 +67,17 @@ export default function ArticleDocumentView({
         title={title}
         sourceUrl={sourceUrl}
       />
-      <div className="flex-1 min-h-0 overflow-auto" style={{ paddingTop: TOP_BAR_HEIGHT_PX }}>
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto" style={{ paddingTop: TOP_BAR_HEIGHT_PX }}>
         <div className="mx-auto px-6 py-10" style={{ maxWidth: typography.maxWidth }}>
           <div
+            ref={contentRef}
             className="reader-article select-text"
             style={{ fontFamily: typography.fontFamily, fontSize: typography.fontSize, lineHeight: typography.lineHeight }}
             dangerouslySetInnerHTML={{ __html: articleHtml }}
           />
+          {/* The bottom of the scroll *is* the end of the document here — no
+              "have they reached it" test needed, unlike a paginated viewer. */}
+          <DocumentEndPanel materialId={materialId} title={title} getCurrentPosition={getPositionNow} />
         </div>
       </div>
     </div>

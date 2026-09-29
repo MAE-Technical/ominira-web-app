@@ -31,6 +31,9 @@ export type Database = {
           age_range: "13_17" | "18_24" | "25_34" | "35_44" | "45_54" | "55_64" | "65_plus" | null;
           gender_identity: string | null;
           onboarding_status: "pending_survey" | "pending_welcome" | "active";
+          avatar_color: string | null;
+          avatar_url: string | null;
+          email_announcements: boolean;
           joined_at: string;
           updated_at: string;
         };
@@ -46,6 +49,9 @@ export type Database = {
           age_range?: "13_17" | "18_24" | "25_34" | "35_44" | "45_54" | "55_64" | "65_plus" | null;
           gender_identity?: string | null;
           onboarding_status?: "pending_survey" | "pending_welcome" | "active";
+          avatar_color?: string | null;
+          avatar_url?: string | null;
+          email_announcements?: boolean;
           joined_at?: string;
           updated_at?: string;
         };
@@ -123,6 +129,14 @@ export type Database = {
           visibility: "personal" | "public";
           source_url: string | null;
           search_vector: string | null;
+          /** Appreciation ("heart") count from the shared public.reactions
+           * table (target_type = 'material') — see
+           * migrations/20260930_material_reactions.sql. Maintained by a
+           * DB trigger, same pattern as posts.reaction_count. */
+          reaction_count: number;
+          /** Bytes of the primary stored object (source file, else parsed JSON,
+           * else article HTML) — migrations/20261005_admin_dashboard.sql. */
+          file_size_bytes: number | null;
         } & Timestamps;
         Insert: {
           id?: string;
@@ -150,6 +164,8 @@ export type Database = {
           uploaded_by?: string | null;
           visibility?: "personal" | "public";
           source_url?: string | null;
+          reaction_count?: number;
+          file_size_bytes?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -176,24 +192,34 @@ export type Database = {
       };
       // One row per (reader, material) — replaces readers.current_reading (a jsonb
       // map) as of migrations/20260831_reader_activities.sql. "activities", not
-      // "reading_positions": audio_time_ms means this covers listening too.
+      // "reading_positions": `mode` means this covers listening too.
+      //
+      // `locator` is format-agnostic (migrations/20261001_reader_activities_locator
+      // .sql): typed `Json` here, same as every other jsonb column, and narrowed to
+      // the real `Locator` union by lib/reader/locator.ts's own `isLocator` at the
+      // read boundary rather than cast.
       reader_activities: {
         Row: {
           reader_id: string;
           material_id: string;
-          section_id: string;
-          passage_index: number;
+          locator: Json;
+          mode: "read" | "listen";
           audio_time_ms: number | null;
           progress_percent: number;
+          // Explicit completion — never inferable from progress_percent (see
+          // migrations/20261002_reader_activities_finished_at.sql) and never written by the
+          // position-save path.
+          finished_at: string | null;
           updated_at: string;
         };
         Insert: {
           reader_id: string;
           material_id: string;
-          section_id: string;
-          passage_index: number;
+          locator: Json;
+          mode: "read" | "listen";
           audio_time_ms?: number | null;
           progress_percent: number;
+          finished_at?: string | null;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["reader_activities"]["Insert"]>;
@@ -341,10 +367,37 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["posts"]["Insert"]>;
         Relationships: [];
       };
-      post_reactions: {
-        Row: { post_id: string; reader_id: string; created_at: string };
-        Insert: { post_id: string; reader_id: string; created_at?: string };
-        Update: Partial<Database["public"]["Tables"]["post_reactions"]["Insert"]>;
+      reactions: {
+        Row: { target_type: "post" | "material"; target_id: string; reader_id: string; created_at: string };
+        Insert: {
+          target_type: "post" | "material";
+          target_id: string;
+          reader_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reactions"]["Insert"]>;
+        Relationships: [];
+      };
+      /** migrations/20261003_bookmarks.sql — reactions' private twin (same
+       * polymorphic key shape). No Update: a bookmark has no mutable
+       * column, it exists or it doesn't. */
+      bookmarks: {
+        Row: { target_type: "post" | "material"; target_id: string; reader_id: string; created_at: string };
+        Insert: {
+          target_type: "post" | "material";
+          target_id: string;
+          reader_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["bookmarks"]["Insert"]>;
+        Relationships: [];
+      };
+      /** migrations/20261004_reader_active_days.sql — one row per reader per
+       * UTC day they were active (`day` is a `date`, "YYYY-MM-DD"). */
+      reader_active_days: {
+        Row: { day: string; reader_id: string };
+        Insert: { day: string; reader_id: string };
+        Update: Partial<Database["public"]["Tables"]["reader_active_days"]["Insert"]>;
         Relationships: [];
       };
       push_subscriptions: {
@@ -379,6 +432,9 @@ export type Database = {
           url: string;
           recipient_count: number;
           failure_count: number;
+          channels: ("push" | "email")[];
+          email_recipient_count: number;
+          email_failure_count: number;
           created_at: string;
         };
         Insert: {
@@ -388,6 +444,9 @@ export type Database = {
           url: string;
           recipient_count: number;
           failure_count?: number;
+          channels?: ("push" | "email")[];
+          email_recipient_count?: number;
+          email_failure_count?: number;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["push_broadcasts"]["Insert"]>;
@@ -397,7 +456,7 @@ export type Database = {
         Row: {
           id: string;
           reader_id: string;
-          kind: "reaction" | "reply" | "broadcast" | "digest";
+          kind: "reaction" | "reply" | "broadcast" | "digest" | "material_reaction";
           title: string;
           body: string;
           url: string;
@@ -407,12 +466,17 @@ export type Database = {
           topic_id: string | null;
           digest_count: number;
           latest_post_id: string | null;
+          // actor_reader_id/snippet: migrations/20260919_notifications_actor_snippet.sql.
+          // The actor is a live FK (its pseudonym is joined at read time);
+          // snippet is the frozen text the notification was about.
+          actor_reader_id: string | null;
+          snippet: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           reader_id: string;
-          kind: "reaction" | "reply" | "broadcast" | "digest";
+          kind: "reaction" | "reply" | "broadcast" | "digest" | "material_reaction";
           title: string;
           body: string;
           url: string;
@@ -420,16 +484,21 @@ export type Database = {
           topic_id?: string | null;
           digest_count?: number;
           latest_post_id?: string | null;
+          actor_reader_id?: string | null;
+          snippet?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["notifications"]["Insert"]>;
         Relationships: [];
       };
     };
-    // Required by supabase-js's GenericSchema shape even though this project has
-    // neither — omitting them collapses the whole schema (and every table's row
-    // type) to `never` rather than erroring loudly, which is its own trap.
+    // Required by supabase-js's GenericSchema shape even with no views —
+    // omitting it collapses the whole schema (and every table's row type) to
+    // `never` rather than erroring loudly, which is its own trap.
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      /** migrations/20261005_admin_dashboard.sql — shape in lib/metrics/dashboard.ts. */
+      admin_dashboard_metrics: { Args: Record<string, never>; Returns: Json };
+    };
   };
 };

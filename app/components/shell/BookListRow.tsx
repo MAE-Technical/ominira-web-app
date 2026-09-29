@@ -1,23 +1,47 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Headphones } from "lucide-react";
+import { Check, Headphones, Lock, MinusCircle, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useReadingPositionStore } from "@/stores/reading-position-store";
 import type { MaterialSummary } from "@/lib/api/types";
 import BookCover from "@/app/components/shared/BookCover";
 import { PresenceLine } from "@/app/components/shared/CurrentReaders";
 import { resolveBookCoverSrc, resolveBookThumbnailSrc } from "@/lib/materials/image";
 import ReaderLink from "@/app/components/ReaderLink";
+import AddBookModal from "@/app/components/shell/AddBookModal";
+import BookmarkButton from "@/app/components/shared/BookmarkButton";
+import { useBookmarkedMaterialIds, useToggleMaterialBookmark } from "@/lib/bookmarks/useBookmarks";
+import { useProfile } from "@/lib/auth/useProfile";
+import { apiFetch } from "@/lib/api/client";
+import { buildResumeHref, positionPercent } from "@/lib/reader/locator";
+import type { CurrentReadingEntry } from "@/lib/api/types";
 
 /**
  * List-row book tile — Claude Design "Library catalogue listing" project,
  * direction 1c ("Editorial tint"), since trimmed to just
  * title/author/progress (the description made the listing feel
  * overwhelming — a reader after it goes to the book's own detail page).
- * Shared by the Library catalogue and the Reading page (ReadingView) — the
- * latter reuses it unmodified, since `showProgress` already reads live off
- * reading-position-store, which each page's own `useContinueReading` call
- * already populated.
+ * Shared by the Library catalogue, the Shelf page (ShelfView), and "My
+ * uploads" (LibraryView's `view === "mine"`) — one row component for every
+ * book list in the app, rather than a near-duplicate per list (the old
+ * MyUploadRow). The only thing that changes per list is whether *this*
+ * reader owns the book (`material.uploadedBy === currentReaderId`, passed
+ * in by the caller, plus `onUpdated`/`onDeleted` to opt into owner actions
+ * at all) — everything else (progress bar, presence line, cover/title) is
+ * identical whether the row came from the shared catalog or "My uploads".
+ *
+ * Owner rows get a "..." (Edit/Delete) menu, same as before, and a small
+ * lock badge — but only when the book is private ("Only you"); a public
+ * upload shows no visibility indicator at all, since visibility is no
+ * longer a quick-toggle here (dropped in favor of the Edit modal's own
+ * Private/Share toggle, so there's exactly one place that changes it). That
+ * badge plus the menu are the row's only interactive children besides the
+ * cover/title links, which is why an owner row can't be one whole-row
+ * `<Link>` the way a plain row is — HTML forbids nesting interactive
+ * content inside an `<a>` — so its cover and title are each their own small
+ * `<Link>`, with the menu as their sibling, never nested inside either.
  *
  * Covers here come from three inconsistent sources (own uploads,
  * OpenLibrary, Google — see lib/materials/image.ts) with wildly different
@@ -30,20 +54,149 @@ import ReaderLink from "@/app/components/ReaderLink";
  * height (the thumbnail's) and centers title/author/progress within that,
  * rather than pinning them to the top and leaving the tall thumbnail
  * towering over a short text block.
- *
- * One wrapping link for the whole row: PresenceLine below is deliberately a
- * plain pulsing-dot + count line, not a set of individual comrade links (see
- * its own doc comment) — no interactive element inside the row that a
- * wrapping `<a>` would nest invalidly.
  */
+/**
+ * One row's progress readout — the percentage + bar + mode icon while still
+ * in progress, or a single "Finished" line once done, in the same green
+ * DocumentPreviewCard's own "done" state uses (--color-forest-500, with a
+ * Check) rather than the in-progress accent color — a finished book is a
+ * completed fact, not a percentage, so it gets that same settled treatment
+ * instead of a 100%-full bar. No date here — the row is dense enough
+ * already, and the exact date is one tap away on the material's own detail
+ * page (MetaLine) and the end-of-document screen (DocumentEndPanel) for a
+ * reader who actually wants it. A component because this row renders two
+ * layout variants (compact and wide) that showed the same thing twice;
+ * "Finished" in particular has to mean the same thing in both, and it isn't
+ * a threshold on `pct` — it's the reader's own explicit mark (see
+ * DocumentEndPanel).
+ */
+function ProgressLine({ pct, isFinished, wasListening }: { pct: number; isFinished: boolean; wasListening: boolean }) {
+  if (isFinished) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--color-forest-500)]">
+        <Check size={11} className="flex-none" />
+        Finished
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {/* One shared bar whichever mode they were in — this icon is the only
+          thing on the row that says which door clicking it reopens, without
+          needing a second, listen-specific progress readout beside the
+          reading one. It leads the line rather than trailing it: read
+          left-to-right this now says "listening, 34%, [bar]" — the mode
+          qualifies the number, so it belongs before it. Trailing (with an
+          ml-auto pushing it past the bar's max-w-[160px] cap) left it
+          floating alone in the leftover space of a wide row, detached from
+          the thing it was describing. */}
+      {wasListening && <Headphones size={12} className="flex-none text-[var(--reader-text-subtle)]" />}
+      <span className="flex-none text-[11px] font-bold text-[var(--reader-accent)]">{pct}%</span>
+      <span className="h-1 max-w-[160px] flex-1 overflow-hidden rounded-full bg-[var(--reader-border)]">
+        <span className="block h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
+      </span>
+    </div>
+  );
+}
+
+type RowMenuItem = {
+  label: string;
+  icon: LucideIcon;
+  onSelect: () => void;
+  /** Destructive — red label, red hover. Reserved for acts that lose data for
+   * everyone (owner Delete), never for "remove from *my* shelf", which loses
+   * only a reading position and is undoable. */
+  danger?: boolean;
+};
+
+/**
+ * The row's "..." overflow menu — one implementation for both the places a
+ * row grows actions: the owner's Edit/Delete, and the Shelf page's "Remove
+ * from shelf". It used to be inlined in the owner branch only; a second copy
+ * in the non-owner branch would have been two dropdowns to keep visually and
+ * behaviourally identical, so it moved out here instead.
+ *
+ * Owns its own open state and outside-click dismissal, which is why it's a
+ * component rather than a render helper — the alternative was one `menuOpen`
+ * in BookListRow shared by two branches that never render at the same time.
+ *
+ * Unlike the bookmark beside it, this is always at full opacity rather than
+ * hover-revealed. A menu is the row's escape hatch: a reader looking for "how
+ * do I get rid of this" has to be able to *see* that there's somewhere to
+ * look, and on touch there's no hover to discover it with. It stays quiet by
+ * being a small muted glyph, not by hiding.
+ */
+function RowMenu({ items, className = "" }: { items: RowMenuItem[]; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onOutsideClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onOutsideClick);
+    return () => document.removeEventListener("mousedown", onOutsideClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`relative flex-none self-center ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Book options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border-none bg-transparent p-0 text-[var(--reader-text-muted)] hover:bg-[var(--reader-surface-hover)]"
+      >
+        <MoreVertical size={15} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-[var(--radius-sm)] border border-[var(--reader-border)] bg-[var(--reader-surface)] py-1 shadow-lg"
+        >
+          {items.map(({ label, icon: Icon, onSelect, danger }) => (
+            <button
+              key={label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                // Closed before the action runs, so anything that opens a
+                // modal or a window.confirm on top of this doesn't leave the
+                // dropdown hanging open behind it.
+                setOpen(false);
+                onSelect();
+              }}
+              className={`flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-[12px] font-semibold ${
+                danger ? "text-red-600 hover:bg-red-50" : "text-[var(--reader-text)] hover:bg-[var(--reader-surface-hover)]"
+              }`}
+            >
+              <Icon size={13} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BookListRow({
   material,
   resumeTarget,
   selection,
+  categories,
+  currentReaderId,
+  onRemove,
+  onUpdated,
+  onDeleted,
 }: {
   material: MaterialSummary;
-  /** Reading page only (ReadingView) — every row there is already this
-   * reader's own real reader_activities entry (GET /continue-reading), so
+  /** Shelf page only (ShelfView's Reading and Finished tabs) — every row
+   * there is already this reader's own real reader_activities entry (GET
+   * /continue-reading), so
    * the row skips book-detail entirely and goes straight into the reader at
    * that exact section/passage, the same URL-based handoff
    * BookDetailView's own "Resume reading" and ContinueReadingItemCard use
@@ -52,72 +205,171 @@ export default function BookListRow({
    * Library catalogue) — those rows are for *browsing*, where the detail
    * page's blurb/outline/CTA is still the right landing spot, most of them
    * not even started yet. */
-  resumeTarget?: { sectionId: string; passageIndex: number; audioTimeMs?: number | null };
+  resumeTarget?: Pick<CurrentReadingEntry, "locator" | "mode">;
   /** SurveyWizard's "which of these have you read?" step only — renders this
    * row as a toggleable checkbox tile instead of a navigating link, and
-   * skips resumeTarget/progress/presence entirely (irrelevant to "have you
-   * ever read this", and this step runs before there's even an authenticated
-   * reader for reading-position-store to have anything for). Mutually
-   * exclusive with resumeTarget. */
+   * skips resumeTarget/progress/presence/owner-actions entirely (irrelevant
+   * to "have you ever read this", and this step runs before there's even an
+   * authenticated reader for any of that to apply to). Mutually exclusive
+   * with resumeTarget and owner actions. */
   selection?: { selected: boolean; onToggle: () => void };
+  /** AddBookModal's (edit mode) category picker, for owner rows only — the caller's
+   * full category list for this library (library-contribution-ux-spec.md). */
+  categories?: string[];
+  /** This viewer's own reader id (useProfile().data.id) — a row renders its
+   * owner "..." menu only when this matches `material.uploadedBy` *and*
+   * `onDeleted` is supplied, so passing an id alone (e.g. from a page that
+   * doesn't wire up edit/delete) doesn't turn on owner UI by accident. */
+  currentReaderId?: string | null;
+  /** Shelf page only — takes over the row's trailing control slot with a
+   * single "remove from shelf" X, in place of the bookmark. Deliberately
+   * *replaces* rather than joins it: a book can be both in-progress and
+   * saved, and two icons side by side in a dense list is precisely the
+   * clutter the one-quiet-control rule exists to avoid. The Reading and
+   * Finished tabs are about what's on the shelf, so removal is the act they
+   * get; saving stays where it means something (the Saved tab, the Library
+   * catalogue, the material's own detail page).
+   *
+   * Only ever a removal from *this reader's shelf* — never a delete of the
+   * material — which is why it's a separate prop from `onDeleted` (owner
+   * delete, behind the "..." menu and a confirm) and not another menu item.
+   * No confirm here on purpose: an activity row is cheap to lose and the
+   * caller offers Undo, so a modal would weigh more than the act. */
+  onRemove?: () => void;
+  onUpdated?: (updated: Pick<MaterialSummary, "id" | "title" | "author" | "visibility" | "categories" | "coverSource">) => void;
+  onDeleted?: (id: string) => void;
 }) {
-  const pct = Math.round(useReadingPositionStore((s) => s.progressPercentByMaterial[material.id] ?? 0));
+  const [editOpen, setEditOpen] = useState(false);
+  // One shared id set for every row on the page (one fetch, one cache
+  // entry) rather than per-row state — see useBookmarkedMaterialIds.
+  const bookmarkedIds = useBookmarkedMaterialIds();
+  const toggleBookmark = useToggleMaterialBookmark();
+  const { data: profile } = useProfile();
+  const position = useReadingPositionStore((s) => s.positions[material.id]);
+  // positionPercent, not progressPercent: a finished material reads 100 here
+  // and nowhere else could, since tracked progress can't reach it (see
+  // lib/reader/locator.ts).
+  const pct = positionPercent(position);
+  const isFinished = Boolean(position?.finishedAt);
   const showProgress = !selection && pct > 0;
-  // `audioTimeMs` set on this row's own reader_activities entry means this
-  // reader's last activity on the book was listening, not reading (see
-  // BookDetailView's lastModeWasListen for the same read on the client-side
-  // mirror) — carried through as `listen=1` so the row's click genuinely
-  // resumes the same way "Continue listening" on the book-detail page
-  // would, instead of always dropping a listening reader back into text.
-  const wasListening = resumeTarget?.audioTimeMs != null;
-  const href = resumeTarget
-    ? `/read/${material.slug}?section=${resumeTarget.sectionId}&passageIndex=${resumeTarget.passageIndex}${wasListening ? "&listen=1" : ""}`
-    : `/book/${material.slug}`;
+  const isOwner = !selection && !!onDeleted && !!currentReaderId && material.uploadedBy === currentReaderId;
+  const isPrivate = material.visibility === "personal";
+  // `mode` on this row's own reader_activities entry is what sends a reader
+  // who was listening back through the listening door (buildResumeHref adds
+  // `listen=1`) instead of always dropping them back into text.
+  const wasListening = resumeTarget?.mode === "listen";
+  const href = resumeTarget ? buildResumeHref(material.slug, resumeTarget) : `/library/${material.slug}`;
   const className = `group flex min-w-0 gap-4 border-b border-[var(--reader-border)] py-4 no-underline ${
     selection ? `cursor-pointer rounded-xs px-2 text-left transition-colors ${selection.selected ? "bg-brand-50/40" : ""}` : ""
   }`;
 
-  const content = (
-    <>
-      <div className="relative h-28 w-20 flex-none overflow-hidden rounded-xs">
-        {/* Selection mode (SurveyWizard) asks for the widest-variant cover,
-            not the compact-list thumbnail every other row here uses — this
-            tile is the main thing on the screen, not a dense list item. */}
-        <BookCover
-          src={selection ? resolveBookCoverSrc(material) : resolveBookThumbnailSrc(material)}
-          alt={material.title}
-          className="h-full w-full"
-          iconSize={22}
-        />
-        <div className="absolute inset-0 bg-[rgba(190,64,13,0.16)] mix-blend-multiply" />
-      </div>
+  // Rule 1 of BookmarkButton's placement contract: never on a book this
+  // reader uploaded. Their own upload is already permanently theirs and
+  // already listed under Library's "Personal library only" view — a save
+  // control on it offers to do something that's already true.
+  //
+  // Read off useProfile directly rather than the `currentReaderId` prop,
+  // which deliberately means something narrower: that prop (with
+  // `onDeleted`) is a caller opting *in* to owner edit/delete UI, and a
+  // listing that doesn't wire those up still needs this suppressed.
+  const isOwnUpload = !!material.uploadedBy && material.uploadedBy === profile?.id;
+  const isSaved = bookmarkedIds.has(material.id);
 
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
-        <div className="font-serif text-[14px] font-semibold leading-tight text-[var(--reader-text)] group-hover:text-brand-500">
-          {material.title}
-        </div>
-        <div className="text-[11px] font-semibold capitalize tracking-[0.04em] text-[var(--reader-text-muted)]">
-          {material.author}
-        </div>
-        {showProgress && (
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-[var(--reader-accent)]">
-              {pct >= 100 ? "Finished" : `${pct}%`}
-            </span>
-            <span className="h-1 max-w-[160px] flex-1 overflow-hidden rounded-full bg-[var(--reader-border)]">
-              <span className="block h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
-            </span>
-            {/* One shared bar either way (see wasListening above) — this icon
-                is the only thing on the row that says which door clicking it
-                reopens, without needing a second, listen-specific progress
-                readout next to the reading one. */}
-            {wasListening && <Headphones size={12} className="flex-none text-[var(--reader-text-subtle)]" />}
-          </div>
-        )}
-        {!selection && <PresenceLine readers={material.currentReaders} totalCount={material.currentReaderCount} />}
-      </div>
+  // Rule 2: on a dense list, an unsaved row's icon shouldn't shout. How
+  // quiet it gets depends on whether the device can hover, because "reveal
+  // on hover" is not a thing a touchscreen can do:
+  //
+  //   hover-capable  — fully hidden at rest, revealed on row hover/focus.
+  //   touch          — dimmed but present, since there's no hover to
+  //                    reveal it and hiding it outright would make a book
+  //                    unsavable from any list on a phone.
+  //
+  // `[@media(hover:hover)]:opacity-0` handles the split; `group-hover:` is
+  // itself already wrapped in that same media query by Tailwind, so it
+  // never fires on touch, and it out-specifies the base rule (two classes
+  // vs. one) so the reveal wins where both apply. group-focus-within keeps
+  // it keyboard-reachable.
+  //
+  // Saved rows stay at full opacity everywhere — that's state, not an
+  // affordance. And `opacity` rather than conditional mounting throughout,
+  // so the row's layout is identical in every case and nothing shifts as
+  // the pointer crosses it.
+  //
+  // No `pointer-events-none` on the hidden state: on a hover-capable
+  // device the icon is always revealed before a click can land on it, and
+  // adding the rule would only create a specificity fight with the reveal.
+  // z-10: on a non-owner row the whole card is one stretched overlay
+  // link (see below), which this has to sit on top of to be clickable
+  // at all. Harmless on the owner row, which has no such overlay.
+  const bookmark = !isOwnUpload && (
+    <BookmarkButton
+      saved={isSaved}
+      onToggle={() => toggleBookmark.mutate(material.id)}
+      size="small"
+      className={`relative z-10 self-center transition-opacity ${
+        isSaved
+          ? ""
+          : "opacity-50 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+      }`}
+    />
+  );
 
-      {selection && (
+  async function deleteNow() {
+    if (!window.confirm(`Delete "${material.title}"? This can't be undone.`)) return;
+    await apiFetch(`/materials/${material.id}`, { method: "DELETE" });
+    onDeleted?.(material.id);
+  }
+
+  // "Remove from shelf", not "Remove": on a row that can *also* offer the
+  // owner's Delete, an unqualified "Remove" beside "Delete" is two words for
+  // what a reader would reasonably read as the same act. Naming the shelf says
+  // exactly how far this reaches — and `MinusCircle` rather than a trash can,
+  // which is Delete's glyph and would undo the distinction the wording just
+  // made. Not `danger`-styled for the same reason (see RowMenuItem).
+  const removeItem: RowMenuItem[] = onRemove ? [{ label: "Remove from shelf", icon: MinusCircle, onSelect: onRemove }] : [];
+
+  // Order is reach: edit the book, take it off your own shelf, then destroy
+  // it for everyone — least to most consequential, with the only irreversible
+  // one last and red.
+  const ownerItems: RowMenuItem[] = [
+    { label: "Edit", icon: Pencil, onSelect: () => setEditOpen(true) },
+    ...removeItem,
+    { label: "Delete", icon: Trash2, onSelect: deleteNow, danger: true },
+  ];
+
+  const cover = (
+    <div className="relative h-28 w-20 flex-none overflow-hidden rounded-xs">
+      {/* Selection mode (SurveyWizard) asks for the widest-variant cover,
+          not the compact-list thumbnail every other row here uses — this
+          tile is the main thing on the screen, not a dense list item. */}
+      <BookCover
+        src={selection ? resolveBookCoverSrc(material) : resolveBookThumbnailSrc(material)}
+        alt={material.title}
+        className="h-full w-full"
+        iconSize={22}
+      />
+      <div className="cover-tint" />
+    </div>
+  );
+
+  const textColumn = (
+    <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+      <div className="font-serif text-[14px] font-semibold leading-tight text-[var(--reader-text)] group-hover:text-brand-500">
+        {material.title}
+      </div>
+      <div className="text-[11px] font-semibold capitalize tracking-[0.04em] text-[var(--reader-text-muted)]">
+        {material.author}
+      </div>
+      {showProgress && <ProgressLine pct={pct} isFinished={isFinished} wasListening={wasListening} />}
+      {!selection && <PresenceLine readers={material.currentReaders} totalCount={material.currentReaderCount} />}
+    </div>
+  );
+
+  if (selection) {
+    return (
+      <button type="button" onClick={selection.onToggle} className={className}>
+        {cover}
+        {textColumn}
         <div
           aria-hidden="true"
           className={`flex h-6 w-6 flex-none items-center justify-center self-center rounded-full border-2 transition-colors ${
@@ -128,15 +380,56 @@ export default function BookListRow({
         >
           {selection.selected && <Check size={14} strokeWidth={3} className="text-white" />}
         </div>
-      )}
-    </>
-  );
-
-  if (selection) {
-    return (
-      <button type="button" onClick={selection.onToggle} className={className}>
-        {content}
       </button>
+    );
+  }
+
+  if (isOwner) {
+    return (
+      <div className="group flex min-w-0 gap-4 border-b border-[var(--reader-border)] py-4">
+        {editOpen && (
+          <AddBookModal
+            categories={categories ?? []}
+            editMaterial={material}
+            onClose={() => setEditOpen(false)}
+            onMaterialSaved={(updated) => onUpdated?.(updated)}
+            onMaterialDeleted={(id) => onDeleted?.(id)}
+          />
+        )}
+
+        <Link href={href} className="relative h-28 w-20 flex-none overflow-hidden rounded-xs">
+          <BookCover src={resolveBookThumbnailSrc(material)} alt={material.title} className="h-full w-full" iconSize={22} />
+          <div className="cover-tint" />
+        </Link>
+
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+          <div className="flex min-w-0 flex-row items-baseline gap-1.5">
+            <Link
+              href={href}
+              className="min-w-0 font-serif text-[14px] font-semibold leading-tight text-[var(--reader-text)] no-underline hover:text-brand-500"
+            >
+              {material.title}
+            </Link>
+            {isPrivate && (
+              <span className="flex flex-none items-center gap-0.5 self-center text-[10px] font-bold text-[var(--reader-text-subtle)]">
+                <Lock size={12} />
+                Only you
+              </span>
+            )}
+
+            {/* No bookmark control on this branch at all: an owner row is
+                by definition this reader's own upload (see `isOwner`), and
+                rule 1 of BookmarkButton's placement contract says you
+                don't save your own books. */}
+            <RowMenu items={ownerItems} className="ml-auto" />
+          </div>
+          <div className="text-[11px] font-semibold capitalize tracking-[0.04em] text-[var(--reader-text-muted)]">
+            {material.author}
+          </div>
+          {showProgress && <ProgressLine pct={pct} isFinished={isFinished} wasListening={wasListening} />}
+          <PresenceLine readers={material.currentReaders} totalCount={material.currentReaderCount} />
+        </div>
+      </div>
     );
   }
 
@@ -145,13 +438,30 @@ export default function BookListRow({
   // client-side Link navigation there regardless of origin (see ReaderLink's
   // own doc comment), which would otherwise pop this up as an overlay on top
   // of the Reading page instead of the real standalone reader.
-  return resumeTarget ? (
-    <ReaderLink href={href} className={className}>
-      {content}
-    </ReaderLink>
-  ) : (
-    <Link href={href} className={className}>
-      {content}
-    </Link>
+  const LinkComponent = resumeTarget ? ReaderLink : Link;
+
+  // A "stretched link": the row is a plain <div>, and the navigation is one
+  // absolutely-positioned empty <a> filling it, with the trailing controls as
+  // siblings stacked above. The row used to *be* the <a>, wrapping cover
+  // and text — but HTML forbids nesting a <button> inside an <a>, the same
+  // constraint the owner branch above calls out and solves by splitting the
+  // row into several small links instead. Splitting this one the same way
+  // would have cost the whole-row tap target, which on mobile is most of
+  // what makes this list usable; the overlay keeps it. The link is empty
+  // and carries the title as its accessible name, since the real title text
+  // lives outside it.
+  return (
+    <div className={`relative ${className}`}>
+      <LinkComponent href={href} aria-label={material.title} className="absolute inset-0 z-0" />
+      {cover}
+      {textColumn}
+      {bookmark}
+      {/* Menu *after* the bookmark, so the two read outermost-last: save is
+          the common act and keeps the position it has in every other list in
+          the app, with the overflow sitting at the row's very edge. Only the
+          Shelf page passes `onRemove`, so no other list grows a "..." here —
+          z-10 for the same stretched-link reason the bookmark needs it. */}
+      {onRemove && <RowMenu items={removeItem} className="relative z-10" />}
+    </div>
   );
 }

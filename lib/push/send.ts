@@ -73,22 +73,23 @@ export async function sendToReaders(readerIds: string[], payload: PushPayload) {
 // so a large table doesn't open thousands of concurrent HTTPS requests at
 // once; each page is still sent with allSettled so one bad batch member
 // never blocks the rest. Returns tallies so the caller (the admin broadcast
-// route) can record a push_broadcasts history row.
+// route) can record a push_broadcasts history row. Keyset-paged on id, not
+// offset: sendToSubscription deletes expired rows mid-loop, which would
+// shift later rows under an offset and silently skip them.
 export async function sendBroadcast(payload: PushPayload): Promise<{ recipientCount: number; failureCount: number }> {
   const admin = getSupabaseAdminClient();
-  let from = 0;
+  let after: string | null = null;
   let recipientCount = 0;
   let succeeded = 0;
   for (;;) {
-    const { data } = await admin
-      .from("push_subscriptions")
-      .select("id, endpoint, p256dh, auth")
-      .range(from, from + BROADCAST_BATCH_SIZE - 1);
+    let query = admin.from("push_subscriptions").select("id, endpoint, p256dh, auth").order("id").limit(BROADCAST_BATCH_SIZE);
+    if (after) query = query.gt("id", after);
+    const { data } = await query;
     if (!data?.length) break;
     recipientCount += data.length;
     succeeded += await sendToRows(data, payload);
     if (data.length < BROADCAST_BATCH_SIZE) break;
-    from += BROADCAST_BATCH_SIZE;
+    after = data[data.length - 1].id;
   }
   return { recipientCount, failureCount: recipientCount - succeeded };
 }

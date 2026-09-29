@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import NoResults from "@/app/components/shared/NoResults";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 import type { BookDocument } from "@/lib/book/schema";
@@ -104,7 +105,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={book ? "Search document..." : "Search the library"}
-            className="flex-1 border-none outline-none text-[14px] font-medium text-[var(--reader-text)] bg-transparent"
+            className="flex-1 border-none outline-none text-[13px] font-semibold text-[var(--reader-text)] bg-transparent"
           />
           {query && (
             <span
@@ -116,7 +117,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
           )}
           <span
             onClick={onClose}
-            className="cursor-pointer text-sm font-medium text-[var(--reader-text-muted)] whitespace-nowrap"
+            className="cursor-pointer text-sm font-semibold text-[var(--reader-text-muted)] whitespace-nowrap"
           >
             {isMobile ? "Cancel" : "Close"}
           </span>
@@ -141,7 +142,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
                       sit inline and wrap only if they actually don't fit —
                       not a fixed vertical stack regardless of width. */}
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className="font-serif text-xs font-semibold text-[var(--reader-text)]">
+                    <span className="font-serif text-[13px] font-semibold text-[var(--reader-text)]">
                       {book.metadata.title}
                     </span>
                     <span className="text-xs text-[var(--reader-text-muted)]">{book.metadata.author}</span>
@@ -155,9 +156,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
                 </div>
               ))}
               {query.trim() && results.length === 0 && (
-                <p className="text-sm text-[var(--reader-text-muted)] text-center py-10">
-                  No results for &ldquo;{query}&rdquo;.
-                </p>
+                <NoResults className="text-center py-10" message={`No results for "${query}".`} />
               )}
             </>
           ) : (
@@ -167,7 +166,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
                 : libraryResults.map((material) => (
                     <Link
                       key={material.id}
-                      href={`/book/${material.slug}`}
+                      href={`/library/${material.slug}`}
                       // Left open on click, same as the book-scoped branch
                       // above — a reader browsing several results in a row
                       // shouldn't lose the search each time.
@@ -175,7 +174,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
                     >
                       <BookCover src={resolveBookThumbnailSrc(material)} alt={material.title} className="h-14 w-11 flex-none rounded-sm border border-[var(--reader-border)]" />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-[var(--reader-text)]">
+                        <div className="truncate text-[13px] font-semibold text-[var(--reader-text)]">
                           {highlight(material.title, query)}
                         </div>
                         <div className="truncate text-xs font-medium text-[var(--reader-text-muted)]">
@@ -186,9 +185,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
                   ))}
               {!isSearching && query.trim() && libraryResults.length === 0 && (
                 <div className="py-10 text-center">
-                  <p className="m-0 text-sm text-[var(--reader-text-muted)]">
-                    No results for &ldquo;{query}&rdquo;
-                  </p>
+                  <NoResults className="m-0" message={`No results for "${query}"`} />
                   {/* <p className="mt-2 mb-4 text-sm text-[var(--reader-text-muted)]">
                     Can&rsquo;t find this book? Suggest it for the library.
                   </p>

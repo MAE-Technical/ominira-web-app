@@ -18,6 +18,8 @@ import ThemeProvider from "./components/ThemeProvider";
 import QueryProvider from "./components/QueryProvider";
 import NarrationEngine from "@/lib/audio/NarrationEngine";
 import { PLATFORM_NAME, PLATFORM_URL } from "@/lib/config/platform";
+import { BOOT_SCRIPT } from "@/lib/pwa/boot";
+import { ICON_VERSION } from "@/lib/config/brand-assets";
 
 // The wider reader font picker (app/fonts.ts) is defined but not loaded here
 // right now — only Literata (the current single reading-font default) is
@@ -46,6 +48,20 @@ export const metadata: Metadata = {
   description: "Raise your Pan-African consciousness.",
   applicationName: PLATFORM_NAME,
   manifest: "/manifest.json",
+  // One favicon set for both colour schemes: its cream tile frames the mark
+  // on light and dark tab bars alike. iOS reads apple-touch-icon once, when
+  // the reader adds the app to their home screen.
+  icons: {
+    icon: [16, 32, 48].map((size) => ({
+      url: `/icons/favicon-${size}x${size}.png?v=${ICON_VERSION}`,
+      sizes: `${size}x${size}`,
+      type: "image/png",
+    })),
+    apple: [152, 180].map((size) => ({
+      url: `/icons/apple-touch-icon-${size}x${size}.png?v=${ICON_VERSION}`,
+      sizes: `${size}x${size}`,
+    })),
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -66,8 +82,11 @@ export const metadata: Metadata = {
   },
 };
 
+// No themeColor here: the right value depends on the reader's persisted
+// theme (and whether the launch splash is up), which only the client knows —
+// lib/pwa/boot.ts's inline script writes the theme-color meta before first
+// paint, and ThemeProvider/AppSplashScreen keep it in step after.
 export const viewport: Viewport = {
-  themeColor: "#ffffff",
   viewportFit: "cover",
 };
 
@@ -94,6 +113,11 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${sourceSerif.variable} ${manrope.variable} ${literata.variable} h-full antialiased`}
     >
+      <head>
+        {/* Parser-blocking on purpose: sets data-reader-theme (and
+            data-splash) on <html> before the first frame. */}
+        <script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col font-sans">
         <QueryProvider>
           <ThemeProvider>
