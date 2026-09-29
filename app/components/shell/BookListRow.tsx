@@ -455,13 +455,22 @@ export default function BookListRow({
       <LinkComponent href={href} aria-label={material.title} className="absolute inset-0 z-0" />
       {cover}
       {textColumn}
-      {bookmark}
-      {/* Menu *after* the bookmark, so the two read outermost-last: save is
-          the common act and keeps the position it has in every other list in
-          the app, with the overflow sitting at the row's very edge. Only the
-          Shelf page passes `onRemove`, so no other list grows a "..." here —
-          z-10 for the same stretched-link reason the bookmark needs it. */}
-      {onRemove && <RowMenu items={removeItem} className="relative z-10" />}
+      {/* A reader's own upload has no bookmark, so an empty slot of the same
+          width keeps the text column clear of the out-of-flow menu below. */}
+      {bookmark || (onRemove && <div aria-hidden="true" className="w-7 flex-none" />)}
+      {/* The "..." is pinned to the row's top-right corner, out of flow,
+          rather than sitting beside the bookmark — side by side, it ate a
+          second icon's width out of the text column on a phone. Out of flow
+          also leaves the bookmark vertically centered exactly where it is on
+          every other list. top-4 matches the row's py-4; right-0.5 centers
+          the 24px menu button over the 28px bookmark below it. Only the Shelf
+          page passes `onRemove`; z-10 for the same stretched-link reason the
+          bookmark needs it. */}
+      {onRemove && (
+        <div className="absolute right-0.5 top-4 z-10">
+          <RowMenu items={removeItem} />
+        </div>
+      )}
     </div>
   );
 }
