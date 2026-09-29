@@ -5,11 +5,11 @@
 // present in the PDF's own metadata), page count, and a rasterized
 // first-page thumbnail.
 
-// pdf.js ships two builds: the browser build (used here in the app) and a
-// `legacy` build meant for non-browser JS environments (used only by the
-// Node-based manual-validation harness, scripts/test-pdf-parser.ts — see
-// reader-uploads-spec.md § 2). Both expose the same API; only the import
-// path and worker/font wiring differ.
+// pdf.js ships two builds: the modern build and a polyfilled `legacy` build.
+// Node (the manual-validation harness, scripts/test-pdf-parser.ts — see
+// reader-uploads-spec.md § 2) imports legacy directly; in the browser the
+// bare `pdfjs-dist` import is aliased to legacy too (next.config.ts), since
+// the modern build breaks on older Safari. Only worker/font wiring differs.
 const isServer = typeof window === "undefined";
 const pdfjsLib = isServer
   ? await import("pdfjs-dist/legacy/build/pdf.mjs")
@@ -22,11 +22,9 @@ if (isServer) {
   const path = await import("node:path");
   const pdfjsDir = path.dirname(require.resolve("pdfjs-dist/package.json"));
   pdfjsLib.GlobalWorkerOptions.workerSrc = path.join(pdfjsDir, "legacy/build/pdf.worker.mjs");
-} else if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-  // `new URL(..., import.meta.url)` is the bundler-portable way to point at
-  // the worker copy pdfjs-dist ships, resolved at build time by
-  // webpack/Turbopack.
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+} else {
+  // Polyfills + the shared worker port the reader uses too.
+  await import("@/lib/pdf/setup");
 }
 
 // Some PDF producers (ReportLab-generated ones among them) stamp a generic

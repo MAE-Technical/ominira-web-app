@@ -1,7 +1,9 @@
 "use client";
 
+// First: polyfills + shared pdf.js worker (see lib/pdf/setup.ts).
+import "@/lib/pdf/setup";
 import { useCallback, useEffect, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useReaderStore, type PdfLayout } from "@/stores/reader-store";
@@ -12,11 +14,6 @@ import DocumentEndPanel from "./DocumentEndPanel";
 import PdfPagerFooter, { ZOOM_DEFAULT } from "./PdfPagerFooter";
 import PdfScrollPages from "./PdfScrollPages";
 import ReaderHeader from "./ReaderHeader";
-
-// Same bundler-portable worker resolution as lib/book/pdfParser.ts's browser
-// branch — Turbopack/webpack resolve the `new URL(...)` against the actual
-// copy pdfjs-dist ships, rather than this app trying to host its own.
-pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 
 /**
  * Where pdf.js finds the resources it doesn't bundle into its own code. Without
