@@ -28,7 +28,7 @@ export default function ContributeBookRow({
   const contributorCount = stats.contributors.length;
   const showContributors = contributorCount >= CONTRIBUTOR_LIST_THRESHOLD;
   const stacked = stats.contributors.slice(0, MAX_STACKED_AVATARS);
-  const heading = category === "All" ? "Add a book to the library" : `Add a book to ${category}`;
+  const heading = category === "All" ? "Add a book to the library" : `Add a book to "${category}"`;
 
   return (
     <button
@@ -42,8 +42,8 @@ export default function ContributeBookRow({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-semibold leading-tight text-[var(--reader-text)]">{heading}</p>
-          <p className="mt-1 text-[12px] font-semibold text-[var(--reader-text-muted)]">
+          <p className="text-[13px] font-semibold leading-tight text-[var(--reader-text)]">{heading}</p>
+          <p className="mt-1 text-[11px] font-semibold text-[var(--reader-text-muted)]">
             PDF, EPUB, or DOCX
           </p>
         </div>

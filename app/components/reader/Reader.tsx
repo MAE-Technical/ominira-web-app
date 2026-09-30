@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Highlighter, MessageCircle, Share, Trash2 } from "lucide-react";
 import NotesSidebar from "./NotesSidebar";
 import BookAnnotationFeedPanel from "./notes/BookAnnotationFeedPanel";
-import type { FeedEntry } from "@/lib/reader/annotationFeed";
+import { epubFeedLocator, type FeedEntry } from "@/lib/reader/annotationFeed";
 import SearchModal from "../SearchModal";
 import FootnotePopover from "./FootnotePopover";
 import ShareQuoteModal from "./ShareQuoteModal";
@@ -39,6 +39,8 @@ import { useResumeScroll } from "@/lib/reader/useResumeScroll";
 import { useProgressiveText } from "@/lib/reader/useProgressiveText";
 import { useReadingProgress } from "@/lib/reader/useReadingProgress";
 import { useTextAnnotations } from "@/lib/reader/useTextAnnotations";
+import { createDomSurface } from "@/lib/annotations/surface";
+import { useTextSelection } from "@/lib/annotations/useTextSelection";
 import { useBookAnnotationFeed } from "@/lib/reader/useBookAnnotationFeed";
 import { useServerPositionReady } from "@/lib/reader/useServerPositionReady";
 import { quoteForRanges } from "@/lib/reader/annotationSelection";
@@ -310,7 +312,8 @@ export default function Reader({
     return { byId, sectionOf };
   }, [orderedSections]);
 
-  const noteFeed = useBookAnnotationFeed({ materialId, orderedSections, passageLookup });
+  const locateFeedEntry = useMemo(() => epubFeedLocator(orderedSections), [orderedSections]);
+  const noteFeed = useBookAnnotationFeed({ materialId, locate: locateFeedEntry });
 
   // Published so NowPlayingBar (rendered in the root layout, well outside
   // this tree) can pull its own right edge in on desktop — see
@@ -401,9 +404,34 @@ export default function Reader({
     // rather than leaving a stale menu floating in place. A page turn can
     // move the reader to a new slide with zero scroll events, so it gets
     // its own dismissal trigger (onNavigate) rather than relying on scroll.
-    onScroll: dismissSelection,
     onNavigate: dismissSelection,
     disabled: navDisabled,
+  });
+
+  // The shared selection engine, bound to whichever section slide is active.
+  const [slideEl, setSlideEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    // After the carousel has committed the slide.
+    const frame = requestAnimationFrame(() => setSlideEl(getSlideEl(activeSectionId) ?? null));
+    return () => cancelAnimationFrame(frame);
+  }, [getSlideEl, activeSectionId]);
+  const selectionSurface = useMemo(
+    () =>
+      slideEl
+        ? createDomSurface(slideEl, {
+            blockAttribute: "data-passage-id",
+            isTextBlock: (el) => el.dataset.passageType !== "image" && el.dataset.passageType !== "horizontalRule",
+          })
+        : null,
+    [slideEl]
+  );
+  const selectionOverlay = useTextSelection({
+    root: slideEl,
+    scrollEl: slideEl,
+    surface: selectionSurface,
+    active: Boolean(selection),
+    onSelect: onTextSelect,
+    layoutKey: `${fontSizeScale}|${fontFamily}|${lineSpacingScale}|${contentWidthScale}`,
   });
 
   // Every "jump to this section id" caller (chapters drawer, in-book link
@@ -721,15 +749,6 @@ export default function Reader({
   const activeSectionForSidebar = activeSectionId ?? book.spine[0];
   const prevSection = orderedSections[activeIndex - 1];
   const nextSection = orderedSections[activeIndex + 1];
-  // ChapterNavFooter's own real rendered height (the measure-and-store
-  // trick NowPlayingBar/AppBottomNav already use for their own height, kept
-  // local here rather than a global store since nothing outside the reader
-  // needs it) — NotesFeedFab reads this so it can stack directly above
-  // whichever bottom bar is actually on screen (this footer, or the player)
-  // instead of a guessed constant that used to get added unconditionally,
-  // even while the footer it was meant to clear was itself hidden (see that
-  // prop's own comment).
-  const [footerHeight, setFooterHeight] = useState(0);
   const getPassageText = useCallback(
     (passageId: string) => passageLookup.byId.get(passageId)?.text ?? "",
     [passageLookup]
@@ -1049,7 +1068,6 @@ export default function Reader({
               notesById={notesById}
               onNoteClick={onNoteClick}
               onInternalLinkClick={onInternalLinkClick}
-              onTextSelect={onTextSelect}
               onNoteMarkerClick={openNoteMarker}
               justJumpedAnnotationId={justJumpedAnnotationId}
               onPassagePlayback={canListen ? handlePassagePlayback : undefined}
@@ -1075,7 +1093,6 @@ export default function Reader({
               // playing" bar.
               visible={footerVisible && !selection && !anyPlayerActive}
               bottomOffsetPx={anyPlayerActive ? playerHeight : 0}
-              onHeightChange={setFooterHeight}
             />
 
             {/* Selection menu is a fixed-position overlay, so it doesn't need
@@ -1087,6 +1104,7 @@ export default function Reader({
                 instead (PassageContent's onNoteMarkerClick) just opens its
                 thread directly, no menu. */}
                 
+            {selectionOverlay}
             {selection && (
               <SelectionMenu
                 anchor={selection.anchor}
@@ -1213,8 +1231,6 @@ export default function Reader({
                 notes={noteFeed.notes}
                 filter={noteFeed.filter}
                 onFilterChange={noteFeed.setFilter}
-                totalNoteCount={noteFeed.totalNoteCount}
-                passageCount={noteFeed.passageCount}
                 activeSectionId={activeSectionId}
                 onJump={jumpToFeedEntry}
                 getPassageText={getPassageText}
@@ -1222,6 +1238,8 @@ export default function Reader({
                 onClose={noteFeed.close}
                 targetNoteId={targetGeneralNoteId}
                 targetThreadId={targetThreadId ?? targetGeneralNoteId}
+                focusedAuthor={noteFeed.focusedAuthor}
+                onClearAuthor={noteFeed.clearAuthor}
               />
             )}
             {notesPanel && (
@@ -1254,8 +1272,14 @@ export default function Reader({
       )}
 
       <NotesFeedFab
-        count={noteFeed.totalNoteCount}
-        onClick={() => {
+        materialId={materialId}
+        noteAuthors={noteFeed.noteAuthors(activeSectionId)}
+        noteCount={noteFeed.totalNoteCount}
+        onOpenAuthor={(authorId) => {
+          closeNotesPanel();
+          noteFeed.openFeed(authorId);
+        }}
+        onOpenFeed={() => {
           if (noteFeed.open) noteFeed.close();
           else {
             closeNotesPanel();
@@ -1265,21 +1289,9 @@ export default function Reader({
         // Same lifecycle as ChapterNavFooter itself, not an independent
         // always-on FAB — see NotesFeedFab's own doc comment. Deliberately
         // not also gated on !anyPlayerActive the way the footer's own
-        // `visible` is: the FAB stays reachable while listening too, just
-        // repositioned above the player instead of the (then-hidden)
-        // footer — see bottomOffsetPx below.
+        // `visible` is: the rail stays reachable while listening too.
         visible={footerVisible && !selection}
-        // The real height of whichever bottom bar is actually on screen —
-        // playerHeight while listening (the footer hides itself then, per
-        // its own `visible`), footerHeight otherwise (real whenever this
-        // FAB is, since `visible` above is exactly the footer's own
-        // condition minus the player check). Used to be the player height
-        // plus a guessed, hand-tuned mobile/desktop constant standing in
-        // for the footer — added unconditionally, even while the footer it
-        // was meant to clear was itself hidden behind the player, which is
-        // what put the FAB floating in a dead gap above the player bar
-        // instead of hugging it.
-        bottomOffsetPx={anyPlayerActive ? playerHeight : footerHeight}
+        scrolledAway={chromeHidden && !atBottom}
       />
 
       {/* Masks the reader until theme/font/position (hydrated) and scroll

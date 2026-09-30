@@ -176,10 +176,13 @@ function MetaLine({
   material,
   hasNarration,
   onOpenReaders,
+  action,
 }: {
   material: MaterialDetail;
   hasNarration: boolean;
   onOpenReaders: () => void;
+  /** Icon-only control (the bookmark) shown beside "reading now". */
+  action?: React.ReactNode;
 }) {
   const parts: { key: string; node: React.ReactNode }[] = [];
   const formatLabel = FORMAT_LABEL[material.materialType];
@@ -207,7 +210,7 @@ function MetaLine({
     material.currentReaders.length > 0 ? (
       <ReadingNowMetaItem readers={material.currentReaders} totalCount={material.currentReaderCount} onOpen={onOpenReaders} />
     ) : null;
-  if (parts.length === 0 && !readingNow) return null;
+  if (parts.length === 0 && !readingNow && !action) return null;
 
   return (
     <div className="mt-2.5 flex flex-col items-center gap-1.5 text-[13px] font-medium text-[var(--reader-text-subtle)]">
@@ -221,7 +224,12 @@ function MetaLine({
           ))}
         </div>
       )}
-      {readingNow}
+      {(readingNow || action) && (
+        <div className="flex items-center justify-center gap-2">
+          {readingNow}
+          {action}
+        </div>
+      )}
     </div>
   );
 }
@@ -395,21 +403,6 @@ export default function MaterialDetailView({ material }: { material: MaterialDet
       <DetailHeader
         onBack={() => (window.history.length > 1 ? router.back() : router.push("/"))}
         shareAction={{ title: material.title, text: `${material.title} by ${material.author}` }}
-        // Beside Share, not down in the CTA row where it first went: save
-        // and share are both things a reader does *with* this book as an
-        // object, while Read/Listen are ways into its contents — grouping
-        // it with the latter made it read as a third way to open the book.
-        // Unconditional here (rule 3 of BookmarkButton's placement
-        // contract): this is the one surface where a reader can always
-        // save, which is what lets the list rows hide it. Suppressed only
-        // for the reader's own upload, same rule 1 as everywhere else.
-        action={
-          isOwnUpload ? undefined : (
-            <Tooltip label={isSaved ? "Remove from saved" : "Save for later"} side="bottom">
-              <BookmarkButton saved={isSaved} onToggle={() => toggleBookmark.mutate(material.id)} />
-            </Tooltip>
-          )
-        }
       />
 
       <div className="mb-8 flex flex-col items-center gap-5">
@@ -420,7 +413,7 @@ export default function MaterialDetailView({ material }: { material: MaterialDet
             its own line, with everything else stacked at full width below
             it (title through the CTAs), reads as one deliberate column
             instead of two columns fighting for the same row. */}
-        <BookCover
+        <BookCover materialType={material.materialType}
           src={resolveBookCoverSrc(material)}
           alt={material.title}
           className="aspect-[2/3] w-48 shell:w-56 flex-none shadow-lg"
@@ -440,7 +433,20 @@ export default function MaterialDetailView({ material }: { material: MaterialDet
           </h1>
           <div className="mt-2 text-sm font-medium text-[var(--reader-text-muted)]">{material.author}</div>
 
-          <MetaLine material={material} hasNarration={hasRecordedAudiobook} onOpenReaders={() => setReadersOpen(true)} />
+          <MetaLine
+            material={material}
+            hasNarration={hasRecordedAudiobook}
+            onOpenReaders={() => setReadersOpen(true)}
+            // Beside "reading now": icon-only, brand-filled once saved.
+            // Hidden for the reader's own upload, which is already theirs.
+            action={
+              isOwnUpload ? undefined : (
+                <Tooltip label="Save for later">
+                  <BookmarkButton saved={isSaved} onToggle={() => toggleBookmark.mutate(material.id)} />
+                </Tooltip>
+              )
+            }
+          />
 
           <ContributorRow material={material} />
 
@@ -555,7 +561,6 @@ export default function MaterialDetailView({ material }: { material: MaterialDet
                 {lastModeWasListen ? <BookOpen size={18} /> : <Headphones size={18} />}
               </ReaderLink>
             </Tooltip>
-
           </div>
         </div>
       </div>

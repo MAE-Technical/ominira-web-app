@@ -59,6 +59,40 @@ export async function toggleBookmark(readerId: string, targetType: BookmarkTarge
 }
 
 /**
+ * Idempotent counterpart to toggleBookmark: puts the target into exactly the
+ * requested state. The client sends the state it wants (not "flip"), so
+ * duplicate, retried or reordered requests can't invert the result — the
+ * upsert on the (target_type, target_id, reader_id) primary key and the
+ * unconditional delete both converge on `bookmarked` however often they run.
+ */
+export async function setBookmark(
+  readerId: string,
+  targetType: BookmarkTarget,
+  targetId: string,
+  bookmarked: boolean
+): Promise<boolean> {
+  const admin = getSupabaseAdminClient();
+  if (bookmarked) {
+    const { error } = await admin
+      .from("bookmarks")
+      .upsert(
+        { target_type: targetType, target_id: targetId, reader_id: readerId },
+        { onConflict: "target_type,target_id,reader_id", ignoreDuplicates: true }
+      );
+    assertOk(error, "upsert");
+  } else {
+    const { error } = await admin
+      .from("bookmarks")
+      .delete()
+      .eq("target_type", targetType)
+      .eq("target_id", targetId)
+      .eq("reader_id", readerId);
+    assertOk(error, "delete");
+  }
+  return bookmarked;
+}
+
+/**
  * "Which of these did I save?" — the batch lookup hydrateNotes uses to fill
  * every note's `bookmarkedByMe` in one query for a whole feed page, exactly
  * as getReactedNoteIds does for `reactedByMe`.

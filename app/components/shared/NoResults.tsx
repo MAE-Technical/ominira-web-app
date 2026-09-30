@@ -8,5 +8,5 @@
  * future styling change (spacing, tone, an icon) happens in one place.
  */
 export default function NoResults({ message, className = "" }: { message: string; className?: string }) {
-  return <p className={`font-semibold text-[14px] text-[var(--reader-text-muted)] ${className}`}>{message}</p>;
+  return <p className={`font-medium text-[13px] text-[var(--reader-text-muted)] ${className}`}>{message}</p>;
 }

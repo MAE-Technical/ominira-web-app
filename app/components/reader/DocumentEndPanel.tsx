@@ -157,7 +157,7 @@ export default function DocumentEndPanel({
         )}
 
         <div className="mb-2 mt-10 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--reader-text-subtle)]">
-          {finishedAt ? "Share a closing thought" : "Thoughts, ideas, reflections?"}
+          {finishedAt ? "Share a closing thought" : "Notes, ideas, reflections?"}
         </div>
         <NoteComposer
           initialText=""

@@ -61,7 +61,7 @@ export default function HomeCommunityFeed() {
       <FeaturedThisWeek />
 
       <div className="mt-1 mb-7">
-        <h1 className="m-0 font-serif text-xl font-bold text-[var(--reader-text)]">Community posts</h1>
+        <h1 className="m-0 font-serif text-xl font-bold text-[var(--reader-text)]">Community notes</h1>
       </div>
 
       <div className="mb-10">
@@ -80,7 +80,7 @@ export default function HomeCommunityFeed() {
           </div>
         )}
 
-        <div className="mb-3">
+        <div className="mb-0">
           <HomeSortToggle mode={sort} onChange={setSort} />
         </div>
 
@@ -93,10 +93,10 @@ export default function HomeCommunityFeed() {
             </div>
           ) : items.length === 0 ? (
             <NoResults
-              className="mt-6 font-bold"
+              className="mt-5 font-bold"
               message={
                 topicId
-                  ? "Nothing here yet — be the first to share your thoughts on this topic."
+                  ? "Nothing here yet — be the first to share notes on this topic."
                   : "No one's here yet in this view — try widening your filters, or start the thread yourself."
               }
             />

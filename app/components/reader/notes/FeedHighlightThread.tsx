@@ -1,13 +1,11 @@
 "use client";
 
-import { useCreateNote } from "@/lib/community/useNoteMutations";
 import { quoteForRanges } from "@/lib/reader/annotationSelection";
 import { topLevelNotes, repliesFor, sortNotes } from "@/lib/reader/noteThread";
 import { useThreadInteraction } from "@/lib/reader/useThreadInteraction";
 import type { FeedEntry } from "@/lib/reader/annotationFeed";
 import HighlightCard from "./HighlightCard";
 import NoteThreadCard from "./NoteThreadCard";
-import NoteComposer from "./NoteComposer";
 
 /** One highlight's full block in the book-wide feed — a truncated quote
  * (HighlightCard's own universal "See more") that's itself the "show in passage"
@@ -32,7 +30,6 @@ export default function FeedHighlightThread({
   onJump: (entry: FeedEntry) => void;
   targetThreadId?: string;
 }) {
-  const createNote = useCreateNote(materialId);
   const { annotation } = entry;
   const excerpt = quoteForRanges(annotation.ranges, getPassageText);
   const { ui, actions, expandedIds, toggleExpanded } = useThreadInteraction({
@@ -42,7 +39,7 @@ export default function FeedHighlightThread({
     // A reply added from here can be added to a highlight the reader isn't
     // actually looking at right now (they're browsing the feed, not
     // necessarily at this passage) — same "always land where the note
-    // actually is" reasoning as the bottom composer's own onSave below.
+    // actually is" reasoning.
     onNoteAdded: () => onJump(entry),
   });
   const roots = sortNotes(topLevelNotes(annotation.notes), "chronological");
@@ -68,42 +65,7 @@ export default function FeedHighlightThread({
         </div>
       )}
 
-      {/* Same single-composer-active-at-a-time rule as the standalone note
-          panel's own root composer (see NotesSidebar), scoped to this
-          highlight's own ui state so a reply/edit open on a sibling
-          highlight never hides this one's composer. No composer exists
-          anywhere until a reader deliberately asks for one, so checking
-          just activeComposerFor/editingId is enough — an expanded thread
-          with nothing actively targeted for reply has no composer of its
-          own to double up with this one. */}
       {ui.actionError && <p className="m-0 text-[11px] text-[var(--reader-text-muted)]">{ui.actionError}</p>}
-
-      {ui.activeComposerFor === null && ui.editingId === null && (
-        <NoteComposer
-          initialText=""
-          placeholder="Add your thoughts"
-          startCollapsed
-          // No showMemberPrompt here — unlike a deliberate "Reply" tap
-          // (NoteThreadCard's own composer), this one sits under every
-          // single highlight in the feed with nothing to trigger it, so a
-          // signed-out reader would otherwise see the same "Only members
-          // can add notes" box repeated under every item on the page. It
-          // simply doesn't render for them instead — the footer composer
-          // and the top-of-feed auth banner already say that once, which
-          // is enough.
-          action="note"
-          onSave={(content, visibility) => {
-            createNote.mutate(
-              { ranges: annotation.ranges, content, visibility },
-              { onError: () => ui.reportError("Couldn't save your note — check your connection and try again.") }
-            );
-            // Same reasoning as useThreadInteraction's own onNoteAdded —
-            // this composer adds a fresh top-level note to a highlight the
-            // reader may be browsing from afar in the feed, not standing at.
-            onJump(entry);
-          }}
-        />
-      )}
     </div>
   );
 }

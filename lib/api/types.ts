@@ -19,9 +19,20 @@ export type CurrentReaderSummary = {
    * roster's mode icon. */
   mode: ReaderMode;
   updatedAt: string;
+  /** Where they read from, as set on their profile — the social rail's
+   * profile card shows it. Null when they left it blank. */
+  city: string | null;
+  country: string | null;
 };
 
-export type AnnotationRange = { passageId: string; start: number; end: number };
+/** One block's share of a highlight or note. `passageId` names the block in the
+ * surface's own terms — an EPUB passage id, a PDF page ("pdf:p12"), a paragraph
+ * of an article — and start/end are character offsets into that block's text
+ * (see lib/annotations/surface.ts). `text` is the quoted slice itself: stored
+ * so the feed can show the quote for formats the server can't re-read (every
+ * format but EPUB, whose book the server has); never part of a range's
+ * identity (sameRanges/rangesKey ignore it). */
+export type AnnotationRange = { passageId: string; start: number; end: number; text?: string };
 
 export type NoteContent =
   | { kind: "text"; text: string }

@@ -2,7 +2,7 @@
 
 import { useEffect, type CSSProperties } from "react";
 import { PLATFORM_NAME } from "@/lib/config/platform";
-import { BRAND_TAGLINE, SPLASH_MARK } from "@/lib/config/brand-assets";
+import { BRAND_TAGLINE, SPLASH_MARK, WORDMARK } from "@/lib/config/brand-assets";
 import { APP_BG, SPLASH_DURATION_MS, SPLASH_FADE_MS, setThemeColor } from "@/lib/pwa/boot";
 
 /**
@@ -14,10 +14,21 @@ import { APP_BG, SPLASH_DURATION_MS, SPLASH_FADE_MS, setThemeColor } from "@/lib
  * (html[data-reader-theme]). So it's on screen, in the right theme, from the
  * very first paint, and never pops in after hydration or switches theme
  * mid-display. This component only schedules the fade-out.
+ *
+ * `persist` holds it on screen indefinitely — for reviewing the design at
+ * /screen (app/screen/page.tsx), never for the real launch.
  */
-export default function AppSplashScreen() {
+export default function AppSplashScreen({ persist = false }: { persist?: boolean }) {
   useEffect(() => {
     const root = document.documentElement;
+
+    // Review mode (app/screen): raise the splash and hold it — no fade, no
+    // session bookkeeping — until the page is left.
+    if (persist) {
+      root.setAttribute("data-splash", "");
+      return () => root.removeAttribute("data-splash");
+    }
+
     if (!root.hasAttribute("data-splash")) return;
 
     // Measured from navigation start, so a slow hydration eats into the
@@ -32,7 +43,7 @@ export default function AppSplashScreen() {
       window.clearTimeout(fade);
       window.clearTimeout(remove);
     };
-  }, []);
+  }, [persist]);
 
   return (
     // Inline display:none (not just the stylesheet) keeps it off every page
@@ -49,10 +60,17 @@ export default function AppSplashScreen() {
           display: "none",
           "--splash-mark-light": `url(${SPLASH_MARK.light})`,
           "--splash-mark-dark": `url(${SPLASH_MARK.dark})`,
+          "--splash-wordmark-light": `url(${WORDMARK.light})`,
+          "--splash-wordmark-dark": `url(${WORDMARK.dark})`,
         } as CSSProperties
       }
     >
-      <div className="app-splash-mark" aria-hidden="true" />
+      {/* Mark + wordmark form one lockup (tight, like the sidebar's stacked
+          BrandMark); the tagline is supporting copy, set apart below it. */}
+      <div className="app-splash-lockup">
+        <div className="app-splash-mark" aria-hidden="true" />
+        <div className="app-splash-wordmark" aria-hidden="true" />
+      </div>
       <p className="app-splash-tagline">{BRAND_TAGLINE}</p>
     </div>
   );

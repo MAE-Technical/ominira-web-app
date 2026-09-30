@@ -43,5 +43,5 @@ export type ThreadActions = {
    * for the same reason every other write here does: one bundled prop, and
    * one place (useThreadInteraction) that binds the thread's own
    * materialId into each mutation. */
-  toggleBookmark: (noteId: string) => void;
+  toggleBookmark: (noteId: string, currentlySaved: boolean) => void;
 };

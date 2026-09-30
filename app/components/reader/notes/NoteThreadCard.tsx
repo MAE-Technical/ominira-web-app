@@ -231,8 +231,7 @@ export default function NoteThreadCard({
             {!own && (
               <BookmarkButton
                 saved={note.bookmarkedByMe}
-                onToggle={() => actions.toggleBookmark(note.id)}
-                size="small"
+                onToggle={() => actions.toggleBookmark(note.id, note.bookmarkedByMe)}
                 className="ml-auto"
               />
             )}

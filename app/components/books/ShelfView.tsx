@@ -11,13 +11,13 @@ import { communityFeedItemHref } from "@/lib/community/useCommunityFeed";
 import { resolveBookThumbnailSrc } from "@/lib/materials/image";
 import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 import { useContinueReading, useRemoveFromShelf, useRestoreToShelf, type ContinueReadingItem } from "@/lib/auth/useContinueReading";
-import { useSavedMaterials, useSavedNotes } from "@/lib/bookmarks/useBookmarks";
+import { useSavedMaterials, useSavedNotes, useToggleMaterialBookmark } from "@/lib/bookmarks/useBookmarks";
 
 type Tab = "reading" | "saved" | "finished";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "reading", label: "Reading" },
-  { value: "saved", label: "Saved" },
+  { value: "saved", label: "Bookmarks" },
   { value: "finished", label: "Finished" },
 ];
 
@@ -134,6 +134,7 @@ export default function ShelfView() {
   const { data: activities, isLoading: activitiesLoading } = useContinueReading();
   const { data: savedBooks, isLoading: savedBooksLoading } = useSavedMaterials();
   const { data: savedNotes, isLoading: savedNotesLoading } = useSavedNotes();
+  const toggleBookmark = useToggleMaterialBookmark();
 
   // finishedAt is the reader's own explicit mark (DocumentEndPanel), never
   // a threshold on progress — so this split is exact, not a heuristic.
@@ -227,7 +228,7 @@ export default function ShelfView() {
       {/* Underline tabs, not CategoryPills: these are three views of one
           page, not a filter over one list, and pills are already spoken
           for elsewhere in the app as "narrow this list down". */}
-      <div className="mb-7">
+      <div className="mb-0">
         <UnderlineTabs options={TABS} value={tab} onChange={setTab} />
       </div>
 
@@ -235,7 +236,7 @@ export default function ShelfView() {
         (activitiesLoading ? (
           <BookGridSkeleton />
         ) : inProgress.length === 0 ? (
-          <NoResults message="Start a book from the library and it will appear here." />
+            <NoResults className="mt-5" message="Start a book from the library and it will appear here." />
         ) : (
           <BookGrid items={inProgress.map(activityRow)} />
         ))}
@@ -244,7 +245,7 @@ export default function ShelfView() {
         (activitiesLoading ? (
           <BookGridSkeleton rows={4} />
         ) : finished.length === 0 ? (
-          <NoResults message="Books you mark finished will collect here." />
+            <NoResults className="mt-5" message="Books you mark finished will collect here." />
         ) : (
           // Still resumable, same as an in-progress row: the saved locator
           // reopens exactly where they stopped, which is what makes a
@@ -263,7 +264,7 @@ export default function ShelfView() {
             // come back to, very often without having opened it yet, so the
             // detail page (blurb, outline, CTAs) is the right landing spot —
             // the same distinction the Library catalogue makes.
-            <BookGrid items={savedBooks.map((material) => ({ material }))} />
+            <BookGrid items={savedBooks.map((material) => ({ material, onRemove: () => toggleBookmark.mutate(material.id) }))} />
           ) : null}
 
           {/* Posts and books share the tab rather than splitting into a
@@ -303,7 +304,7 @@ export default function ShelfView() {
           ) : null}
 
           {!savedBooksLoading && !savedNotesLoading && !savedBooks?.length && !savedNotes?.length && (
-            <NoResults message="Nothing saved yet — tap the bookmark on any book or post to keep it here." />
+             <NoResults className="mt-5" message="Nothing saved yet — tap the bookmark on any book or post to keep it here." />
           )}
         </>
       )}

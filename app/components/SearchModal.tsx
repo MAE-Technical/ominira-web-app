@@ -172,7 +172,7 @@ export default function SearchModal({ book, onNavigate, onClose }: Props) {
                       // shouldn't lose the search each time.
                       className="flex items-center gap-3 py-3 border-b border-[var(--reader-border)] no-underline"
                     >
-                      <BookCover src={resolveBookThumbnailSrc(material)} alt={material.title} className="h-14 w-11 flex-none rounded-sm border border-[var(--reader-border)]" />
+                      <BookCover materialType={material.materialType} src={resolveBookThumbnailSrc(material)} alt={material.title} className="h-14 w-11 flex-none rounded-sm border border-[var(--reader-border)]" />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13px] font-semibold text-[var(--reader-text)]">
                           {highlight(material.title, query)}

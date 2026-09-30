@@ -177,14 +177,14 @@ body {
   /* --reader-surface: #f7f7f7; */
   --reader-surface: #ffffff;
   --reader-surface-hover: #ececec;
-  /* Deliberately faint — a hairline, not a stroke. Any border reads with
-     outsized weight against a pure-white canvas, so this needs to sit well
-     below what would look "muted" on a tinted background. */
-  --reader-border: rgba(0, 0, 0, 0.08);
-  /* The notes thread tree (trunk + elbows): exactly --reader-border as it
-     lands on --reader-bg, but opaque, so the trunk and the elbow's
-     overlapping vertical leg don't double up darker than the curve. */
-  --reader-thread-line: #ebebeb;
+  /* Matches the notes thread tree (--reader-thread-line). */
+  /* --reader-border: rgba(0, 0, 0, 0.08); */
+  --reader-border: var(--color-sand-300);
+  /* The notes thread tree (trunk + elbows): one step darker than the
+     preview card border (--color-app-border) so the tree reads as structure,
+     kept opaque so the trunk and the elbow's overlapping vertical leg don't
+     double up darker than the curve. */
+  --reader-thread-line: var(--color-sand-300);
   --reader-text: #000000;
   --reader-text-muted: #6e6e73;
   --reader-text-subtle: #a1a1a6;
@@ -229,8 +229,11 @@ body {
   /* --reader-surface: #121212; */
   --reader-surface: #000000;
   --reader-surface-hover: #1c1c1e;
-  --reader-border: rgba(255, 255, 255, 0.1);
-  --reader-thread-line: #1a1a1a;
+  /* Dark mirror of light's sand-300: same warm hue, same ~1.5:1 contrast
+     against the black canvas. Shared with the notes thread tree. */
+  /* --reader-border: rgba(255, 255, 255, 0.1); */
+  --reader-border: #322c27;
+  --reader-thread-line: var(--reader-border);
   --reader-text: #ffffff;
   --reader-text-muted: #98989d;
   --reader-text-subtle: #636366;
@@ -284,6 +287,20 @@ body {
    book's" highlight color, not a generic OS affordance. */
 [data-reader-theme] ::selection {
   background: var(--reader-highlight);
+}
+
+/* The shared selection engine's own layer (lib/annotations/useTextSelection),
+   which every reader uses in place of the native selection — washed in the same
+   --reader-highlight. It sits over the text rather than behind it (a PDF page is
+   an opaque image), so light theme multiplies the whole layer in — ink stays
+   ink, exactly like a highlighter; dark theme's highlight is already
+   translucent. On the layer, not each box: the layer is its own stacking
+   context, so a box would only blend with the empty layer. */
+.reader-selection-layer {
+  mix-blend-mode: multiply;
+}
+[data-reader-theme="dark"] .reader-selection-layer {
+  mix-blend-mode: normal;
 }
 
 /* The active section's own overflow-y-auto box (BookContent.tsx) — a thin,
@@ -349,6 +366,104 @@ body {
 }
 .reader-menu-in {
   animation: reader-menu-in 140ms ease;
+}
+
+/* A face arriving on the reader's social rail (NotesFeedFab.tsx) — a small
+   pop, staggered per face via inline animation-delay, so a run with readers
+   in it reads as people turning up rather than a list redrawing. */
+@keyframes reader-face-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.reader-face-in {
+  animation: reader-face-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reader-face-in {
+    animation: none;
+  }
+}
+
+/* The social rail's floating surfaces (NotesFeedFab.tsx) — frosted over the
+   page rather than a flat card on top of it, so the rail reads as a layer of
+   the reading surface, not chrome bolted onto it. */
+.reader-glass {
+  background: color-mix(in srgb, var(--reader-surface) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--reader-text) 9%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+}
+
+/* A reader's face with something unread behind it — the story-ring idiom:
+   brand gradient while there's a note you haven't opened, a quiet grey once
+   you have. */
+.reader-story-ring {
+  position: relative;
+  isolation: isolate;
+  border-radius: 9999px;
+  /* 2.5px of gradient outside the avatar's own 1.5px surface-colored gap. */
+  padding: 4px;
+}
+.reader-story-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 200deg,
+    var(--color-brand-300),
+    var(--color-brand-500),
+    #f2b441,
+    var(--color-brand-300)
+  );
+}
+.reader-story-ring[data-seen]::before {
+  background: color-mix(in srgb, var(--reader-text) 16%, transparent);
+}
+.reader-story-ring[data-plain]::before {
+  background: none;
+}
+
+/* Someone listening right now — three bars, the "now playing" glyph. */
+.reader-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 7px;
+}
+.reader-eq > i {
+  width: 1.5px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: bottom;
+  animation: reader-eq 820ms ease-in-out infinite alternate;
+}
+.reader-eq > i:nth-child(2) {
+  animation-delay: -280ms;
+}
+.reader-eq > i:nth-child(3) {
+  animation-delay: -560ms;
+}
+@keyframes reader-eq {
+  from {
+    transform: scaleY(0.3);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reader-eq > i {
+    animation: none;
+  }
 }
 
 /* Jump-to-highlight flash (PassageContent.tsx/Reader.tsx) — plays once on
@@ -668,7 +783,9 @@ html[data-splash] .app-splash {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.75rem;
+  /* Lockup → tagline: clearly wider than the mark → wordmark gap inside
+     the lockup, so the tagline reads as a message, not part of the name. */
+  gap: 3.75rem;
   padding-bottom: 6svh;
   background: #faf6f0;
   color: #14110e;
@@ -690,12 +807,29 @@ html[data-reader-theme="dark"] .app-splash {
 html[data-reader-theme="dark"] .app-splash-mark {
   background-image: var(--splash-mark-dark);
 }
+.app-splash-lockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+/* The design's own OMINIRA lettering (an image, like the mark — it's a
+   custom display face, not a web font). */
+.app-splash-wordmark {
+  width: 180px;
+  aspect-ratio: 540 / 81;
+  background: var(--splash-wordmark-light) center / contain no-repeat;
+}
+html[data-reader-theme="dark"] .app-splash-wordmark {
+  background-image: var(--splash-wordmark-dark);
+}
 .app-splash-tagline {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1.125rem;
+  font-weight: 500;
   letter-spacing: 0.02em;
+  opacity: 0.72;
 }
 
 /* Theme-paired assets that must be right on first paint (e.g.

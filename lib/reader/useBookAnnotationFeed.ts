@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import type { Note } from "@/lib/api/types";
-import type { Passage, Section } from "@/lib/book/schema";
+import { useSessionStore } from "@/stores/session-store";
 import { useAnnotations } from "./useAnnotations";
 import { topLevelNotes } from "./noteThread";
 import { annotationSortKey, generalNoteSortKey, type FeedSort } from "./feedSort";
-import { buildAnnotationFeedGroups, type FeedEntry } from "./annotationFeed";
+import { buildAnnotationFeedEntries, type FeedEntry, type FeedLocator } from "./annotationFeed";
 
 /** Which entries the panel actually renders — "notes" (labeled "Public
  * notes") narrows down to entries with at least one note, "highlights"
@@ -27,6 +27,13 @@ export type AnnotationFeedFilter = "notes" | "highlights";
  * BookAnnotationFeedPanel). */
 export type FeedItem = { kind: "highlight"; entry: FeedEntry } | { kind: "general"; note: Note };
 
+/** Another reader who has written in this material, for NotesFeedFab's
+ * social rail. `entries` are where their notes sit, in book order — only the
+ * current run's when `here`, and empty when all they wrote was general
+ * discussion. `count` is every note and reply they wrote, book-wide.
+ * `latest` is their newest note's createdAt. */
+export type NoteAuthor = { author: Note["author"]; entries: FeedEntry[]; here: boolean; count: number; latest: string };
+
 function feedItemKey(item: FeedItem, notes: Note[], sort: "recent" | "top"): number {
   return item.kind === "highlight"
     ? annotationSortKey(item.entry.annotation, sort)
@@ -45,12 +52,12 @@ function feedItemKey(item: FeedItem, notes: Note[], sort: "recent" | "top"): num
  */
 export function useBookAnnotationFeed({
   materialId,
-  orderedSections,
-  passageLookup,
+  locate,
 }: {
   materialId: string;
-  orderedSections: Section[];
-  passageLookup: { byId: Map<string, Passage>; sectionOf: Map<string, string> };
+  /** Where each block sits — see FeedLocator. Memoize it: the feed rebuilds
+   * whenever it changes. */
+  locate: FeedLocator;
 }) {
   const { notes, allAnnotations } = useAnnotations(materialId);
 
@@ -65,20 +72,19 @@ export function useBookAnnotationFeed({
   // anyway, so it always stays in book order regardless of this value (see
   // `items` below).
   const [sort, setSort] = useState<FeedSort>("book");
+  // One comrade the panel is narrowed to — opened from their face on the
+  // social rail. Only ever meaningful on the "notes" tab.
+  const [authorId, setAuthorId] = useState<string | null>(null);
 
-  // Still built section-by-section (buildAnnotationFeedGroups) purely to
-  // get each entry stamped with its own chapter label in spine order —
-  // flattened right back out below. The book-wide feed itself no longer
-  // renders these as separate sections (see BookAnnotationFeedPanel's own
-  // doc comment); every entry carries its context with it instead.
-  const flatEntries: FeedEntry[] = useMemo(() => {
-    const groups = buildAnnotationFeedGroups(allAnnotations, orderedSections, passageLookup.sectionOf, passageLookup.byId);
-    return groups.flatMap((g) => g.entries);
-  }, [allAnnotations, orderedSections, passageLookup]);
+  // Every entry carries its own run label (chapter, page, heading), so the
+  // panel groups consecutive runs itself — no separate grouping pass here.
+  const flatEntries: FeedEntry[] = useMemo(() => buildAnnotationFeedEntries(allAnnotations, locate), [allAnnotations, locate]);
 
   const items: FeedItem[] = useMemo(() => {
+    const byAuthor = (n: Note) => n.author.readerId === authorId;
     const highlightItems: FeedItem[] = flatEntries
       .filter((e) => (filter === "notes" ? e.annotation.notes.length > 0 : e.annotation.notes.length === 0))
+      .filter((e) => !authorId || e.annotation.notes.some(byAuthor))
       .map((entry) => ({ kind: "highlight", entry }));
 
     if (filter !== "highlights") {
@@ -89,7 +95,9 @@ export function useBookAnnotationFeed({
       // panel supplies "General discussion" for these directly. "Your
       // highlights" never includes these — a general note is always an
       // actual note, never a bare highlight.
-      const generalNotes = topLevelNotes(notes).filter((n) => n.ranges.length === 0);
+      const generalNotes = topLevelNotes(notes).filter(
+        (n) => n.ranges.length === 0 && (!authorId || byAuthor(n) || notes.some((r) => r.parentId === n.id && byAuthor(r)))
+      );
 
       if (sort === "book") {
         // General discussion first (oldest first among themselves — read
@@ -115,7 +123,7 @@ export function useBookAnnotationFeed({
     // stays in book order (flatEntries' own spine order), same as
     // browsing the book itself.
     return highlightItems;
-  }, [flatEntries, notes, filter, sort]);
+  }, [flatEntries, notes, filter, sort, authorId]);
 
   const totalNoteCount =
     flatEntries.reduce((sum, e) => sum + e.annotation.notes.length, 0) +
@@ -127,8 +135,60 @@ export function useBookAnnotationFeed({
       .reduce((sum, n) => sum + 1 + notes.filter((r) => r.parentId === n.id).length, 0);
   const passageCount = flatEntries.length;
 
-  const openFeed = useCallback(() => setOpen(true), []);
-  const close = useCallback(() => setOpen(false), []);
+  // Every other reader who has written here, with where — the same notes
+  // totalNoteCount counts, minus the reader's own (seeing yourself back
+  // invites nothing). General discussion and its replies add a face but no
+  // entry.
+  const readerId = useSessionStore((s) => s.readerId);
+  const { authorsById, othersNoteCount } = useMemo(() => {
+    const byId = new Map<string, { author: Note["author"]; entries: FeedEntry[]; count: number; latest: string }>();
+    let count = 0;
+    const add = (n: Note, entry?: FeedEntry) => {
+      if (n.author.readerId === readerId) return;
+      count++;
+      let a = byId.get(n.author.readerId);
+      if (!a) byId.set(n.author.readerId, (a = { author: n.author, entries: [], count: 0, latest: n.createdAt }));
+      a.count++;
+      if (n.createdAt > a.latest) a.latest = n.createdAt;
+      if (entry && a.entries.at(-1) !== entry) a.entries.push(entry);
+    };
+    for (const e of flatEntries) for (const n of e.annotation.notes) add(n, e);
+    const generalIds = new Set(
+      topLevelNotes(notes)
+        .filter((n) => n.ranges.length === 0)
+        .map((n) => n.id)
+    );
+    for (const n of notes) if (generalIds.has(n.id) || (n.parentId && generalIds.has(n.parentId))) add(n);
+    return { authorsById: byId, othersNoteCount: count };
+  }, [flatEntries, notes, readerId]);
+
+  /** Other readers' faces for the run the reader is in: whoever wrote there
+   * first, then everyone else who wrote in the book, newest activity first
+   * within each. */
+  const noteAuthors = useCallback(
+    (sectionId: string | undefined): NoteAuthor[] =>
+      [...authorsById.values()]
+        .map(({ author, entries, count, latest }) => {
+          const hereEntries = sectionId ? entries.filter((e) => e.sectionId === sectionId) : [];
+          const here = hereEntries.length > 0;
+          return { author, entries: here ? hereEntries : entries, here, count, latest };
+        })
+        .sort((a, b) => Number(b.here) - Number(a.here) || b.latest.localeCompare(a.latest)),
+    [authorsById]
+  );
+
+  /** Opens the feed — narrowed to one comrade's notes when given their id. */
+  const openFeed = useCallback((author?: string) => {
+    setAuthorId(author ?? null);
+    if (author) setFilter("notes");
+    setOpen(true);
+  }, []);
+  const close = useCallback(() => {
+    setOpen(false);
+    setAuthorId(null);
+  }, []);
+  const clearAuthor = useCallback(() => setAuthorId(null), []);
+  const focusedAuthor = (authorId && authorsById.get(authorId)) || null;
 
   return {
     open,
@@ -145,6 +205,10 @@ export function useBookAnnotationFeed({
     setSort,
     totalNoteCount,
     passageCount,
+    noteAuthors,
+    othersNoteCount,
+    focusedAuthor,
+    clearAuthor,
     openFeed,
     close,
   };

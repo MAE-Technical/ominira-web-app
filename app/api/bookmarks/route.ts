@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedReader } from "@/lib/auth/session";
 import { notFound, unauthorized, validationError } from "@/lib/api/errors";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
-import { toggleBookmark, type BookmarkTarget } from "@/lib/bookmarks/store";
+import { setBookmark, toggleBookmark, type BookmarkTarget } from "@/lib/bookmarks/store";
 
 const TARGETS: BookmarkTarget[] = ["material", "post"];
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const reader = await getAuthenticatedReader(request);
   if (!reader) return unauthorized();
 
-  const body = (await request.json()) as { targetType?: string; targetId?: string };
+  const body = (await request.json()) as { targetType?: string; targetId?: string; bookmarked?: boolean };
   const targetType = body.targetType as BookmarkTarget | undefined;
   if (!targetType || !TARGETS.includes(targetType) || !body.targetId) {
     return validationError(`targetType (${TARGETS.join(" | ")}) and targetId are required.`);
@@ -41,6 +41,11 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (!target) return notFound();
 
-  const bookmarked = await toggleBookmark(reader.readerId, targetType, body.targetId);
+  // `bookmarked` = the state the client wants (idempotent, what the app
+  // sends); without it the route still toggles, for older callers.
+  const bookmarked =
+    typeof body.bookmarked === "boolean"
+      ? await setBookmark(reader.readerId, targetType, body.targetId, body.bookmarked)
+      : await toggleBookmark(reader.readerId, targetType, body.targetId);
   return NextResponse.json({ bookmarked });
 }

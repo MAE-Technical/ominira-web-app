@@ -6,62 +6,29 @@ import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 import MembersOnlyPrompt from "@/app/components/reader/notes/MembersOnlyPrompt";
 
 /**
- * "Save this for later" — the one bookmark control, shared by book rows
- * (BookListRow), a book's own detail page (DetailHeader) and community
- * posts (NoteThreadCard).
+ * "Save this for later" — the one bookmark control, used by a book's detail
+ * page and community posts (NoteThreadCard). One look everywhere: change it
+ * here and both follow. The behaviour lives in the same two places too —
+ * optimistic toggle + toast + ordering in lib/bookmarks/useBookmarks.ts and
+ * useToggleNoteBookmark, sharing serialize.ts and stores/toast-store.ts.
  *
- * Icon-only, with no count beside it, which is the visible half of the
- * decision the bookmarks table itself makes (migrations/20261003_bookmarks
- * .sql): a reaction is public appreciation and therefore has a number, a
- * bookmark is private and has nothing to show anyone else. Saved state is
- * carried entirely by the icon's fill.
- *
- * Deliberately quiet — `--reader-text-subtle`, lifting to
- * `--reader-text-muted` on hover, with no hover background at all. It sits
- * on dense repeated surfaces (a list row, a post's action row) next to
- * controls that *are* bordered pills (ReactionButton, ReplyButton); a
- * filled hover chip here would read as a third button of equal weight
- * rather than the small private marker it is.
- *
- * Saved changes the icon's *fill* and nothing else — same color either
- * way. Color is this control's hover channel (subtle -> muted), so
- * spending it on saved state too would mean a saved-and-hovered bookmark
- * had nowhere left to go, and a brand-colored one pulled far more
- * attention down a list of rows than a private marker has any business
- * pulling. Solid vs. outline is a clear enough read on its own, and it's
- * the distinction the glyph was designed around.
+ * Icon-only, no count (a bookmark is private, unlike a reaction). Muted at
+ * rest, brand-coloured and filled when saved.
  *
  * Gates itself for signed-out readers exactly as ReactionButton does — the
- * same MembersOnlyPrompt in the same scrim-plus-absolute-box popover, shown
- * in place rather than redirecting to /auth/login — since like that button
- * this is reachable from public surfaces with nothing upstream gating it.
+ * same MembersOnlyPrompt popover, shown in place rather than redirecting.
  *
- * WHERE THIS RENDERS AT ALL is not this component's decision but its
- * callers', and the rule they share is worth stating once here:
- *
- *   1. Never on something the reader already owns — their own upload, their
- *      own post. Saving your own work is a no-op dressed as an action; an
- *      upload is already in Library's "Personal library only" view and a
- *      post is already on your profile.
- *   2. On a dense *list* of books, quiet unless it's saying something: full
- *      strength when the book is actually saved (a state marker, and the
- *      way to unsave), otherwise hidden until the row is hovered, or merely
- *      dimmed where there's no hover to wait for. An icon at full strength
- *      on every row of a 50-book catalogue is noise on 49 of them. See
- *      BookListRow for the hover/touch split.
- *   3. Always, unconditionally, on a surface dedicated to one thing — a
- *      book's detail page, a post's own card. One tap away from any list,
- *      and the natural home for a considered "save this".
+ * Where it renders is the callers' call: never on something the reader
+ * already owns (their own upload/post), and not on book list rows — the
+ * detail page is the place to save a book.
  */
 export default function BookmarkButton({
   saved,
   onToggle,
-  size = "default",
   className = "",
 }: {
   saved: boolean;
   onToggle: () => void;
-  size?: "default" | "small";
   /** Positioning and visibility from the caller only (e.g. BookListRow
    * pinning this to the row's trailing edge and revealing it on hover) —
    * never colors, which are this component's own job so a saved bookmark
@@ -70,7 +37,6 @@ export default function BookmarkButton({
 }) {
   const isAuthenticated = useIsAuthenticated();
   const [showPrompt, setShowPrompt] = useState(false);
-  const isSmall = size === "small";
 
   const handleClick = (e: React.MouseEvent) => {
     // Every book row is itself a link (and the whole row is the tap
@@ -92,11 +58,11 @@ export default function BookmarkButton({
         onClick={handleClick}
         aria-label={saved ? "Remove from saved" : "Save for later"}
         aria-pressed={saved}
-        className={`flex flex-none cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-[var(--reader-text-subtle)] transition-colors hover:text-[var(--reader-text-muted)] ${
-          isSmall ? "h-7 w-7" : "h-8 w-8"
+        className={`flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-full border-none bg-transparent transition-colors ${
+          saved ? "text-brand-500" : "text-[var(--reader-text-subtle)] hover:text-[var(--reader-text-muted)]"
         }`}
-      >
-        <Bookmark size={isSmall ? 17 : 19} strokeWidth={1.75} fill={saved ? "currentColor" : "none"} />
+>
+        <Bookmark size={17} strokeWidth={1.75} fill={saved ? "currentColor" : "none"} />
       </button>
       {showPrompt && (
         <>

@@ -196,7 +196,7 @@ export default function LibraryAdminView({ books, categories }: { books: AdminBo
                     }`}
                   >
                     <td className="px-3 py-2 align-middle">
-                      <BookCover src={thumbnailOf(book)} alt="" className="h-11 w-8 rounded-sm border border-[var(--reader-border)]" iconSize={13} />
+                      <BookCover materialType={book.materialType} src={thumbnailOf(book)} alt="" className="h-11 w-8 rounded-sm border border-[var(--reader-border)]" iconSize={13} />
                     </td>
                     <td className="max-w-[260px] px-3 py-2 align-middle">
                       <button
@@ -434,7 +434,7 @@ function BookEditPanel({
   return (
     <div className="flex min-h-full flex-col">
       <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--reader-border)] bg-[var(--reader-surface)] px-5 py-3">
-        <BookCover src={thumbnailOf(book)} alt="" className="h-12 w-9 flex-none rounded-sm border border-[var(--reader-border)]" iconSize={14} />
+        <BookCover materialType={book.materialType} src={thumbnailOf(book)} alt="" className="h-12 w-9 flex-none rounded-sm border border-[var(--reader-border)]" iconSize={14} />
         <div className="min-w-0 flex-1">
           <p className="m-0 truncate text-[13px] font-bold text-[var(--reader-text)]">{book.title}</p>
           <p className="m-0 text-[11px] text-[var(--reader-text-muted)]">

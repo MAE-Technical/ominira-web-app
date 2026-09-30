@@ -333,7 +333,7 @@ export default function AccountView() {
               <LogOut size={14} />
               {logout.isPending ? "Logging out…" : "Log out"}
             </button>
-            <p className="m-0 text-xs font-medium text-[var(--reader-text-muted)]">Arise for Freedom.</p>
+            <p className="m-0 text-xs font-medium text-[var(--reader-text-muted)]">Arise for Freedom</p>
             <p className="m-0 text-xs font-medium text-[var(--reader-text-subtle)]">Ominira · v{APP_VERSION}</p>
           </div>
         </>

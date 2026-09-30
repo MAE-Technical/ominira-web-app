@@ -25,7 +25,7 @@ export default function ContinueReadingItemCard({ item }: { item: ContinueReadin
       href={buildResumeHref(material.slug, item)}
       className="flex w-60 flex-none gap-3 rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] p-3 no-underline md:w-70"
     >
-      <BookCover src={resolveBookThumbnailSrc(material)} alt={material.title} className="h-20 w-17 flex-none rounded-sm border border-[var(--reader-border)]" />
+      <BookCover materialType={material.materialType} src={resolveBookThumbnailSrc(material)} alt={material.title} className="h-20 w-17 flex-none rounded-sm border border-[var(--reader-border)]" />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="min-w-0">
           <div className="truncate font-serif text-sm font-semibold leading-tight text-[var(--reader-text)]">{material.title}</div>

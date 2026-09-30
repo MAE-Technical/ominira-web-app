@@ -1,72 +1,51 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, GalleryVertical, Minus, Plus, RectangleVertical } from "lucide-react";
-import type { PdfLayout } from "@/stores/reader-store";
-
-// Content-sized, not `flex-1`: an edge button that stretched to fill its half of
-// the bar turned every bit of empty space beside it into a page turn — a stray
-// click anywhere near the bottom of the window silently moved the reader. The
-// buttons now occupy exactly their own label, and the room around them belongs to
-// the bar (which is `cursor-default` and inert) rather than to a control.
-const edgeButtonClass =
-  "group flex items-center gap-2 rounded-md border-none bg-transparent cursor-pointer px-3 py-2 text-[13px] font-semibold text-[var(--reader-text-muted)] transition-colors hover:bg-[var(--reader-surface-hover)] hover:text-[var(--reader-text)] disabled:opacity-40 disabled:pointer-events-none";
-const chevronClass = "flex-none transition-transform duration-150";
+import { Minus, Plus } from "lucide-react";
 
 const iconButtonClass =
   "flex h-9 w-9 flex-none items-center justify-center rounded-md border-none bg-transparent cursor-pointer text-[var(--reader-text-muted)] transition-colors hover:bg-[var(--reader-surface-hover)] hover:text-[var(--reader-text)] disabled:opacity-40 disabled:pointer-events-none";
 
 /**
  * Everything a PDF is navigated and sized by, in one bar: zoom, which page of
- * how many (typed, not just read), the paged↔scroll layout switch, and
- * prev/next at the edges.
+ * how many (typed, not just read).
  *
- * One centred cluster — `[15] / 157 │ ▤ │ − +` — with the page turners pushed to
- * the far edges. Zoom lives here rather than up in the header (where it started)
- * so everything that moves or resizes the document is in one place and within
- * thumb reach, and so the bar keeps to a single row on a phone instead of
- * stacking page controls above zoom controls. Page numbers lead, since that's
- * what a reader looks at; the layout switch and zoom follow, each divided off so
- * three unrelated controls don't read as one undifferentiated row.
+ * One centred cluster — `[15] / 157 │ − +`. Zoom lives here rather than up in the
+ * header (where it started) so everything that moves or resizes the document is
+ * in one place and within thumb reach, and so the bar keeps to a single row on a
+ * phone. Page numbers lead, since that's what a reader looks at; zoom follows,
+ * divided off so two unrelated controls don't read as one undifferentiated row.
  *
  * The page number is an input rather than a label because pages are a PDF's
  * *only* structure — there's no TOC to jump through (see
  * document-readers-spec.md § 3), so "go to page 18" is the whole navigation
  * model, and tapping Next fifteen times was the alternative. It holds free text
- * while focused (so a two-digit number can be typed without the first keystroke
- * jumping anywhere) and commits on Enter or blur, clamped to the document.
+ * while focused, starting from the current page (so a digit can be added or
+ * changed without the first keystroke jumping anywhere) and commits on Enter or blur, clamped to the document.
  */
 export default function PdfPagerFooter({
   pageNumber,
   numPages,
-  layout,
   zoom,
   onGoToPage,
-  onStepPage,
-  onLayoutChange,
   onZoomIn,
   onZoomOut,
   onZoomReset,
 }: {
   pageNumber: number;
   numPages: number;
-  layout: PdfLayout;
-  /** `isCustom` is whether the reader has zoomed away from the layout's own
+  /** `isCustom` is whether the reader has zoomed away from the page's own
    * fit (by these buttons or a pinch) — the only time the percentage is worth
    * the room it takes, and the only time there's anything to reset. */
   zoom: { percent: number; isCustom: boolean; canZoomIn: boolean; canZoomOut: boolean };
   onGoToPage: (page: number) => void;
-  /** Previous/next page — a step rather than an absolute page, so the viewer
-   * can count from a page turn that's still in flight. */
-  onStepPage: (delta: -1 | 1) => void;
-  onLayoutChange: (layout: PdfLayout) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
 }) {
   // What's being typed, tagged with the page it was typed against. The tag is
   // how the readout follows `pageNumber` (which changes continuously as the
-  // reader scrolls in the scroll layout) without an effect clearing the draft:
+  // reader scrolls) without an effect clearing the draft:
   // a draft for a page the reader has since moved off is simply stale, and the
   // live page number shows instead.
   const [typed, setTyped] = useState<{ basePage: number; text: string } | null>(null);
@@ -87,146 +66,81 @@ export default function PdfPagerFooter({
     if (clamped !== pageNumber) onGoToPage(clamped);
   };
 
-  const isScroll = layout === "scroll";
-
   return (
     <div
       // min-h-16 matches PdfDocumentView's BOTTOM_BAR_HEIGHT_PX, which is what
       // the scroll container reserves for this bar — the controls inside are all
       // shorter than that, so without it the reserved space would exceed the bar
-      // and leave a gap under it.
-      //
-      // A three-column grid rather than a flex row with stretching edge buttons:
-      // the centre cluster stays centred in the bar whether or not the page
-      // turners are showing, while each turner keeps to its own width so the
-      // space around it isn't clickable. `cursor-default` says as much — without
-      // it the bar inherits the text cursor from the document and reads as if
-      // something there could be selected or pressed.
-      className="absolute left-0 right-0 bottom-0 z-10 grid min-h-16 cursor-default grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-[var(--reader-border)] bg-[var(--reader-surface)] px-2"
+      // and leave a gap under it. `cursor-default` because without it the bar
+      // inherits the text cursor from the document and reads as if something
+      // there could be selected or pressed.
+      className="absolute left-0 right-0 bottom-0 z-10 flex min-h-16 cursor-default items-center justify-center gap-2 border-t border-[var(--reader-border)] bg-[var(--reader-surface)] px-2 sm:gap-3"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Prev/next are a paged-layout affordance only — in continuous scroll the
-          scroll itself is the page turn, and buttons that merely jump the scroll
-          position would compete with it. Their labels drop away on a phone,
-          where the chevrons alone are unambiguous and the room is better spent
-          on the centre cluster. */}
-      <div className="flex min-w-0 justify-start">
-        {!isScroll && (
-          <button
-            onClick={() => onStepPage(-1)}
-            disabled={pageNumber <= 1}
-            aria-label="Previous page"
-            className={edgeButtonClass}
-          >
-            <ChevronLeft size={18} className={`${chevronClass} group-hover:-translate-x-0.5`} />
-            <span className="hidden sm:inline">Previous</span>
-          </button>
-        )}
+      <div className="flex flex-none items-center gap-1.5 text-[13px] font-semibold tabular-nums text-[var(--reader-text-muted)]">
+        <input
+          type="text"
+          inputMode="numeric"
+          // A form control needs a label even though the "/ 157" beside it
+          // reads as one visually.
+          aria-label={`Page number, of ${numPages}`}
+          // Focusing keeps the current page in the field, so the reader can
+          // nudge it (add a digit, fix one) rather than retype from scratch.
+          value={draft ?? String(pageNumber)}
+          onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+          onFocus={() => setDraft(String(pageNumber))}
+          onBlur={commitDraft}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur(); // blur commits, so there's one commit path
+            } else if (e.key === "Escape") {
+              setDraft(null);
+              e.currentTarget.blur();
+            }
+          }}
+          // No focus border: the caret already says the field is live, and a
+          // recolouring border reads as a state change that hasn't happened.
+          // The selection override is not cosmetic — the reader's global
+          // ::selection is the annotation-highlight colour (globals.css),
+          // which on a page-number field looks like a highlighted passage.
+          className="w-14 cursor-text rounded-sm border border-[var(--reader-border)] bg-transparent px-2 py-1 text-center text-[13px] font-semibold tabular-nums text-[var(--reader-text)] outline-none selection:bg-[var(--reader-surface-hover)] selection:text-[var(--reader-text)]"
+        />
+        <span>/ {numPages}</span>
       </div>
 
-      {/* Page numbers first — the thing a reader looks at — then the layout
-          switch, then zoom, each its own group behind a hairline so three
-          unrelated controls don't read as one row of buttons. */}
-      <div className="flex flex-none items-center gap-2 sm:gap-3">
-        <div className="flex flex-none items-center gap-1.5 text-[13px] font-semibold tabular-nums text-[var(--reader-text-muted)]">
-          <input
-            type="text"
-            inputMode="numeric"
-            // A form control needs a label even though the "/ 157" beside it
-            // reads as one visually.
-            aria-label={`Page number, of ${numPages}`}
-            // Focusing empties the field and shows the current page as a
-            // placeholder, so the caret blinks *in front of* the number the
-            // reader is on: it says "this can be changed" and the first
-            // keystroke starts a new number, rather than appending to the old
-            // one or relying on a select-all the reader can't see.
-            value={draft ?? String(pageNumber)}
-            placeholder={String(pageNumber)}
-            onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
-            onFocus={() => setDraft("")}
-            onBlur={commitDraft}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                e.currentTarget.blur(); // blur commits, so there's one commit path
-              } else if (e.key === "Escape") {
-                setDraft(null);
-                e.currentTarget.blur();
-              }
-            }}
-            // No focus border: the caret already says the field is live, and a
-            // recolouring border reads as a state change that hasn't happened.
-            // The selection override is not cosmetic — the reader's global
-            // ::selection is the annotation-highlight colour (globals.css),
-            // which on a page-number field looks like a highlighted passage.
-            className="w-14 cursor-text rounded-sm border border-[var(--reader-border)] bg-transparent px-2 py-1 text-center text-[13px] font-semibold tabular-nums text-[var(--reader-text)] outline-none selection:bg-[var(--reader-surface-hover)] selection:text-[var(--reader-text)] placeholder:text-[var(--reader-text-muted)]"
-          />
-          <span>/ {numPages}</span>
-        </div>
+      <span aria-hidden="true" className="h-5 w-px flex-none bg-[var(--reader-border)]" />
 
-        <span aria-hidden="true" className="h-5 w-px flex-none bg-[var(--reader-border)]" />
-
-        {/* One button that toggles rather than a two-option segmented control:
-            there are only two layouts, so the icon can simply show the one the
-            tap leads to — a single page, or a stack of them — the same way the
-            header's sun/moon theme toggle already works. */}
+      <div className="flex flex-none items-center gap-0.5">
         <button
-          type="button"
-          onClick={() => onLayoutChange(isScroll ? "paged" : "scroll")}
-          aria-label={isScroll ? "Switch to page by page" : "Switch to continuous scroll"}
-          title={isScroll ? "Page by page" : "Continuous scroll"}
+          onClick={onZoomOut}
+          disabled={!zoom.canZoomOut}
+          aria-label={`Zoom out, currently ${zoom.percent}%`}
           className={iconButtonClass}
         >
-          {isScroll ? <RectangleVertical size={17} /> : <GalleryVertical size={17} />}
+          <Minus size={16} />
         </button>
-
-        <span aria-hidden="true" className="h-5 w-px flex-none bg-[var(--reader-border)]" />
-
-        <div className="flex flex-none items-center gap-0.5">
+        <button
+          onClick={onZoomIn}
+          disabled={!zoom.canZoomIn}
+          aria-label={`Zoom in, currently ${zoom.percent}%`}
+          className={iconButtonClass}
+        >
+          <Plus size={16} />
+        </button>
+        {/* Shown only while zoomed off the page's own fit — feedback when it
+            matters, no permanent "100%" taking up room on a phone — and a
+            button, since after a pinch there's otherwise no one-tap way back
+            to a page that fits. */}
+        {zoom.isCustom && (
           <button
-            onClick={onZoomOut}
-            disabled={!zoom.canZoomOut}
-            aria-label={`Zoom out, currently ${zoom.percent}%`}
-            className={iconButtonClass}
+            type="button"
+            onClick={onZoomReset}
+            aria-label={`Reset zoom, currently ${zoom.percent}%`}
+            title="Reset zoom"
+            className="hidden flex-none cursor-pointer rounded-md border-none bg-transparent px-1.5 py-1 text-[12px] font-semibold tabular-nums text-[var(--reader-text-subtle)] transition-colors hover:bg-[var(--reader-surface-hover)] hover:text-[var(--reader-text)] sm:inline"
           >
-            <Minus size={16} />
-          </button>
-          <button
-            onClick={onZoomIn}
-            disabled={!zoom.canZoomIn}
-            aria-label={`Zoom in, currently ${zoom.percent}%`}
-            className={iconButtonClass}
-          >
-            <Plus size={16} />
-          </button>
-          {/* Shown only while zoomed off the layout's own fit — feedback when it
-              matters, no permanent "100%" taking up room on a phone — and a
-              button, since after a pinch there's otherwise no one-tap way back
-              to a page that fits. */}
-          {zoom.isCustom && (
-            <button
-              type="button"
-              onClick={onZoomReset}
-              aria-label={`Reset zoom, currently ${zoom.percent}%`}
-              title="Reset zoom"
-              className="hidden flex-none cursor-pointer rounded-md border-none bg-transparent px-1.5 py-1 text-[12px] font-semibold tabular-nums text-[var(--reader-text-subtle)] transition-colors hover:bg-[var(--reader-surface-hover)] hover:text-[var(--reader-text)] sm:inline"
-            >
-              {zoom.percent}%
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="flex min-w-0 justify-end">
-        {!isScroll && (
-          <button
-            onClick={() => onStepPage(1)}
-            disabled={pageNumber >= numPages}
-            aria-label="Next page"
-            className={edgeButtonClass}
-          >
-            <span className="hidden sm:inline">Next</span>
-            <ChevronRight size={18} className={`${chevronClass} group-hover:translate-x-0.5`} />
+            {zoom.percent}%
           </button>
         )}
       </div>

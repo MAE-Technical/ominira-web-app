@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Theme } from "@/stores/reader-store";
 import type { SelectionAnchor } from "@/lib/reader/useTextAnnotations";
+import { SELECTION_SURFACE_ATTR } from "@/lib/annotations/useTextSelection";
 
 export type Item = { key: string; icon: ReactNode; label: string; onClick: () => void; danger?: boolean };
 
@@ -107,7 +108,9 @@ export default function SelectionMenu({ anchor, isMobile, bottomOffsetPx, theme,
     const handler = (e: PointerEvent) => {
       const target = e.target as Node;
       if (rootRef.current?.contains(target)) return;
-      if ((target as HTMLElement).closest?.("[data-section-id]")) return;
+      // Taps on a reading surface are the selection engine's own to handle
+      // (lib/annotations/useTextSelection).
+      if ((target as HTMLElement).closest?.(`[${SELECTION_SURFACE_ATTR}], [data-section-id]`)) return;
       onDismiss();
     };
     document.addEventListener("pointerdown", handler);

@@ -21,14 +21,33 @@ function contentTopOf(scrollEl: HTMLElement): number {
   return scrollEl.getBoundingClientRect().top + paddingTop;
 }
 
-const blocksOf = (contentEl: HTMLElement) => Array.from(contentEl.children) as HTMLElement[];
+const WRAPPER_TAGS = new Set(["DIV", "SECTION", "ARTICLE", "MAIN"]);
+
+/**
+ * An article's blocks: the content element's top-level children — looking
+ * through a lone wrapper first (Readability puts every extracted article in
+ * one `div.page`, which would otherwise make the whole article one block).
+ * Shared with the article selection surface (useArticleAnnotations), so
+ * "block 17" means the same element to progress and to saved highlights.
+ */
+export function articleBlocks(contentEl: HTMLElement): HTMLElement[] {
+  let el: Element = contentEl;
+  while (
+    el.childElementCount === 1 &&
+    WRAPPER_TAGS.has(el.firstElementChild!.tagName) &&
+    !Array.from(el.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim())
+  ) {
+    el = el.firstElementChild!;
+  }
+  return Array.from(el.children) as HTMLElement[];
+}
 
 /**
  * Resume + progress tracking for the reflowable single-document viewers
  * (DOCX, extracted web articles) — the `block` locator kind's own half of
  * useDocumentProgress, shared by both because they render identically: one
  * scrolling container wrapping one `.reader-article` element whose top-level
- * children are the blocks.
+ * children are the blocks (see articleBlocks).
  *
  * A block index, not a scroll offset or fraction: the reader can change font
  * size, line height and column width at any time (useArticleTypographyStyle),
@@ -59,7 +78,7 @@ export function useArticleProgress({ materialId, urlLocator }: { materialId: str
     const contentEl = contentRef.current;
     setArticleState({
       ready: scrollRef.current !== null && contentEl !== null,
-      blockCount: contentEl ? blocksOf(contentEl).length : 0,
+      blockCount: contentEl ? articleBlocks(contentEl).length : 0,
     });
   }, []);
   const setScrollEl = useCallback(
@@ -82,7 +101,7 @@ export function useArticleProgress({ materialId, urlLocator }: { materialId: str
     const scrollEl = scrollRef.current;
     const contentEl = contentRef.current;
     if (!scrollEl || !contentEl) return undefined;
-    const blocks = blocksOf(contentEl);
+    const blocks = articleBlocks(contentEl);
     if (blocks.length === 0) return undefined;
     const line = contentTopOf(scrollEl) + TOP_TOLERANCE_PX;
     // The first block not yet scrolled past the reference line — i.e.
@@ -97,7 +116,7 @@ export function useArticleProgress({ materialId, urlLocator }: { materialId: str
     const scrollEl = scrollRef.current;
     const contentEl = contentRef.current;
     if (!scrollEl || !contentEl) return;
-    const block = blocksOf(contentEl)[locator.blockIndex];
+    const block = articleBlocks(contentEl)[locator.blockIndex];
     if (!block) return;
     // Relative rather than scrollIntoView: this is a scroll container nested
     // in a fixed-height layout, and scrollIntoView would also move whatever

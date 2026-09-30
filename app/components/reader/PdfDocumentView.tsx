@@ -1,33 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPluginRegistration } from "@embedpdf/core";
 import { EmbedPDF } from "@embedpdf/core/react";
-import { PdfErrorCode, type PdfEngine } from "@embedpdf/models";
+import { PdfErrorCode, type PdfDocumentObject, type PdfEngine } from "@embedpdf/models";
 import { DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager/react";
-import {
-  GlobalPointerProvider,
-  InteractionManagerPluginPackage,
-  PagePointerProvider,
-} from "@embedpdf/plugin-interaction-manager/react";
-import { PanPluginPackage } from "@embedpdf/plugin-pan/react";
 import { RenderLayer, RenderPluginPackage } from "@embedpdf/plugin-render/react";
 import { Scroller, ScrollPluginPackage, useScroll, useScrollCapability } from "@embedpdf/plugin-scroll/react";
 import type { PageLayout } from "@embedpdf/plugin-scroll";
-import { SelectionLayer, SelectionPluginPackage, useSelectionCapability } from "@embedpdf/plugin-selection/react";
 import { TilingLayer, TilingPluginPackage } from "@embedpdf/plugin-tiling/react";
 import { useViewportElement, Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react";
 import { ZoomGestureWrapper, ZoomMode, ZoomPluginPackage, useZoom } from "@embedpdf/plugin-zoom/react";
 import { usePdfEngine } from "@/lib/pdf/pdfiumEngine";
 import { formatDownloadProgress, PdfFetchError, type PdfDownload } from "@/lib/pdf/usePdfBytes";
 import Loader from "@/app/components/Loader";
-import { useReaderStore, type PdfLayout } from "@/stores/reader-store";
+import { useReaderStore } from "@/stores/reader-store";
 import type { Locator } from "@/lib/reader/locator";
 import { useDocumentProgress } from "@/lib/reader/useDocumentProgress";
-import { useDocumentKeyboard, type DocumentPager } from "@/lib/reader/useDocumentKeyboard";
+import { useDocumentKeyboard } from "@/lib/reader/useDocumentKeyboard";
 import DocumentEndPanel from "./DocumentEndPanel";
 import PdfPagerFooter from "./PdfPagerFooter";
 import ReaderHeader from "./ReaderHeader";
+import { createPdfSurface, pdfBlockId, pdfPageIndexOf, pdfRangeRects, PDF_PAGE_ATTR, type PdfSurface } from "@/lib/annotations/pdfSurface";
+import { markStyle, NoteGlyph, useDocumentAnnotations } from "./DocumentAnnotations";
+import { useSessionStore } from "@/stores/session-store";
+import type { FeedLocator } from "@/lib/reader/annotationFeed";
+import type { Annotation } from "@/stores/library-store";
 
 const TOP_BAR_HEIGHT_PX = 60;
 const RAIL_INSET_PX = 16;
@@ -46,14 +44,11 @@ const PAGE_GAP_PX = 16;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 
-/** Each layout's "fits the screen" zoom. Paged fits the whole page — one page,
- * one screen, which is what the page-by-page layout promises. Continuous scroll
- * fits the width but never enlarges past 100%: on a phone that's a page exactly
- * as wide as the screen (the old viewer rendered it at its full 612px and let it
- * overflow), on a desktop it's the page at its real size. */
-function fitZoomFor(layout: PdfLayout) {
-  return layout === "paged" ? ZoomMode.FitPage : ZoomMode.Automatic;
-}
+/** The zoom that "fits the screen": the page's width, never enlarged past 100%.
+ * On a phone that's a page exactly as wide as the screen (the old viewer rendered
+ * it at its full 612px and let it overflow); on a desktop it's the page at its
+ * real size. */
+const FIT_ZOOM = ZoomMode.Automatic;
 
 /** How each page is painted: a low-resolution image of the whole page, instantly
  * available as the page scrolls in, under full-resolution tiles covering only the
@@ -67,7 +62,7 @@ const BASE_LAYER_SCALE = 0.5;
 /** `overscroll-behavior: contain` so reaching either end of the document doesn't
  * chain into scrolling (or pull-to-refresh on) the page behind the reader.
  * Horizontal centring is EmbedPDF's own (the zoom wrapper sets its margin). */
-const viewportStyle = { background: "var(--reader-bg)", overscrollBehavior: "contain" } as const;
+const viewportStyle = { position: "relative", background: "var(--reader-bg)", overscrollBehavior: "contain" } as const;
 
 /** Honours a reader's reduced-motion setting for every page jump. */
 function jumpBehavior() {
@@ -94,11 +89,8 @@ function jumpBehavior() {
  * split: `onClose` present picks the close-X, absent picks the back-arrow —
  * same convention as ReaderHeader.
  *
- * Two layouts, switchable in the footer and remembered as a reader preference
- * (reader-store's `pdfLayout`): page by page, or one continuous scroll. Both are
- * the same vertical stack of pages — paged fits a whole page to the screen and
- * snaps to one page at a time — so they report the same thing, a page number,
- * and progress, resume and the end panel are layout-agnostic.
+ * One continuous vertical scroll of pages, reported as a page number: progress,
+ * resume and the end panel all work in pages.
  *
  * Reading progress is tracked at page granularity (the `page` locator kind).
  * Zoom and intra-page scroll are deliberately not part of the position: a page
@@ -224,12 +216,6 @@ function PdfReader({
   urlLocator?: Locator;
   onRetry: (engineFailed: boolean) => void;
 }) {
-  // Read once, at registration: the initial zoom is the layout's own fit, set
-  // from the start rather than corrected after a first render at the wrong one.
-  // Later layout changes go through PdfReaderBody's effect instead — rebuilding
-  // the plugins would reopen the document.
-  const [layoutAtMount] = useState(() => useReaderStore.getState().pdfLayout);
-
   const plugins = useMemo(
     () => [
       createPluginRegistration(DocumentManagerPluginPackage, {
@@ -244,18 +230,16 @@ function PdfReader({
       createPluginRegistration(RenderPluginPackage, { withAnnotations: true, withForms: true }),
       createPluginRegistration(TilingPluginPackage, { tileSize: 768, overlapPx: 2.5, extraRings: 0 }),
       createPluginRegistration(ZoomPluginPackage, {
-        defaultZoomLevel: fitZoomFor(layoutAtMount),
+        defaultZoomLevel: FIT_ZOOM,
         minZoom: MIN_ZOOM,
         maxZoom: MAX_ZOOM,
       }),
-      createPluginRegistration(InteractionManagerPluginPackage),
-      // On touch devices a drag scrolls (natively, with momentum) rather than
-      // selecting text — the default pointer mode claims every touch on a page
-      // for selection, which leaves a phone unable to scroll at all.
-      createPluginRegistration(PanPluginPackage, { defaultMode: "mobile" }),
-      createPluginRegistration(SelectionPluginPackage, { marquee: { enabled: false } }),
+      // No interaction-manager / pan / selection plugins: text selection is the
+      // shared engine's (lib/annotations), identical on every format, and with
+      // none of EmbedPDF's pointer layers claiming touches, a drag on a phone is
+      // simply a native scroll.
     ],
-    [buffer, title, layoutAtMount]
+    [buffer, title]
   );
 
   return (
@@ -285,7 +269,13 @@ function PdfReader({
           return <PdfOpenError message="This PDF has no pages to show." />;
         }
         return (
-          <PdfReaderBody materialId={materialId} title={title} urlLocator={urlLocator} initialFitLayout={layoutAtMount} />
+          <PdfReaderBody
+            materialId={materialId}
+            title={title}
+            urlLocator={urlLocator}
+            engine={engine}
+            document={doc.document}
+          />
         );
       }}
     </EmbedPDF>
@@ -293,64 +283,92 @@ function PdfReader({
 }
 
 /** One page: the low-resolution base image, the full-resolution tiles over the
- * visible part of it, and the text-selection layer on top.
+ * visible part of it, and the reader's highlights on top.
  *
  * `select-none no-callout`: a page is images, not text, as far as the browser
  * can tell, so iOS's own long-press selection grabbed the whole page as one
- * block (and offered to save the image). Text selection here is EmbedPDF's,
- * which isn't the browser's and is unaffected. */
+ * block (and offered to save the image). Text selection is the shared engine's
+ * (lib/annotations), which draws its own. */
 function renderPdfPage({ pageIndex }: PageLayout) {
   return (
-    <PagePointerProvider
-      documentId={DOCUMENT_ID}
-      pageIndex={pageIndex}
-      className="bg-white shadow-sm select-none no-callout"
-    >
+    <div {...{ [PDF_PAGE_ATTR]: pageIndex }} className="relative h-full w-full bg-white shadow-sm select-none no-callout">
       <RenderLayer documentId={DOCUMENT_ID} pageIndex={pageIndex} scale={BASE_LAYER_SCALE} className="pointer-events-none block" />
       <TilingLayer documentId={DOCUMENT_ID} pageIndex={pageIndex} className="pointer-events-none" />
-      <SelectionLayer documentId={DOCUMENT_ID} pageIndex={pageIndex} textStyle={{ background: "var(--reader-highlight)" }} />
-    </PagePointerProvider>
+      <PdfHighlightLayer pageIndex={pageIndex} />
+    </div>
   );
 }
 
-/**
- * One invisible snap point per page, for the paged layout.
- *
- * The pages themselves can't be the snap points: EmbedPDF only mounts the pages
- * near the viewport, and a browser can only snap to elements that exist — so on
- * open (and on any jump to a page not yet mounted) the nearest snap point was
- * the end panel, and the reader was flung to the end of the document. These
- * markers exist for every page from the start, placed from the scroll plugin's
- * own layout (the same numbers it positions the pages with), and re-placed
- * whenever that layout changes — a zoom, a resize.
- */
-function PageSnapPoints() {
-  const { provides: scroll } = useScroll(DOCUMENT_ID);
-  const { state: zoomState } = useZoom(DOCUMENT_ID);
-  const [items, setItems] = useState(() => scroll?.getLayout().virtualItems ?? []);
-  // Replays the current layout on subscribe, so this also covers mounting after
-  // the layout was first computed.
-  useEffect(() => scroll?.onLayoutChange((layout) => setItems(layout.virtualItems)), [scroll]);
+/** What each page's highlight layer reads — provided once by PdfReaderBody, so
+ * the page renderer itself can stay a plain function the Scroller calls. */
+type PdfAnnotationsContextValue = {
+  surface: PdfSurface;
+  document: PdfDocumentObject;
+  getForPassage: (block: string) => Annotation[];
+  onMarkClick: (block: string, annotationId: string) => void;
+  readerId: string | null;
+  /** Bumped as page geometry loads, so layers waiting on it re-render. */
+  version: number;
+};
+const PdfAnnotationsContext = createContext<PdfAnnotationsContextValue | null>(null);
 
-  const scale = zoomState.currentZoomLevel;
+/**
+ * A page's highlights and noted passages, drawn from PDFium's glyph geometry as
+ * percentages of the page — so they sit exactly on the text at any zoom with no
+ * re-measuring. Same rules as the EPUB reader's inline marks (PassageContent):
+ * the reader's own highlight or own note washes the text; someone else's
+ * public note shows only the note glyph; a pending selection (the notes panel
+ * open on a new thread) shows the wash but isn't clickable.
+ */
+function PdfHighlightLayer({ pageIndex }: { pageIndex: number }) {
+  const ctx = useContext(PdfAnnotationsContext);
+  const data = ctx?.surface.page(pageIndex);
+  if (!ctx || !data) return null;
+  const block = pdfBlockId(pageIndex);
+  const { width, height } = ctx.document.pages[pageIndex].size;
+  const pct = (v: number, of: number) => `${(v / of) * 100}%`;
+
   return (
-    <>
-      {items.map((item) => (
-        <div
-          key={item.id}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-0 w-px"
-          style={{
-            top: item.y * scale,
-            height: item.height * scale,
-            scrollSnapAlign: "center",
-            // A fast flick still stops at the next page instead of sailing past
-            // several.
-            scrollSnapStop: "always",
-          }}
-        />
-      ))}
-    </>
+    <div className="absolute inset-0">
+      {ctx.getForPassage(block).map((a) => {
+        const range = a.ranges.find((r) => r.passageId === block);
+        if (!range) return null;
+        const rects = pdfRangeRects(data, range.start, range.end);
+        if (!rects.length) return null;
+        const { wash, clickable, noteCount } = markStyle(a, ctx.readerId);
+        const isTail = a.ranges[a.ranges.length - 1].passageId === block;
+        const last = rects[rects.length - 1];
+        return (
+          <div key={a.id}>
+            {rects.map((r, i) => (
+              <div
+                key={i}
+                data-annotation-id={a.id}
+                onClick={clickable ? () => ctx.onMarkClick(block, a.id) : undefined}
+                className={`absolute rounded-[2px] ${clickable ? "cursor-pointer" : "pointer-events-none"}`}
+                style={{
+                  left: pct(r.x, width),
+                  top: pct(r.y, height),
+                  width: pct(r.w, width),
+                  height: pct(r.h, height),
+                  background: wash ? "var(--reader-highlight)" : undefined,
+                  mixBlendMode: "multiply",
+                }}
+              />
+            ))}
+            {/* Pages are always white paper, so the glyph keeps a fixed grey
+                rather than the theme's muted text colour. */}
+            {isTail && noteCount > 0 && (
+              <NoteGlyph
+                count={noteCount}
+                onClick={() => ctx.onMarkClick(block, a.id)}
+                style={{ left: pct(last.x + last.w, width), top: pct(last.y, height), marginLeft: 3, color: "#6b6b6b" }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -369,22 +387,20 @@ function PdfReaderBody({
   materialId,
   title,
   urlLocator,
-  initialFitLayout,
+  engine,
+  document,
 }: {
   materialId: string;
   title: string;
   urlLocator?: Locator;
-  /** The layout the zoom plugin was registered to fit. */
-  initialFitLayout: PdfLayout;
+  engine: PdfEngine;
+  document: PdfDocumentObject;
 }) {
-  const layout = useReaderStore((s) => s.pdfLayout);
-  const setLayout = useReaderStore((s) => s.setPdfLayout);
-  const isPaged = layout === "paged";
+  const readerId = useSessionStore((s) => s.readerId);
 
   const { provides: scroll, state: scrollState } = useScroll(DOCUMENT_ID);
   const { provides: scrollCapability } = useScrollCapability();
   const { provides: zoom, state: zoomState } = useZoom(DOCUMENT_ID);
-  const { provides: selection } = useSelectionCapability();
 
   const numPages = scrollState.totalPages;
   // Scrolled past the last page into the end panel, the scroll plugin sees no
@@ -412,73 +428,17 @@ function PdfReaderBody({
     });
   }, [scrollCapability]);
 
-  /** Paged layout centres the page it lands on (that's where its snap point is);
-   * continuous scroll puts the page's top at the top of the screen. */
   const scrollToPage = useCallback(
     (page: number, behavior: "instant" | "smooth") => {
       if (!scroll) return;
-      const clamped = Math.min(Math.max(1, page), numPages || 1);
-      scroll.scrollToPage({ pageNumber: clamped, behavior, ...(isPaged ? { alignY: 50 } : {}) });
+      scroll.scrollToPage({ pageNumber: Math.min(Math.max(1, page), numPages || 1), behavior });
     },
-    [scroll, numPages, isPaged]
+    [scroll, numPages]
   );
 
   const goToPage = useCallback((page: number) => scrollToPage(page, jumpBehavior()), [scrollToPage]);
 
-  /** Next/previous page. Counted from the page a jump still in flight is heading
-   * to, not the one currently reported — otherwise two quick presses would both
-   * aim for the same page, since the current page only changes once the scroll
-   * arrives. */
-  const stepPage = useCallback(
-    (delta: -1 | 1) => {
-      if (!scroll) return;
-      const change = scroll.getPageChangeState();
-      goToPage((change.isChanging ? change.targetPage : scroll.getCurrentPage()) + delta);
-    },
-    [scroll, goToPage]
-  );
-
-  // A layout switch re-fits the zoom to the new layout and keeps the reader on
-  // their page. Compared against the layout the zoom was last fitted for rather
-  // than run on every change of `layout`, which also covers the stored
-  // preference arriving after the viewer opened.
-  const fittedLayoutRef = useRef(initialFitLayout);
-  // The layout whose zoom and position have fully landed — trails `layout`
-  // through a switch. Page snapping waits on it (see `snapping` below).
-  const [settledLayout, setSettledLayout] = useState(initialFitLayout);
-  const pageRef = useRef(pageNumber);
-  useEffect(() => {
-    pageRef.current = pageNumber;
-  }, [pageNumber]);
-  useEffect(() => {
-    if (!zoom || !layoutReady || fittedLayoutRef.current === layout) return;
-    fittedLayoutRef.current = layout;
-    const page = pageRef.current;
-    zoom.requestZoom(fitZoomFor(layout));
-    // Re-place the reader only once the zoom's re-layout has actually reached
-    // the page — until then the scroll height is the old one and a jump lands a
-    // few pages off. "Reached" = the scroll height has held still for a couple of
-    // frames (capped, so a layout that never settles can't hold this forever).
-    let frame = 0;
-    let lastHeight = -1;
-    let stableFrames = 0;
-    let frames = 0;
-    const settle = () => {
-      const height = scrollEl?.scrollHeight ?? 0;
-      stableFrames = height === lastHeight ? stableFrames + 1 : 0;
-      lastHeight = height;
-      if (stableFrames < 2 && ++frames < 30) {
-        frame = requestAnimationFrame(settle);
-        return;
-      }
-      scrollToPage(page, "instant");
-      setSettledLayout(layout);
-    };
-    frame = requestAnimationFrame(settle);
-    return () => cancelAnimationFrame(frame);
-  }, [layout, layoutReady, zoom, scrollToPage, scrollEl]);
-
-  // The page number is the tracked signal in both layouts, reported by the
+  // The page number is the tracked signal reported by the
   // scroll plugin as the reader moves. Still the debounced `commit` rather than
   // an immediate write: scrolling quickly through a run of pages should record
   // where the reader stopped, not every page they passed. `commit` stays closed
@@ -499,88 +459,89 @@ function PdfReaderBody({
     if (layoutReady) commit({ kind: "page", page: pageNumber });
   }, [pageNumber, layoutReady, commit]);
 
-  const pager = useMemo<DocumentPager | undefined>(
-    () =>
-      isPaged
-        ? {
-            prev: () => stepPage(-1),
-            next: () => stepPage(1),
-            first: () => goToPage(1),
-            last: () => goToPage(numPages),
-          }
-        : undefined,
-    [isPaged, stepPage, goToPage, numPages]
-  );
-  useDocumentKeyboard({ scrollElement: scrollEl, pager });
-
-  // ⌘/Ctrl+C copies the PDF text selection. Only while there is one: copying an
-  // empty selection would wipe whatever the reader last put on the clipboard.
-  useEffect(() => {
-    if (!selection) return;
-    const scope = selection.forDocument(DOCUMENT_ID);
-    let hasSelection = false;
-    const unsubscribe = scope.onSelectionChange((range) => {
-      hasSelection = !!range;
-    });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "c" || !hasSelection) return;
-      // A native selection (the page-number field, say) takes precedence.
-      if (window.getSelection()?.toString()) return;
-      scope.copyToClipboard();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      unsubscribe();
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [selection]);
+  useDocumentKeyboard({ scrollElement: scrollEl });
 
   const zoomLevel = zoomState.currentZoomLevel;
+
+  // The PDF as a selection surface: PDFium's text and glyph geometry, loaded
+  // for each page as it comes into view.
+  const surface = useMemo(
+    () => (scrollEl ? createPdfSurface(scrollEl, engine, document) : null),
+    [scrollEl, engine, document]
+  );
+  const [geometryVersion, setGeometryVersion] = useState(0);
+  useEffect(() => surface?.onPageLoad(() => setGeometryVersion((n) => n + 1)), [surface]);
+  useEffect(() => {
+    if (!scroll || !surface) return;
+    // Replays the current metrics on subscribe, so the first screenful loads too.
+    return scroll.onScroll((metrics) => metrics.renderedPageIndexes.forEach((i) => surface.ensurePage(i)));
+  }, [scroll, surface]);
+
+  const getPassageText = useCallback(
+    (block: string) => surface?.page(pdfPageIndexOf(block))?.text ?? "",
+    [surface]
+  );
+  // The notes feed files each highlight under its page.
+  const locate = useCallback<FeedLocator>((block) => {
+    const index = pdfPageIndexOf(block);
+    return index < 0 ? null : { sectionId: block, label: `Page ${index + 1}`, order: index };
+  }, []);
+  const jumpToBlock = useCallback((block: string) => goToPage(pdfPageIndexOf(block) + 1), [goToPage]);
+
+  // Highlights and notes: the same selection engine, menu, notes panel and
+  // feed as every other reader — only the surface, and drawing the marks on
+  // each page (PdfHighlightLayer), are the PDF's own.
+  const { annotations, onMarkClick, chrome } = useDocumentAnnotations({
+    materialId,
+    surface,
+    scrollEl,
+    layoutKey: `${zoomLevel}|${geometryVersion}`,
+    getPassageText,
+    locate,
+    jumpToBlock,
+    activeBlock: pdfBlockId(pageNumber - 1),
+  });
+  const { getForPassage } = annotations;
+
+  const annotationsContext = useMemo<PdfAnnotationsContextValue | null>(
+    () =>
+      surface && {
+        surface,
+        document,
+        getForPassage,
+        onMarkClick,
+        readerId,
+        version: geometryVersion,
+      },
+    [surface, document, getForPassage, onMarkClick, readerId, geometryVersion]
+  );
+
   const zoomInfo = {
     percent: Math.round(zoomLevel * 100),
     isCustom: typeof zoomState.zoomLevel === "number",
     canZoomIn: zoomLevel < MAX_ZOOM - 0.001,
     canZoomOut: zoomLevel > MIN_ZOOM + 0.001,
   };
-  // Paged snaps to one page per screen only at the layout's own fit. Zoomed in
-  // past it, a page no longer fits a screen and the reader needs to pan around
-  // it freely — and a mandatory snap live while a zoom resizes every page
-  // re-snaps mid-resize to whatever is nearest, which flung the reader to the
-  // end of the document. Resetting the zoom brings the snapping back. For the
-  // same reason it waits out a switch into paged (settledLayout): turned on in
-  // the same frame as the switch's own zoom change, it snapped mid-resize.
-  const snapping = isPaged && settledLayout === "paged" && !zoomInfo.isCustom;
-
   return (
-    <>
+    <PdfAnnotationsContext.Provider value={annotationsContext}>
       <div className="absolute inset-x-0 top-0" style={{ bottom: `calc(${BOTTOM_BAR_HEIGHT_PX}px + env(safe-area-inset-bottom))` }}>
-        <GlobalPointerProvider documentId={DOCUMENT_ID}>
-          <Viewport
-            documentId={DOCUMENT_ID}
-            style={snapping ? { ...viewportStyle, scrollSnapType: "y mandatory" } : viewportStyle}
-          >
+        <Viewport documentId={DOCUMENT_ID} style={viewportStyle}>
             <ViewportElementReporter onElement={setScrollEl} />
             {/* Pinch and ⌘/Ctrl-scroll zoom are the viewer's own: it re-renders sharp
                 at the new zoom, instead of the browser magnifying a bitmap — the
                 "blurry text" half of the old viewer's problem. */}
             <ZoomGestureWrapper documentId={DOCUMENT_ID} style={{ position: "relative" }}>
               <Scroller documentId={DOCUMENT_ID} renderPage={renderPdfPage} />
-              {snapping && <PageSnapPoints />}
             </ZoomGestureWrapper>
-            {/* The bottom of the document is a real place in both layouts, so the
-                end screen simply sits after the last page (a snap point of its own
-                when paged). Sticky to the left edge so it stays in view when a
-                zoomed-in document is scrolled sideways. */}
-            <div
-              className="sticky left-0 w-full text-left"
-              style={snapping ? { scrollSnapAlign: "end" } : undefined}
-            >
+            {/* The end screen simply sits after the last page. Sticky to the left
+                edge so it stays in view when a zoomed-in document is scrolled
+                sideways. */}
+            <div className="sticky left-0 w-full text-left">
               <div className="mx-auto max-w-[640px] px-6">
                 <DocumentEndPanel materialId={materialId} title={title} getCurrentPosition={getPositionNow} />
               </div>
             </div>
           </Viewport>
-        </GlobalPointerProvider>
       </div>
       {/* A page number stands in for a section title, since pages are the only
           "structure" a PDF has (see document-readers-spec.md § 3) — and, unlike
@@ -591,17 +552,16 @@ function PdfReaderBody({
         <PdfPagerFooter
           pageNumber={pageNumber}
           numPages={numPages}
-          layout={layout}
           zoom={zoomInfo}
           onGoToPage={goToPage}
-          onStepPage={stepPage}
-          onLayoutChange={setLayout}
           onZoomIn={() => zoom?.zoomIn()}
           onZoomOut={() => zoom?.zoomOut()}
-          onZoomReset={() => zoom?.requestZoom(fitZoomFor(layout))}
+          onZoomReset={() => zoom?.requestZoom(FIT_ZOOM)}
         />
       )}
-    </>
+
+      {chrome}
+    </PdfAnnotationsContext.Provider>
   );
 }
 

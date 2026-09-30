@@ -11,13 +11,18 @@ export default function UnderlineTabs<T extends string>({
   options,
   value,
   onChange,
+  bare = false,
 }: {
   options: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
+  /** Drops the bar's own baseline, for a container that draws it instead
+   * (PanelShell's tab header) — the active tab's `-mb-px` underline then
+   * lands on that container's border. */
+  bare?: boolean;
 }) {
   return (
-    <div className="flex gap-6 border-b border-[var(--reader-border)]">
+    <div className={`flex gap-6 ${bare ? "" : "border-b border-[var(--reader-border)]"}`}>
       {options.map((option) => (
         <button
           key={option.value}

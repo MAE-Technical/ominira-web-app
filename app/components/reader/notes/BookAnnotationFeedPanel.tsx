@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { X } from "lucide-react";
 import NoResults from "@/app/components/shared/NoResults";
+import ReaderAvatar from "@/app/components/shared/ReaderAvatar";
+import { comradeName } from "@/lib/reader/authorDisplay";
 import type { FeedEntry } from "@/lib/reader/annotationFeed";
 import type { AnnotationFeedFilter, FeedItem } from "@/lib/reader/useBookAnnotationFeed";
 import type { Note } from "@/lib/api/types";
@@ -11,6 +14,7 @@ import PanelShell from "./PanelShell";
 import FeedHighlightThread from "./FeedHighlightThread";
 import GeneralNoteThread from "./GeneralNoteThread";
 import NoteComposer from "./NoteComposer";
+import { notesLabel } from "../ReaderPresence";
 
 // Same two-tab split as book details' own Table of contents/Community notes
 // switch (UnderlineTabs), just this panel's own two views — every entry is
@@ -119,8 +123,6 @@ export default function BookAnnotationFeedPanel({
   notes,
   filter,
   onFilterChange,
-  totalNoteCount,
-  passageCount,
   activeSectionId,
   onJump,
   getPassageText,
@@ -128,6 +130,8 @@ export default function BookAnnotationFeedPanel({
   onClose,
   targetNoteId,
   targetThreadId,
+  focusedAuthor,
+  onClearAuthor,
 }: {
   materialId: string;
   items: FeedItem[];
@@ -137,9 +141,8 @@ export default function BookAnnotationFeedPanel({
   notes: Note[];
   filter: AnnotationFeedFilter;
   onFilterChange: (filter: AnnotationFeedFilter) => void;
-  totalNoteCount: number;
-  passageCount: number;
-  activeSectionId: string;
+  /** The run the reader is in now — the panel opens scrolled to it. */
+  activeSectionId?: string;
   onJump: (entry: FeedEntry) => void;
   getPassageText: (passageId: string) => string;
   panelType?: "side" | "sheet";
@@ -151,6 +154,9 @@ export default function BookAnnotationFeedPanel({
    * when deep-linked from a notification. Duplicates targetNoteId for
    * general notes, separate for anchored highlights. */
   targetThreadId?: string;
+  /** The comrade the feed is narrowed to, opened from their face. */
+  focusedAuthor: { author: Note["author"]; count: number } | null;
+  onClearAuthor: () => void;
 }) {
   const createNote = useCreateNote(materialId);
   const [generalComposerError, setGeneralComposerError] = useState<string | null>(null);
@@ -163,6 +169,11 @@ export default function BookAnnotationFeedPanel({
   const hasPositionedRef = useRef(false);
   useEffect(() => {
     if (hasPositionedRef.current) return;
+    // One comrade's notes read top to bottom — no mid-feed positioning.
+    if (focusedAuthor) {
+      hasPositionedRef.current = true;
+      return;
+    }
     // Deep-link to a specific note takes precedence over position-based scroll.
     if (targetNoteId) {
       const target = items.find((item) => feedItemElementId(item) === `feed-item-${targetNoteId}`);
@@ -205,7 +216,14 @@ export default function BookAnnotationFeedPanel({
     requestAnimationFrame(() => {
       document.getElementById(feedItemElementId(target))?.scrollIntoView({ behavior: "auto", block: "start" });
     });
-  }, [items, targetNoteId, activeSectionId]);
+  }, [items, targetNoteId, activeSectionId, focusedAuthor]);
+
+  // Narrowing to someone else from the header starts their notes at the top.
+  const focusedId = focusedAuthor?.author.readerId;
+  const listTopRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusedId) listTopRef.current?.scrollIntoView({ block: "start" });
+  }, [focusedId]);
 
   return (
     <PanelShell
@@ -250,30 +268,44 @@ export default function BookAnnotationFeedPanel({
           )}
         </div>
       }
-      title={
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-xs font-medium text-[var(--reader-text-muted)]">
-            {totalNoteCount} {totalNoteCount === 1 ? "note" : "notes"}
-            {passageCount > 0 && ` · ${passageCount} ${passageCount === 1 ? "highlight" : "highlights"}`}
-          </span>
-        </div>
-      }
-      subheader={
-        // No bottom padding here — UnderlineTabs' own buttons already carry
-        // their usual pb-3 before their (inactive: transparent, active:
-        // colored) border-b, `-mb-px` pulling that border up to sit right
-        // on top of this subheader's own bottom border, the same "shared
-        // baseline, active tab's own border overlays it" trick book
-        // details' identical tab bar uses via its own container border
-        // instead.
-        <div className="px-5">
-          <UnderlineTabs options={FILTER_OPTIONS} value={filter} onChange={(next) => onFilterChange(next as AnnotationFeedFilter)} />
-        </div>
+      // No "Notes & Highlights" title — the tabs already say what the panel
+      // holds, so they are the header, sharing its line with Close.
+      tabs={
+        <UnderlineTabs
+          bare
+          options={FILTER_OPTIONS}
+          value={filter}
+          onChange={(next) => {
+            onClearAuthor();
+            onFilterChange(next as AnnotationFeedFilter);
+          }}
+        />
       }
     >
+      {focusedAuthor && (
+        <div
+          ref={listTopRef}
+          className="reader-menu-in mt-3 flex items-center gap-2.5 rounded-full bg-[color-mix(in_srgb,var(--reader-accent)_10%,transparent)] py-1 pl-1 pr-1.5"
+        >
+          <ReaderAvatar pseudonym={focusedAuthor.author.pseudonym} avatar={focusedAuthor.author.avatar} size={26} />
+          <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--reader-text-muted)]">
+            <span className="font-semibold text-[var(--reader-text)]">{comradeName(focusedAuthor.author.pseudonym)}</span>
+            {" · "}
+            {notesLabel(focusedAuthor.count)}
+          </span>
+          <button
+            type="button"
+            onClick={onClearAuthor}
+            className="flex flex-none cursor-pointer items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold text-[var(--reader-accent)] transition-colors hover:bg-[color-mix(in_srgb,var(--reader-accent)_12%,transparent)]"
+          >
+            All notes
+            <X size={13} strokeWidth={2.5} />
+          </button>
+        </div>
+      )}
       {items.length === 0 ? (
         <NoResults
-          className="mt-4 py-1 font-serif"
+          className="mt-5"
           message={
             filter === "notes"
               ? "No notes in this book yet — be the first to say something."

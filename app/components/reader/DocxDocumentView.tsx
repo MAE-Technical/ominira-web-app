@@ -8,6 +8,7 @@ import { useDocumentKeyboard } from "@/lib/reader/useDocumentKeyboard";
 import DocumentEndPanel from "./DocumentEndPanel";
 import { useArticleTypographyStyle } from "@/lib/reader/useArticleTypographyStyle";
 import ReaderHeader from "./ReaderHeader";
+import { ARTICLE_SCROLL_CLASS, useArticleAnnotations } from "./useArticleAnnotations";
 import Loader from "../Loader";
 
 const TOP_BAR_HEIGHT_PX = 60;
@@ -50,12 +51,16 @@ export default function DocxDocumentView({
 }) {
   const theme = useReaderStore((s) => s.theme);
   const typography = useArticleTypographyStyle();
-  const [html, setHtml] = useState<string | null>(null);
+  // The markup object itself is state, not rebuilt per render: React re-sets
+  // innerHTML whenever it gets a new `{ __html }` object, which would replace
+  // the article (and the paragraph under a reader's finger) on every render.
+  const [markup, setMarkup] = useState<{ __html: string } | null>(null);
   const [error, setError] = useState(false);
   const { scrollRef, contentRef, scrollElement, getPositionNow } = useArticleProgress({ materialId, urlLocator });
   // Arrows/PageUp/PageDown/Space/Home/End scroll the document on desktop — see
   // the hook; with no pages to turn, ←/→ move by a screenful.
   useDocumentKeyboard({ scrollElement });
+  const { attachContent, chrome, highlights } = useArticleAnnotations({ materialId, title, contentRef, scrollElement, typography });
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +70,7 @@ export default function DocxDocumentView({
         if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
         const arrayBuffer = await res.arrayBuffer();
         const { value } = await mammoth.convertToHtml({ arrayBuffer });
-        if (!cancelled) setHtml(value);
+        if (!cancelled) setMarkup({ __html: value });
       } catch {
         if (!cancelled) setError(true);
       }
@@ -86,28 +91,30 @@ export default function DocxDocumentView({
       style={{ background: "var(--reader-bg)" }}
     >
       <ReaderHeader topBarHeightPx={TOP_BAR_HEIGHT_PX} railInsetPx={RAIL_INSET_PX} onClose={onClose} title={title} />
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto" style={{ paddingTop: TOP_BAR_HEIGHT_PX }}>
+      <div ref={scrollRef} className={ARTICLE_SCROLL_CLASS} style={{ paddingTop: TOP_BAR_HEIGHT_PX }}>
         <div className="mx-auto px-6 py-10" style={{ maxWidth: typography.maxWidth }}>
           {error ? (
             <p className="text-sm text-[var(--reader-text-muted)]">This document couldn&apos;t be opened.</p>
-          ) : html === null ? (
+          ) : markup === null ? (
             <Loader confined />
           ) : (
             <div
-              ref={contentRef}
-              className="reader-article select-text"
+              ref={attachContent}
+              className="reader-article"
               style={{ fontFamily: typography.fontFamily, fontSize: typography.fontSize, lineHeight: typography.lineHeight }}
-              dangerouslySetInnerHTML={{ __html: html }}
+              dangerouslySetInnerHTML={markup}
             />
           )}
           {/* Only once the conversion has actually produced something to reach
               the end *of* — the bottom of the scroll is the end of the
               document here, same as ArticleDocumentView. */}
-          {html !== null && !error && (
+          {markup !== null && !error && (
             <DocumentEndPanel materialId={materialId} title={title} getCurrentPosition={getPositionNow} />
           )}
         </div>
       </div>
+      {highlights}
+      {chrome}
     </div>
   );
 }

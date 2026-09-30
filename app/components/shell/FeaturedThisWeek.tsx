@@ -36,7 +36,7 @@ export default function FeaturedThisWeek() {
           {books!.map(({ material }) => (
             <Link key={material.id} href={`/library/${material.slug}`} className="group block w-[150px] flex-none no-underline">
               <div className="h-[225px] w-[150px] overflow-hidden rounded-sm border border-[var(--reader-border)] shadow-md">
-                <BookCover src={resolveBookCoverSrc(material)} alt={material.title} className="h-full w-full" />
+                <BookCover materialType={material.materialType} src={resolveBookCoverSrc(material)} alt={material.title} className="h-full w-full" />
               </div>
               <div className="mt-2.5 text-[12px] font-bold leading-tight text-[var(--reader-text)] group-hover:text-brand-500">
                 {material.title}

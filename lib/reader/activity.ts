@@ -182,7 +182,7 @@ export async function listCurrentReaders(
 
   const { data: readerRows } = await getSupabaseAdminClient()
     .from("readers")
-    .select("id, pseudonym, avatar_color, avatar_url")
+    .select("id, pseudonym, avatar_color, avatar_url, city, country")
     .in("id", [...neededReaderIds]);
   const readerById = new Map((readerRows ?? []).map((r) => [r.id, r]));
 
@@ -192,7 +192,15 @@ export async function listCurrentReaders(
       .map((row) => {
         const reader = readerById.get(row.readerId);
         return reader
-          ? { readerId: row.readerId, pseudonym: reader.pseudonym, avatar: toAvatar(reader), mode: row.mode, updatedAt: row.updatedAt }
+          ? {
+              readerId: row.readerId,
+              pseudonym: reader.pseudonym,
+              avatar: toAvatar(reader),
+              mode: row.mode,
+              updatedAt: row.updatedAt,
+              city: reader.city,
+              country: reader.country,
+            }
           : null;
       })
       // Guards a reader row deleted between the two queries above — the

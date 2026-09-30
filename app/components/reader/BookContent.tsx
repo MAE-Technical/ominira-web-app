@@ -48,9 +48,6 @@ type BookContentProps = {
   notesById: Map<string, NoteLookup>;
   onNoteClick: (note: NoteLookup, target: HTMLElement) => void;
   onInternalLinkClick: (sectionId: string, fragmentId?: string) => void;
-  /** Fires on the *section's* own mouseup (not per-passage) so a drag that
-   * crosses paragraph boundaries is captured as one selection. */
-  onTextSelect: (sectionEl: HTMLElement) => void;
   /** A plain click on any existing mark — highlight-only or noted alike —
    * opening its thread directly. */
   onNoteMarkerClick: (passageId: string, annotationId: string) => void;
@@ -115,7 +112,6 @@ const BookContent = memo(function BookContent({
   notesById,
   onNoteClick,
   onInternalLinkClick,
-  onTextSelect,
   onNoteMarkerClick,
   justJumpedAnnotationId,
   onPassagePlayback,
@@ -416,7 +412,7 @@ const BookContent = memo(function BookContent({
         key={raw.id}
         data-passage-id={raw.id}
         data-passage-type={raw.type}
-        className={`m-0 font-serif rounded-xs select-text no-callout${narrationClass}`}
+        className={`m-0 font-serif rounded-xs no-callout${narrationClass}`}
         onTouchStart={revealOnTouch}
         onClick={handleWordClick}
         // sharedStyle deliberately carries no margin — every other passage
@@ -499,26 +495,12 @@ const BookContent = memo(function BookContent({
         ref={registerSlide(section.id)}
         data-section-id={section.id}
         onClick={onAnyClick}
-        onMouseUp={(e) => onTextSelect(e.currentTarget)}
-        // Mirrors onMouseUp exactly (same handler, same call shape) — a
-        // touch-based long-press-to-select on Safari/iPhone ends in a
-        // `touchend` rather than a `mouseup`, so without this the pill
-        // never appeared there. Deliberately just this, not a
-        // `selectionchange` listener: that fires continuously throughout
-        // an in-progress drag (mouse or touch) and showed intermediate,
-        // not-yet-final selection states — flickering the pill and
-        // occasionally rendering a stale multi-passage range. touchend
-        // only fires once, right when the gesture actually ends.
-        onTouchEnd={(e) => onTextSelect(e.currentTarget)}
-        // select-none here, select-text on each passage <p> below — user-
-        // select doesn't strictly inherit, so a child can still opt back
-        // into being selectable. Giving Safari this explicit boundary (this
-        // scrolling container is NOT selectable, only the actual passage
-        // text is) is the other half of the .no-callout fix in globals.css:
-        // without it, a long-press here had nothing telling it where
-        // "selectable" stops, and it would balloon past the tapped word to
-        // the whole visible screen.
-        className={`reader-fade-in om-scroll h-full overflow-y-auto relative select-none${
+        // No native selection anywhere in the book: text selection is the
+        // shared engine's (lib/annotations/useTextSelection, bound to this
+        // slide by Reader.tsx) — on iOS, keeping native selection off is the
+        // only way to keep the system's Copy/Look Up menu from appearing
+        // alongside our own. no-callout keeps the long-press callout away too.
+        className={`reader-fade-in om-scroll h-full overflow-y-auto relative select-none no-callout${
           isNarrationPlaying ? " om-listen-active" : ""
         }`}
         style={{ background: "var(--reader-bg)" }}

@@ -49,4 +49,14 @@ export const SPLASH_MARK: Record<BrandTheme, string> = {
   dark: "/icons/mark-dark.webp",
 };
 
+/**
+ * The OMINIRA wordmark (the design's own lettering), trimmed, 540×81 (3× its
+ * 180px splash display width). Each sits on its theme's splash background
+ * (cream / black), so it only belongs on that canvas.
+ */
+export const WORDMARK: Record<BrandTheme, string> = {
+  light: "/icons/wordmark-light.webp",
+  dark: "/icons/wordmark-dark.webp",
+};
+
 export const BRAND_TAGLINE = "Arise for Freedom";

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen } from "lucide-react";
+import { FileText, Link as LinkIcon } from "lucide-react";
 
 type Props = {
   src?: string | null;
@@ -8,13 +8,15 @@ type Props = {
   className?: string;
   imageClassName?: string;
   iconSize?: number;
+  /** Picks the no-cover default: link icon for a saved webpage, document icon for everything else (epub/pdf/docx). */
+  materialType?: string | null;
 };
 
-export default function BookCover({ src, alt, className = "", imageClassName = "", iconSize = 22 }: Props) {
+export default function BookCover({ src, alt, className = "", imageClassName = "", iconSize = 22, materialType }: Props) {
   const resolvedSrc = src?.trim() || undefined;
 
   return (
-    <div className={`relative overflow-hidden bg-[var(--reader-surface-hover)] ${className}`}>
+    <div className={`relative overflow-hidden bg-[var(--color-app-surface-muted)] ${className}`}>
       {resolvedSrc ? (
         // eslint-disable-next-line @next/next/no-img-element -- content-library thumbnail, not an app asset
         <img
@@ -25,9 +27,13 @@ export default function BookCover({ src, alt, className = "", imageClassName = "
       ) : (
         <div
           aria-hidden="true"
-          className="absolute inset-0 flex items-center justify-center text-[var(--reader-text-muted)]"
+          className="absolute inset-0 flex items-center justify-center text-[var(--color-app-text-muted)]"
         >
-          <BookOpen size={iconSize} strokeWidth={1.75} />
+          {materialType === "webpage" ? (
+            <LinkIcon size={iconSize} strokeWidth={1.5} />
+          ) : (
+            <FileText size={iconSize} strokeWidth={1.5} />
+          )}
         </div>
       )}
     </div>

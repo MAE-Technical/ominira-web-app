@@ -180,7 +180,7 @@ export default function ReaderHeader({
         )}
       </div>
 
-      <div className="flex items-center gap-1.5 md:gap-2 flex-none">
+      <div className="flex items-center gap-1.5 md:gap-4 flex-none">
         {sourceUrl && (
           <Tooltip label="View original" side="bottom" align="end">
             <a href={sourceUrl} target="_blank" rel="noopener noreferrer" aria-label="View original" className={iconButtonClass}>

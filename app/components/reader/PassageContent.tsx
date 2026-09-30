@@ -235,6 +235,8 @@ function NoteGlyph({ count }: { count: number }) {
         color: "var(--reader-text-muted)",
       }}
       className="select-none"
+      // Not part of the passage text: never selected, never counted in offsets.
+      data-selection-ignore=""
     >
       <MessageCircle size={12} strokeWidth={2.5} />
       {count > 1 && (

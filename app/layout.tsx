@@ -6,6 +6,7 @@ import ServiceWorkerRegistration from "./ServiceWorkerRegistration";
 import TouchActiveState from "./components/pwa/TouchActiveState";
 import AppSplashScreen from "./components/pwa/AppSplashScreen";
 import NowPlayingBar from "./components/NowPlayingBar";
+import Toaster from "./components/shared/Toaster";
 import ThemeProvider from "./components/ThemeProvider";
 import QueryProvider from "./components/QueryProvider";
 import NarrationEngine from "@/lib/audio/NarrationEngine";
@@ -37,7 +38,7 @@ const literata = Literata({
 export const metadata: Metadata = {
   metadataBase: new URL(PLATFORM_URL),
   title: { default: PLATFORM_NAME, template: `%s — ${PLATFORM_NAME}` },
-  description: "Raise your Pan-African consciousness.",
+  description: "Arise for Freedom",
   applicationName: PLATFORM_NAME,
   manifest: "/manifest.json",
   // One favicon set for both colour schemes: its cream tile frames the mark
@@ -121,6 +122,7 @@ export default function RootLayout({
           <TouchActiveState />
           <NarrationEngine />
           <NowPlayingBar />
+          <Toaster />
           {/* `mode` is explicit (rather than relying on the "auto" default)
            * so a local `bun run dev` never reports as production even if
            * NODE_ENV gets overridden by tooling — only a real production

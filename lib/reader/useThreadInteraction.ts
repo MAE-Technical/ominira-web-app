@@ -108,7 +108,7 @@ export function useThreadInteraction({
     saveEdit: (noteId, content, visibility) => updateNote.mutate({ noteId, content, visibility }, { onError }),
     delete: (noteId) => deleteNote.mutate(noteId, { onError }),
     toggleReaction: (noteId) => toggleReaction.mutate(noteId, { onError }),
-    toggleBookmark: (noteId) => toggleBookmark.mutate(noteId, { onError }),
+    toggleBookmark: (noteId, currentlySaved) => toggleBookmark.mutate({ noteId, bookmarked: !currentlySaved }, { onError }),
   };
 
   // No-op: every root is always expanded (see expandedIds above), so

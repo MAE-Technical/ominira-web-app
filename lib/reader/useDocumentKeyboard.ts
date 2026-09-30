@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 /** How far Up/Down move the scroll — a line-ish nudge, matching what a browser's
  * own arrow-key scroll does on an ordinary page. */
@@ -32,15 +32,6 @@ const EASE = 0.18;
  * keystroke aimed at a form field (the pager's page input, a note composer) or
  * carrying a modifier (⌘F, ⌘←/browser-back) is left alone.
  *
- * `pager` is optional: a viewer that moves in whole pages (the paged PDF layout,
- * whose pages snap into place) hands one in, and every one of these keys turns
- * pages instead — ←/↑/PageUp/Shift+Space back, →/↓/PageDown/Space forward,
- * Home/End to the first/last page. It has to be all of them rather than just
- * ←/→: a snapping container pulls any partial scroll straight back to the page
- * it started on, so a line-by-line glide there would just fight the snap. A
- * reflowing viewer (DOCX, article, the PDF's continuous scroll, where the scroll
- * *is* the page turn) leaves it out and gets the scrolling behaviour above.
- *
  * Scrolling is animated here, frame by frame, rather than handed to
  * `scrollTo({ behavior: "smooth" })`. The native version restarts its animation
  * from a standstill on every call, so a held or repeated arrow key — the normal
@@ -48,28 +39,7 @@ const EASE = 0.18;
  * stops. Keeping our own target means repeat keystrokes *accumulate* into one
  * continuous glide, which is the whole difference between paging and reading.
  */
-export type DocumentPager = {
-  prev: () => void;
-  next: () => void;
-  first: () => void;
-  last: () => void;
-};
-
-export function useDocumentKeyboard({
-  scrollElement,
-  pager,
-}: {
-  scrollElement: HTMLElement | null;
-  pager?: DocumentPager;
-}) {
-  // Through a ref so the listener is bound once per scroll container rather than
-  // re-bound on every render of a parent that recreates the pager (PdfDocumentView's
-  // does change: it closes over the current page).
-  const pagerRef = useRef(pager);
-  useEffect(() => {
-    pagerRef.current = pager;
-  }, [pager]);
-
+export function useDocumentKeyboard({ scrollElement }: { scrollElement: HTMLElement | null }) {
   useEffect(() => {
     if (!scrollElement) return;
 
@@ -118,36 +88,6 @@ export function useDocumentKeyboard({
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
-
-      const pager = pagerRef.current;
-      if (pager) {
-        switch (event.key) {
-          case "ArrowLeft":
-          case "ArrowUp":
-          case "PageUp":
-            pager.prev();
-            break;
-          case "ArrowRight":
-          case "ArrowDown":
-          case "PageDown":
-            pager.next();
-            break;
-          case " ":
-            if (event.shiftKey) pager.prev();
-            else pager.next();
-            break;
-          case "Home":
-            pager.first();
-            break;
-          case "End":
-            pager.last();
-            break;
-          default:
-            return;
-        }
-        event.preventDefault();
-        return;
-      }
 
       const screenful = Math.max(LINE_STEP_PX, scrollElement.clientHeight - PAGE_OVERLAP_PX);
 

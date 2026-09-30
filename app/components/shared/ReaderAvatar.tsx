@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { AVATAR_COLORS, avatarChoice, avatarInitial, type Avatar } from "@/lib/avatar/avatar";
 import { comradeName } from "@/lib/reader/authorDisplay";
 
@@ -11,15 +12,17 @@ export default function ReaderAvatar({
   avatar,
   size = 32,
   className = "",
+  style: styleProp,
 }: {
   pseudonym: string;
   avatar?: Avatar | null;
   size?: number;
   className?: string;
+  style?: CSSProperties;
 }) {
   const name = comradeName(pseudonym);
   const choice = avatarChoice(pseudonym, avatar);
-  const style = { width: size, height: size };
+  const style = { width: size, height: size, ...styleProp };
 
   if (choice === "photo") {
     return (

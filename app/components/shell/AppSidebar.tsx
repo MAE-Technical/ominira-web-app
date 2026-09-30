@@ -48,7 +48,7 @@ export default function AppSidebar() {
         aria-label="Ominira home"
         className="flex-none px-4 pt-[18px] pb-3.5 no-underline"
       >
-        <BrandMark withMark />
+        <BrandMark withMark stacked />
       </Link>
 
       <nav className="flex-1 min-h-0 overflow-y-auto px-2.5 pt-2 flex flex-col gap-2">

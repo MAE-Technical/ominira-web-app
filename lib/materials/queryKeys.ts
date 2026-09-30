@@ -14,4 +14,5 @@ export const materialKeys = {
   // prefix" trick communityKeys.feedPrefix already uses.
   notesFeedPrefix: (materialId: string) => ["materials", materialId, "notes-feed"] as const,
   notesFeed: (materialId: string, sort: string) => ["materials", materialId, "notes-feed", sort] as const,
+  currentReaders: (materialId: string) => ["materials", materialId, "current-readers"] as const,
 };

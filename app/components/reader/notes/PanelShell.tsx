@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ArrowLeft, X } from "lucide-react";
-import Tooltip from "../Tooltip";
 
 // The mobile sheet's height, as a fraction of the viewport — half by
 // default (was a flat 82%, tall enough that the book underneath was barely
@@ -22,6 +21,7 @@ export default function PanelShell({
   panelType,
   side = "right",
   title,
+  tabs,
   onBack,
   headerMenu,
   subheader,
@@ -42,7 +42,11 @@ export default function PanelShell({
    * block (e.g. a title + subtitle stack) for a panel that needs more —
    * ReactNode rather than a dedicated `subtitle` prop, so this stays the
    * one flexible slot instead of PanelShell growing a new prop per caller. */
-  title: ReactNode;
+  title?: ReactNode;
+  /** A bare UnderlineTabs in place of the title — the tabs become the
+   * header itself, sharing its bottom border with the close button beside
+   * them (the book feed's Notes / Your highlights). */
+  tabs?: ReactNode;
   /** Present only while drilled into a note's own reply thread — steps back
    * out to whichever thread was open before, one level at a time. */
   onBack?: () => void;
@@ -170,29 +174,37 @@ export default function PanelShell({
             <div className="w-9 h-1 rounded-full bg-[var(--reader-border)]" />
           </div>
         )}
-        <div className="px-5 py-4 flex-none flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {onBack && (
-              <Tooltip label="Back" side="bottom">
-                <button
-                  onClick={onBack}
-                  className="flex-none bg-transparent border-none cursor-pointer text-[var(--reader-text-muted)] -ml-1 p-1"
-                >
-                  <ArrowLeft size={16} />
+        {tabs ? (
+          <div className={`px-5 ${isSheet ? "pt-1" : "pt-4"} flex-none flex items-end justify-between gap-2 border-b border-[var(--reader-border)]`}>
+            <div className="min-w-0">{tabs}</div>
+            <div className="flex items-center gap-3.5 flex-none pb-3">
+              {headerMenu}
+                <button onClick={onClose} className="flex bg-transparent border-none cursor-pointer text-[var(--reader-text-muted)] p-0">
+                  <X size={16} />
                 </button>
-              </Tooltip>
-            )}
-            <span className="truncate font-serif font-semibold text-base text-[var(--reader-text)]">{title}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3.5 flex-none">
-            {headerMenu}
-            <Tooltip label="Close" side="bottom" align="end">
-              <button onClick={onClose} className="bg-transparent border-none cursor-pointer text-[var(--reader-text-muted)]">
-                <X size={16} />
-              </button>
-            </Tooltip>
+        ) : (
+          <div className="px-5 py-4 flex-none flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {onBack && (
+                  <button
+                    onClick={onBack}
+                    className="flex-none bg-transparent border-none cursor-pointer text-[var(--reader-text-muted)] -ml-1 p-1"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+              )}
+              <span className="truncate font-serif font-semibold text-base text-[var(--reader-text)]">{title}</span>
+            </div>
+            <div className="flex items-center gap-3.5 flex-none">
+              {headerMenu}
+                <button onClick={onClose} className="bg-transparent border-none cursor-pointer text-[var(--reader-text-muted)]">
+                  <X size={16} />
+                </button>
+            </div>
           </div>
-        </div>
+        )}
         {subheader && (
           <div className="flex-none border-b border-[var(--reader-border)] bg-[var(--reader-surface)]">
             {subheader}

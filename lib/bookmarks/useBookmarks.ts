@@ -1,6 +1,8 @@
 "use client";
 
+import { showToast } from "@/stores/toast-store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { serialized } from "@/lib/bookmarks/serialize";
 import { apiFetch } from "@/lib/api/client";
 import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 import type { FeedItem } from "@/lib/community/feed";
@@ -37,48 +39,69 @@ export function useBookmarkedMaterialIds() {
   return data ?? EMPTY;
 }
 
+const MATERIAL_MUTATION_KEY = ["bookmarks", "toggle-material"] as const;
+
 /**
- * `POST /api/bookmarks` for a book. Flips the cached id set immediately
- * (the button is the kind of control that has to feel instant) and rolls
- * that exact flip back on failure; the Saved shelf itself is invalidated
- * rather than patched, since inserting into it would mean reconstructing a
- * full MaterialSummary the client may not be holding.
+ * Saves/unsaves a book. Fully optimistic: the id set (and, on removal, the
+ * Bookmarks tab list) change and the toast shows the instant it's tapped —
+ * nothing waits on the network.
+ *
+ * Race safety: the request carries the *desired* state (idempotent on the
+ * server, see setBookmark) rather than "flip", and requests for one book are
+ * serialized in click order (serialize.ts), so rapid taps can never invert
+ * or reorder the result — the last tap always wins. A failure undoes just
+ * that tap's flip; once the last in-flight request settles, the cache is
+ * re-read from the server so any drift is corrected.
+ *
+ * `mutate(materialId)` decides the desired state from the cache at call
+ * time, so callers still just say "toggle this".
  */
 export function useToggleMaterialBookmark() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (materialId: string) =>
-      apiFetch<{ bookmarked: boolean }>("/bookmarks", {
-        json: { targetType: "material", targetId: materialId },
-      }),
-    onMutate: async (materialId) => {
+  const mutation = useMutation({
+    mutationKey: MATERIAL_MUTATION_KEY,
+    mutationFn: ({ materialId, bookmarked }: { materialId: string; bookmarked: boolean }) =>
+      serialized(`material:${materialId}`, () =>
+        apiFetch<{ bookmarked: boolean }>("/bookmarks", { json: { targetType: "material", targetId: materialId, bookmarked } })
+      ),
+    onMutate: async ({ materialId, bookmarked }) => {
+      showToast(bookmarked ? "Saved to bookmark" : "Removed from bookmark");
       await queryClient.cancelQueries({ queryKey: bookmarkKeys.materialIds });
-      const previous = queryClient.getQueryData<ReadonlySet<string>>(bookmarkKeys.materialIds);
       queryClient.setQueryData<ReadonlySet<string>>(bookmarkKeys.materialIds, (old) => {
         const next = new Set(old ?? []);
-        if (next.has(materialId)) next.delete(materialId);
-        else next.add(materialId);
-        return next;
-      });
-      return { previous };
-    },
-    onError: (_err, _materialId, context) => {
-      if (context?.previous) queryClient.setQueryData(bookmarkKeys.materialIds, context.previous);
-    },
-    onSuccess: (result, materialId) => {
-      // Reconcile against what the server actually landed on, rather than
-      // trusting the optimistic flip — two devices toggling the same book
-      // can otherwise leave this set inverted until the next cold load.
-      queryClient.setQueryData<ReadonlySet<string>>(bookmarkKeys.materialIds, (old) => {
-        const next = new Set(old ?? []);
-        if (result.bookmarked) next.add(materialId);
+        if (bookmarked) next.add(materialId);
         else next.delete(materialId);
         return next;
       });
+      if (!bookmarked) {
+        queryClient.setQueryData<MaterialSummary[]>(bookmarkKeys.saved("material"), (old) => old?.filter((m) => m.id !== materialId));
+      }
+    },
+    onError: (_err, { materialId, bookmarked }) => {
+      showToast("Couldn't update bookmark");
+      queryClient.setQueryData<ReadonlySet<string>>(bookmarkKeys.materialIds, (old) => {
+        const next = new Set(old ?? []);
+        if (bookmarked) next.delete(materialId);
+        else next.add(materialId);
+        return next;
+      });
+    },
+    onSettled: () => {
+      // Only the last in-flight request reconciles (this one still counts
+      // as mutating), so an early response can't overwrite a later tap.
+      if (queryClient.isMutating({ mutationKey: MATERIAL_MUTATION_KEY }) > 1) return;
+      queryClient.invalidateQueries({ queryKey: bookmarkKeys.materialIds });
       queryClient.invalidateQueries({ queryKey: bookmarkKeys.saved("material") });
     },
   });
+
+  return {
+    mutate: (materialId: string) => {
+      const saved = queryClient.getQueryData<ReadonlySet<string>>(bookmarkKeys.materialIds)?.has(materialId) ?? false;
+      mutation.mutate({ materialId, bookmarked: !saved });
+    },
+  };
 }
 
 /** `GET /api/auth/me/bookmarks?type=material` — the Saved tab's books. */

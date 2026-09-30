@@ -1,6 +1,6 @@
 // Bumped whenever a precached file changes — activate() then drops every
 // older cache, so installed apps pick up the new icon set / splash marks.
-const CACHE_NAME = "ominira-shell-v11";
+const CACHE_NAME = "ominira-shell-v12";
 // Launch artwork is part of the PWA shell, not page content: it needs to be
 // available before a network request can complete on a cold app start. Cache
 // both themes because the reader preference is restored client-side. Paths
@@ -15,6 +15,8 @@ const APP_SHELL = [
   "/icons/badge-96.png",
   "/icons/mark-light.webp",
   "/icons/mark-dark.webp",
+  "/icons/wordmark-light.webp",
+  "/icons/wordmark-dark.webp",
 ];
 
 self.addEventListener("install", (event) => {

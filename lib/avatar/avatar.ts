@@ -51,6 +51,16 @@ export function avatarChoice(pseudonym: string, avatar?: Avatar | null): AvatarC
   return avatar?.color ?? FALLBACK_COLORS[hash(comradeName(pseudonym)) % FALLBACK_COLORS.length];
 }
 
+/** The ring color to sit an avatar in — mixed toward its own background
+ * rather than a flat surface color, so a stack of different-colored circles
+ * doesn't get one same-colored outline. A photo's background varies too much
+ * to pick from, so it keeps the plain surface ring. */
+export function avatarRingColor(pseudonym: string, avatar?: Avatar | null): string {
+  const choice = avatarChoice(pseudonym, avatar);
+  if (choice === "photo") return "var(--reader-surface)";
+  return `color-mix(in srgb, ${AVATAR_COLORS[choice]} 45%, var(--reader-surface))`;
+}
+
 /** "Comrade Muiz" -> "M" — the letter after "Comrade ", uppercased; falls
  * back to the name's own first letter if it doesn't follow that pattern. */
 export function avatarInitial(name: string): string {

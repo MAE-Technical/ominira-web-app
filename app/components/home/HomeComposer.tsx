@@ -233,7 +233,7 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
 
     for (const file of accepted) {
       upload(file, {
-        visibility: "personal",
+        visibility: "public",
         onStage: (stage) => {
           if (stage !== "parsing" && stage !== "uploading") return;
           setFiles((existing) => existing.map((a) => (a.file === file ? { ...a, status: stage } : a)));
@@ -333,7 +333,7 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
         className="flex w-full cursor-text items-center gap-2.5 rounded-sm border border-[var(--reader-border)] bg-[var(--reader-surface)] px-3.5 py-4.5 text-left"
       >
         <ReaderAvatar pseudonym={profile?.pseudonym ?? "Reader"} avatar={profile?.avatar} size={32} />
-        <span className="flex-1 text-[13px] font-medium text-[var(--reader-text-muted)]">Share a thought</span>
+        <span className="flex-1 text-[13px] font-medium text-[var(--reader-text-muted)]">Share a note</span>
         <Mic size={17} className="text-[var(--reader-text-subtle)]" />
       </button>
     );
@@ -431,7 +431,7 @@ export default function HomeComposer({ defaultTopicId = null }: { defaultTopicId
             autoFocus
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Share a thought"
+            placeholder="Share a note"
             style={{
               minHeight: isDesktop ? 70 : MOBILE_TEXTAREA_MIN_HEIGHT,
               maxHeight: isDesktop ? DESKTOP_TEXTAREA_MAX_HEIGHT : MOBILE_TEXTAREA_MAX_HEIGHT,

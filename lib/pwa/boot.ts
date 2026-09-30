@@ -14,7 +14,7 @@ export const READER_PREFS_STORAGE_KEY = "ominira-reader-prefs";
 export const SPLASH_SESSION_KEY = "ominira:pwa-launch-splash-shown";
 
 /** Total time the launch splash stays up, measured from navigation start. */
-export const SPLASH_DURATION_MS = 1600;
+export const SPLASH_DURATION_MS = 2600;
 /** Matches the .app-splash opacity transition in app/globals.css. */
 export const SPLASH_FADE_MS = 300;
 
