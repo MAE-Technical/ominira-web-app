@@ -209,7 +209,9 @@ export default function NotesFeedFab({
 
   return (
     <div
-      className={`fixed z-40 transition-[scale,opacity] duration-200 ease-out right-[calc(16px+env(safe-area-inset-right))] bottom-[calc(76px+env(safe-area-inset-bottom))] shell:bottom-auto shell:top-1/2 shell:-translate-y-1/2 ${
+      className={`fixed z-40 transition-[scale,opacity] duration-200 ease-out ${
+        folded ? "right-[calc(2px+env(safe-area-inset-right))]" : "right-[calc(16px+env(safe-area-inset-right))]"
+      } shell:right-[calc(16px+env(safe-area-inset-right))] bottom-[calc(76px+env(safe-area-inset-bottom))] shell:bottom-auto shell:top-1/2 shell:-translate-y-1/2 ${
         visible ? "scale-100 opacity-100" : "scale-95 opacity-0 pointer-events-none"
       }`}
     >
@@ -234,17 +236,18 @@ export default function NotesFeedFab({
       )}
 
       {folded ? (
-        // Folded, the rail is the reader's own seat at the table — their
-        // face, ring and "+". Tapping it brings the rail back; the open
-        // rail's × folds it again.
+        // Folded, the rail is the reader's own seat at the table — just their
+        // face, ring and "+", no pill around it (smaller and tucked further
+        // right on phones). Tapping it brings the rail back; the open rail's
+        // × folds it again.
         <button
           onClick={() => setFolded(false)}
           aria-label={`Show readers — ${summary}`}
           aria-expanded={false}
           title="Show readers"
-          className="reader-glass reader-face-in group flex cursor-pointer items-center rounded-full border border-[var(--reader-border)] p-2 transition-transform duration-150 hover:scale-[1.03] active:scale-95"
+          className="reader-face-in group flex cursor-pointer items-center rounded-full p-1 transition-transform duration-150 hover:scale-[1.03] active:scale-95"
         >
-          <span className="reader-story-ring relative flex-none">
+          <span className="reader-story-ring relative flex-none origin-bottom-right scale-[0.75] shell:scale-100">
             <MyFace me={me} />
           </span>
         </button>
