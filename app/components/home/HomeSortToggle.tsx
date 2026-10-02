@@ -4,8 +4,8 @@ import UnderlineTabs from "@/app/components/UnderlineTabs";
 import type { CommunityFeedSort } from "@/lib/community/useCommunityFeed";
 
 const OPTIONS: { value: CommunityFeedSort; label: string }[] = [
-  { value: "top", label: "Popular" },
   { value: "recent", label: "Latest" },
+  { value: "top", label: "Popular" },
 ];
 
 /** Home's sort control — same underline-tab styling as Shelf's tab bar. */

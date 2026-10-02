@@ -395,8 +395,8 @@ export type Database = {
       /** migrations/20261004_reader_active_days.sql — one row per reader per
        * UTC day they were active (`day` is a `date`, "YYYY-MM-DD"). */
       reader_active_days: {
-        Row: { day: string; reader_id: string };
-        Insert: { day: string; reader_id: string };
+        Row: { day: string; reader_id: string; read: boolean };
+        Insert: { day: string; reader_id: string; read?: boolean };
         Update: Partial<Database["public"]["Tables"]["reader_active_days"]["Insert"]>;
         Relationships: [];
       };

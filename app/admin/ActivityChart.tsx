@@ -14,7 +14,7 @@ const formatDay = (day: string, format = shortDate) => format.format(new Date(`$
  * Daily active members over the last 30 days — one series, so no legend: the
  * card's title names it. A 2px line over a ~10% wash, hairline horizontal
  * grid only, and a crosshair tooltip carrying that day's other activity
- * (new members, posts, reactions) so one line tells the whole day.
+ * (readers, new members, posts, reactions) so one line tells the whole day.
  */
 export default function ActivityChart({ data }: { data: DailyActivity[] }) {
   return (
@@ -79,6 +79,8 @@ function ActivityTooltip({ active, payload }: TooltipContentProps<ValueType, Nam
         {point.active.toLocaleString("en")} active
       </p>
       <dl className="m-0 mt-1.5 grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-[11px] text-[var(--reader-text-muted)]">
+        <dt>Reading</dt>
+        <dd className="m-0 text-right tabular-nums">{point.reading}</dd>
         <dt>New members</dt>
         <dd className="m-0 text-right tabular-nums">{point.newMembers}</dd>
         <dt>Posts</dt>

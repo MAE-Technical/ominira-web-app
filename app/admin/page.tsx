@@ -92,8 +92,8 @@ export default async function AdminDashboardPage() {
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-semibold text-[var(--reader-text-muted)]">Active members per day · last 30 days</span>
             <InfoTip label="Reader activity">
-              How many members used Ominira while signed in on each of the last 30 days. Each day tracks new members, posts and
-              reactions.
+              How many members used Ominira while signed in on each of the last 30 days. Each day also tracks members who read, new
+              members, posts and reactions.
             </InfoTip>
           </div>
         </div>

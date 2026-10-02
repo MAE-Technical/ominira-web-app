@@ -23,7 +23,7 @@ export const TARGETS = {
   contributors: 0.1,
 } as const;
 
-export type DailyActivity = { day: string; active: number; newMembers: number; posts: number; reactions: number };
+export type DailyActivity = { day: string; active: number; reading: number; newMembers: number; posts: number; reactions: number };
 
 type CoreKey = "members" | "books" | "posts" | "reactions";
 type Totals = Record<CoreKey | `${CoreKey}_week` | `${CoreKey}_prev_week`, number>;

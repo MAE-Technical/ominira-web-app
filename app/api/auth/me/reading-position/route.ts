@@ -1,4 +1,5 @@
 import { getAuthenticatedReader } from "@/lib/auth/session";
+import { recordReadingDay } from "@/lib/metrics/activeDays";
 import { unauthorized, validationError } from "@/lib/api/errors";
 import { deleteReaderActivity, saveReaderActivity } from "@/lib/reader/activity";
 import { isLocator, isReaderMode } from "@/lib/reader/locator";
@@ -32,6 +33,7 @@ export async function PUT(request: Request) {
   });
 
   if (!saved) return validationError("Could not save reading position.");
+  recordReadingDay(reader.readerId);
   return new Response(null, { status: 204 });
 }
 
