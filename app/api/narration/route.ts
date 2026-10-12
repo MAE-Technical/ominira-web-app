@@ -3,6 +3,9 @@ import { getEngine } from "@/lib/audio/engines";
 import { synthesizeGated } from "@/lib/audio/synthesisGate";
 import { validationError } from "@/lib/api/errors";
 
+// Edge TTS answers 403 to connections from Vercel's fra1 (Frankfurt) region.
+export const preferredRegion = "iad1";
+
 /**
  * Live, on-demand AI narration for one chunk of text, live, on request —
  * no pre-generation, nothing cached or persisted to the book JSON (that's
