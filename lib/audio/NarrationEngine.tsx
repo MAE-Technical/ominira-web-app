@@ -10,7 +10,7 @@ import { listenLocator, locatorPlace, narrationScale } from "@/lib/audio/narrati
 import { chunkWordOffsets, hasNarratableText } from "@/lib/audio/narrationText";
 import { buildNarrationIndex, type NarrationTarget } from "@/lib/audio/narrationIndex";
 import { createNarrationQueue, type NarrationQueue } from "@/lib/audio/narrationQueue";
-import { ensureClip, touchClip, useLiveClip } from "@/lib/audio/liveNarrationCache";
+import { ensureClip, peekClip, touchClip, useLiveClip } from "@/lib/audio/liveNarrationCache";
 import { registerNarrationElement } from "@/lib/audio/narrationTap";
 import { activeWordIndex, type KaraokeWord } from "@/lib/audio/karaoke";
 import type { Passage, Section } from "@/lib/book/schema";
@@ -208,9 +208,11 @@ export default function NarrationEngine() {
   // just set true, and the new clip would sit there loaded and ready
   // without ever actually starting.
   const suppressPauseEventRef = useRef(false);
-  const stopCurrentAudio = useCallback(() => {
+  // `keepElement`: the 'ended' handler has already handed the element the
+  // next clip, so only the store-side reset applies.
+  const stopCurrentAudio = useCallback((keepElement = false) => {
     const audio = audioElRef.current;
-    if (audio) {
+    if (audio && !keepElement) {
       if (!audio.paused) suppressPauseEventRef.current = true;
       audio.pause();
       audio.removeAttribute("src");
@@ -246,9 +248,10 @@ export default function NarrationEngine() {
   // `opts.explicit` marks a reader-initiated jump (see explicitJumpSeq
   // above) — left false for the 'ended' auto-advance handler below, the
   // one caller that must NOT force the reader's view to follow.
+  // `opts.handedOff` means the element is already playing `next`'s clip.
   const requestTarget = useCallback(
-    (next: NarrationTarget | undefined, opts?: { explicit?: boolean }) => {
-      stopCurrentAudio();
+    (next: NarrationTarget | undefined, opts?: { explicit?: boolean; handedOff?: boolean }) => {
+      stopCurrentAudio(opts?.handedOff);
       if (!next || !materialId) {
         setTarget(undefined);
         if (!next) useAudioStore.getState().pause();
@@ -683,13 +686,29 @@ export default function NarrationEngine() {
   // a chunk boundary inside one long passage, so there is no separate
   // section-advance branch here to fall out of sync with the rest of this
   // file (see the module doc comment on why that symmetry is the point).
+  //
+  // A passage plays as several short clips (textChunk.ts), so this runs
+  // between sentences, not just paragraphs. When the next clip is already
+  // here it goes onto the element right now, in the event itself: going
+  // through requestTarget's teardown (pause, drop the src) and a render
+  // pass before the src-swap effect shut the audio output down and started
+  // it again, an audible break at every join.
   useEffect(() => {
     const audio = audioElRef.current;
-    if (!audio || !narrationIndex || !target) return;
-    const onEnded = () => requestTarget(narrationIndex.next(target));
+    if (!audio || !book || !narrationIndex || !target) return;
+    const onEnded = () => {
+      const next = narrationIndex.next(target);
+      const clip = next && peekClip(book.slug, next.passageId, next.chunkIndex, voice);
+      if (!clip || clip.status !== "ready" || !clip.src) return requestTarget(next);
+      audioSrcRef.current = clip.src;
+      audio.src = clip.src;
+      setPlaybackRate(audio, useAudioStore.getState().speed);
+      audio.play().catch(() => useAudioStore.getState().pause());
+      requestTarget(next, { handedOff: true });
+    };
     audio.addEventListener("ended", onEnded);
     return () => audio.removeEventListener("ended", onEnded);
-  }, [narrationIndex, target, requestTarget]);
+  }, [book, narrationIndex, target, voice, requestTarget]);
 
   // Persists resume position as playback advances (reader-issues #2).
   useEffect(() => {

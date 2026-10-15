@@ -104,7 +104,7 @@ describe("speakingLine", () => {
   });
 
   test("a speaker reading aloud is the narrator's turn", () => {
-    const ada = { name: "Ada", readingAloud: "en-ZA-LeahNeural" };
+    const ada = { name: "Ada", readingAloud: "female6" };
     expect(speakingLine([ada])).toBe("Leah is narrating via Comrade Ada");
     expect(speakingLine([ada, ...named("Sekou")])).toBe("Leah is narrating via Comrade Ada · Comrade Sekou is speaking");
   });

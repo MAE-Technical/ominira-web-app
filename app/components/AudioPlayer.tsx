@@ -190,7 +190,13 @@ export default function AudioPlayer({
         onClick={() => setVoiceMenuOpen(true)}
         className="flex items-center gap-2 min-w-0 border-none bg-transparent p-0 cursor-pointer"
       >
-        <img src={activeVoice.avatar} alt={activeVoice.name} className="h-11 w-11 flex-none rounded-full object-cover" />
+        {/* While narrating: the brand ring a room member gets when speaking (RoomAvatar). */}
+        <img
+          src={activeVoice.avatar}
+          alt={activeVoice.name}
+          className="h-11 w-11 flex-none rounded-full object-cover transition-[box-shadow] duration-150"
+          style={{ boxShadow: isPlaying ? "0 0 0 2px var(--reader-surface), 0 0 0 4.5px var(--color-brand-500)" : "none" }}
+        />
         <div className="min-w-0 leading-tight text-left">
           <div className="text-xs font-semibold text-[var(--reader-text)] whitespace-nowrap overflow-hidden text-ellipsis">
             {activeVoice.name}

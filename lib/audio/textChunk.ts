@@ -1,15 +1,14 @@
-// The unit actually sent to the TTS engine is a whole passage, not a
-// sentence — see lib/audio/narrationText.ts's own doc comment on why
-// text-splitting stopped being how synthesis request boundaries get
-// decided at all. This module now only exists for the rare passage that's
-// long enough to need splitting anyway, purely to stay under a sane
-// per-request size — a paragraph that long is uncommon enough that an
-// occasional imperfect split point here is low-stakes (one clip restarts
-// slightly early/late mid-paragraph), unlike the old sentence-per-request
-// model, where the exact same kind of imperfect boundary produced an
-// actual standalone clip of just "Dr." or "E." — an audible defect, not a
-// shrug.
-const MAX_CHARS = 1000;
+// Was 1000 (a whole passage per request) when Edge TTS synthesized faster
+// than real time at any length. Pocket TTS slows down as the input grows:
+// ~150 chars ran faster than real time, a 610-char paragraph about 1.5x
+// slower, so a whole passage meant a long wait before the first word and a
+// reader that caught up with synthesis. At ~200 chars the reader waits for
+// the first sentence or two while the rest prefetch behind playback, and
+// NarrationEngine hands each next clip to the element without a gap.
+// Sentences still accumulate up to the budget rather than one per request,
+// so an imperfect boundary (after "Dr.") only shifts where a clip ends — it
+// never makes a standalone clip of just "Dr.".
+const MAX_CHARS = 200;
 
 // Where Intl.Segmenter picks a break point at all, it's still a better
 // guess than a blind mid-word character cut — real Unicode sentence-break
@@ -30,10 +29,9 @@ function getSegmenter(locale: string): Intl.Segmenter {
 /**
  * Splits passage text into pieces safely under a TTS request's practical
  * size, breaking on a sentence boundary when one exists near the budget so
- * a split (when one is even needed) doesn't cut mid-word. The overwhelming
- * majority of passages are well under MAX_CHARS and come back as a single
- * untouched chunk — this only matters for an unusually long paragraph or
- * blockquote.
+ * a split (when one is even needed) doesn't cut mid-word. A short passage
+ * (a heading, a one-sentence paragraph) comes back as a single untouched
+ * chunk; a longer one splits every sentence or two.
  */
 export function splitForSynthesis(text: string, locale = "en", maxChars = MAX_CHARS): string[] {
   if (text.length <= maxChars) return [text];

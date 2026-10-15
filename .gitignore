@@ -90,3 +90,6 @@ remotion/
 # Supabase -> Filebase migration state: manifest, local backups of every
 # moved object, materials backups (scripts/migrate-storage-to-filebase.ts)
 /storage-migration/
+
+# Standalone repo (own git), see ominira-tts-server/
+/ominira-tts-server/

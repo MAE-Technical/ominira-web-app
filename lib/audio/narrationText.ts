@@ -56,19 +56,13 @@ export function spokenPassageText(passage: Passage): string {
  * splitting, no network call, so the client (liveNarrationCache.ts) can
  * enumerate a passage's chunks — and pick out any one chunk's exact text
  * to send to app/api/narration/route.ts for synthesis — without asking
- * the server anything first. A whole passage is always one chunk unless
- * it's long enough to need textChunk.ts's own size-budget split (rare) —
- * text is deliberately *not* pre-split into sentences for synthesis
- * anymore (see textChunk.ts's own doc comment): there is no reliable,
- * dependency-free way to guess a sentence boundary that's never wrong on
- * real prose (abbreviations, initials, decimals all defeat it), and a
- * wrong guess used to mean an actual standalone clip of just "Dr." or
- * "E." — an audible defect, not a shrug. Sending a whole passage as
- * continuous text sidesteps making that boundary decision at all: Edge TTS
- * gets the real sentence in one piece and produces correct prosody for it.
- * Word-level navigation (clicking any word) still works precisely off the
- * per-word timestamps the engine returns for that one clip — no sentence
- * splitting needed for that either.
+ * the server anything first. A passage splits into chunks of a sentence or
+ * two (textChunk.ts's size budget, and its doc comment on why), so the
+ * reader waits for the first chunk, not the whole passage. Sentences are
+ * grouped up to the budget rather than sent one per request, so a wrong
+ * boundary guess (abbreviations, initials, decimals) never produces a
+ * standalone clip of just "Dr." or "E.". Word-level navigation (clicking
+ * any word) works off the per-word timestamps each chunk's clip returns.
  */
 export function passageChunkTexts(passage: Passage): string[] {
   const text = spokenPassageText(passage);

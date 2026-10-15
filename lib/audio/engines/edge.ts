@@ -17,8 +17,7 @@
 // (verified-working) source, not reconstructed from protocol docs.
 import { randomUUID, createHash } from "node:crypto";
 import WebSocket from "ws";
-import type { SynthesisEngine, SynthesisResult, SynthesizeOptions } from "./types";
-import { AFRICAN_VOICES, DEFAULT_VOICE_ID } from "@/lib/audio/voices";
+import type { EngineVoice, SynthesisEngine, SynthesisResult, SynthesizeOptions } from "./types";
 
 const TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 const WSS_URL = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1";
@@ -26,11 +25,19 @@ const OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3";
 const AUDIO_DELIM = "Path:audio\r\n";
 const REQUEST_TIMEOUT_MS = 15_000;
 
-// The reader-facing voice set — see lib/audio/voices.ts's own doc comment
-// on why it's African-only and why it lives in its own dependency-free
-// file rather than here (this module is server-only; that one isn't).
-export const VOICES = AFRICAN_VOICES;
-const DEFAULT_VOICE = DEFAULT_VOICE_ID;
+// One Neural voice per major English-speaking African market Microsoft
+// ships, a woman and a man each.
+export const VOICES: EngineVoice[] = [
+  { id: "en-ZA-LeahNeural", label: "Leah (South Africa)" },
+  { id: "en-TZ-ElimuNeural", label: "Elimu (Tanzania)" },
+  { id: "en-TZ-ImaniNeural", label: "Imani (Tanzania)" },
+  { id: "en-NG-AbeoNeural", label: "Abeo (Nigeria)" },
+  { id: "en-KE-AsiliaNeural", label: "Asilia (Kenya)" },
+  { id: "en-KE-ChilembaNeural", label: "Chilemba (Kenya)" },
+  { id: "en-NG-EzinneNeural", label: "Ezinne (Nigeria)" },
+  { id: "en-ZA-LukeNeural", label: "Luke (South Africa)" },
+];
+const DEFAULT_VOICE = VOICES[0].id;
 
 type BoundaryMetadata = { Type: string; Data: { Offset: number; Duration: number; text: { Text: string } } };
 
