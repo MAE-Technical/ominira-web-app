@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getMaterialDetail } from "@/lib/materials/detail";
+import { resolveMaterialRow } from "@/lib/materials/resolve";
 import { PLATFORM_NAME } from "@/lib/config/platform";
 import { loadReaderMaterial, MaterialNotFoundError, type ReaderMaterial } from "./loadReaderMaterial";
 
@@ -9,35 +9,29 @@ import { loadReaderMaterial, MaterialNotFoundError, type ReaderMaterial } from "
  * standalone reader page — app/read/[slug] (the canonical/shareable URL)
  * and app/reader/[slug] (the soft-navigable entry point ReaderLink points
  * at, so the root layout's <audio> element never unmounts crossing into
- * it). Both render the exact same <Reader> with the exact same prop set,
+ * it). Both render the exact same <BookReader> with the exact same prop set,
  * so sharing this is a real de-dup, not forced abstraction — unlike
  * app/@modal/(.)read/[slug]/page.tsx, which renders <ReaderModal> with a
  * narrower prop set and stays deliberately separate (see its own doc
  * comment).
  */
 
-// Deliberately uses the cheap DB-only getMaterialDetail rather than
-// getBookDocumentFromMaterial (which pulls the full Section[] tree,
-// including a Storage read for every passage) — a <title>/description tag
-// only ever needs metadata, never the book's actual text.
+// The row alone: a <title>/description tag never needs the manifest, the
+// current readers or the book's text.
 export async function readerPageMetadata(slug: string): Promise<Metadata> {
-  let material;
-  try {
-    material = await getMaterialDetail(slug);
-  } catch {
-    return { title: "Not found" };
-  }
-  const { title, author, description } = material;
+  const row = await resolveMaterialRow(slug);
+  if (!row) return { title: "Not found" };
+  const { title, author, description } = row;
   const desc = description || `${title} by ${author} — read or listen on ${PLATFORM_NAME}.`;
   return { title, description: desc };
 }
 
-export async function loadReaderPageMaterial(slug: string, eagerSectionId?: string): Promise<ReaderMaterial> {
+export async function loadReaderPageMaterial(slug: string): Promise<ReaderMaterial> {
   try {
-    return await loadReaderMaterial(slug, { eagerSectionId });
+    return await loadReaderMaterial(slug);
   } catch (err) {
     if (err instanceof MaterialNotFoundError) notFound();
-    // Schema/parse errors and anything unexpected surface through error.tsx
+    // Anything unexpected surfaces through error.tsx
     throw err;
   }
 }

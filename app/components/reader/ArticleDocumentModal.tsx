@@ -14,8 +14,8 @@ export default function ArticleDocumentModal({
   title,
   sourceUrl,
   urlLocator,
-  articleHtml,
-}: DocumentModalProps & { articleHtml: string }) {
+  articleUrl,
+}: DocumentModalProps & { articleUrl: string }) {
   return (
     <DocumentOverlayShell slug={slug}>
       {(onClose) => (
@@ -23,7 +23,7 @@ export default function ArticleDocumentModal({
           materialId={materialId}
           title={title}
           sourceUrl={sourceUrl}
-          articleHtml={articleHtml}
+          articleUrl={articleUrl}
           urlLocator={urlLocator}
           onClose={onClose}
         />

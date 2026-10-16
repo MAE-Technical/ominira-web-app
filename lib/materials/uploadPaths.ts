@@ -27,26 +27,20 @@ export function thumbnailExtension(contentType: unknown): string | null {
 }
 
 /**
- * Every Storage object one upload may write, derived only from the uploader's
- * own id and a server-issued uploadId — never from client-supplied paths — so
- * the finalize step (POST /api/materials/upload) can only ever claim objects
- * under the caller's own `uploads/{readerId}/` folder. Both the signing route
- * and the finalize route build paths here, so they can't drift apart.
+ * Every object one upload may write, derived only from the uploader's own id
+ * and a server-issued uploadId — never from client-supplied paths — so the
+ * finalize step (POST /api/materials/upload) can only ever claim objects in
+ * the caller's own `uploads/{readerId}/` folder. Both the signing route and
+ * the finalize route build paths here, so they can't drift apart. Finalize
+ * moves them into the material's `books/<slug>/` folder.
  */
 export function uploadObjectPaths(readerId: string, uploadId: string, materialType: UploadMaterialType, thumbExt: string | null) {
-  const folder = `uploads/${readerId}`;
-  const prefix = `${folder}/${uploadId}`;
+  const folder = `uploads/${readerId}/${uploadId}`;
   return {
     folder,
-    source: `${prefix}.${EXTENSION_BY_MATERIAL_TYPE[materialType]}`,
-    json: materialType === "book" ? `${prefix}.json` : null,
-    thumbnail: thumbExt ? `${prefix}-thumbnail.${thumbExt}` : null,
-    images: materialType === "book" ? uploadImagesFolder(`${prefix}.json`) : null,
+    source: `${folder}/source.${EXTENSION_BY_MATERIAL_TYPE[materialType]}`,
+    json: materialType === "book" ? `${folder}/book.json` : null,
+    thumbnail: thumbExt ? `${folder}/cover.${thumbExt}` : null,
+    images: materialType === "book" ? `${folder}/images` : null,
   };
-}
-
-/** An EPUB upload's body-images folder, from its JSON object path — how
- * DELETE finds the images, since the materials row only records the JSON. */
-export function uploadImagesFolder(jsonObjectPath: string): string {
-  return jsonObjectPath.replace(/\.json$/, "-images");
 }

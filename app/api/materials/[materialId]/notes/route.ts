@@ -6,9 +6,7 @@ import { resolveMaterialRow } from "@/lib/materials/resolve";
 import { decodeCursor, encodeCursor, keysetBeforeFilter, type Keyset } from "@/lib/api/cursor";
 import { hydrateNotes, visibleToFilter, type NoteRow } from "@/lib/community/notes";
 import { resolveExcerpt } from "@/lib/community/excerpt";
-import { readStorageText } from "@/lib/storage/filebase";
-import { parseBookDocument, type BookDocument } from "@/lib/book/schema";
-import { buildPassageIndex } from "@/lib/reader/sections";
+import { loadSectionLabels } from "@/lib/materials/sectionLabels";
 import type { AnnotationRange } from "@/lib/api/types";
 
 type Sort = "recent" | "top";
@@ -41,36 +39,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ mate
 
   const admin = getSupabaseAdminClient();
 
-  // sectionId isn't indexed at the DB level (ranges is jsonb, keyed by
-  // passageId) — resolved application-side by mapping the section's own
-  // passage ids against each note's ranges[0] (models-spec.md's own note on
-  // exactly this). The same parsed book doc is reused for excerpt
-  // enrichment below rather than fetched twice.
-  let book: BookDocument | undefined;
-  if ((sectionId || withExcerpts) && material.json_storage_path) {
-    const text = await readStorageText(material.json_storage_path).catch(() => null);
-    if (text) {
-      const parsed = parseBookDocument(JSON.parse(text));
-      if (parsed.ok) book = parsed.data;
-    }
-  }
-  const passageIdsForSection = sectionId && book ? new Set(
-    Array.from(buildPassageIndex(book.sections).entries())
-      .filter(([, v]) => v.sectionId === sectionId)
-      .map(([passageId]) => passageId)
-  ) : null;
-
   let query = admin
     .from("posts")
     .select("*")
     .eq("material_id", material.id)
     .is("parent_id", null)
     .or(visibleToFilter(reader?.readerId));
+  // A passage id is its section's id plus "-p<n>", so a section's notes are
+  // the ones whose first range starts in one of its passages.
+  if (sectionId) query = query.like("ranges->0->>passageId", `${sectionId.replace(/[\\%_]/g, "\\$&")}-p%`);
 
   if (sort === "top") {
     query = query.order("reaction_count", { ascending: false }).order("created_at", { ascending: false }).order("id", { ascending: false });
     const c = cursor as TopCursor | null;
-    if (c && !passageIdsForSection) {
+    if (c) {
       query = query.or(
         `reaction_count.lt.${c.reactionCount},and(reaction_count.eq.${c.reactionCount},created_at.lt.${c.createdAt}),and(reaction_count.eq.${c.reactionCount},created_at.eq.${c.createdAt},id.lt.${c.id})`
       );
@@ -78,38 +60,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ mate
   } else {
     query = query.order("created_at", { ascending: false }).order("id", { ascending: false });
     const c = cursor as Keyset | null;
-    if (c && !passageIdsForSection) query = query.or(keysetBeforeFilter(c));
+    if (c) query = query.or(keysetBeforeFilter(c));
   }
 
-  // Section-scoped counts are small in practice, so filtering post-fetch
-  // just needs a generous cap rather than true DB-side pagination.
-  query = passageIdsForSection ? query.limit(500) : query.limit(limit + 1);
-
-  const { data, error } = await query;
+  const { data, error } = await query.limit(limit + 1);
   if (error) return NextResponse.json({ items: [], nextCursor: null });
-
-  let rows = (data ?? []) as NoteRow[];
-  if (passageIdsForSection) {
-    const ids = passageIdsForSection;
-    rows = rows.filter((r) => (r.ranges as { passageId: string }[]).some((rg) => ids.has(rg.passageId)));
-    if (cursor) {
-      rows =
-        sort === "top"
-          ? (() => {
-              const c = cursor as TopCursor;
-              return rows.filter(
-                (r) =>
-                  r.reaction_count < c.reactionCount ||
-                  (r.reaction_count === c.reactionCount &&
-                    (r.created_at < c.createdAt || (r.created_at === c.createdAt && r.id < c.id)))
-              );
-            })()
-          : (() => {
-              const c = cursor as Keyset;
-              return rows.filter((r) => r.created_at < c.createdAt || (r.created_at === c.createdAt && r.id < c.id));
-            })();
-    }
-  }
+  const rows = (data ?? []) as NoteRow[];
+  const labels = withExcerpts ? (await loadSectionLabels([material])).get(material.id) : undefined;
 
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
@@ -140,7 +97,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ mate
   const items = page.map((root) => ({
     note: hydratedById.get(root.id)!,
     replies: (replyRows ?? []).filter((r) => r.parent_id === root.id).map((r) => hydratedById.get(r.id)!),
-    ...(withExcerpts ? resolveExcerpt(book, root.ranges as AnnotationRange[]) : {}),
+    ...(withExcerpts ? resolveExcerpt(root.ranges as AnnotationRange[], labels) : {}),
   }));
 
   return NextResponse.json({ items, nextCursor });

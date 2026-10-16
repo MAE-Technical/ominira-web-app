@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import { getAuthenticatedReader } from "@/lib/auth/session";
 import { validationError } from "@/lib/api/errors";
-import { bucketPublicUrl, resolveStorageUrl, STORAGE_BUCKET } from "@/lib/storage/config";
+import { cdnUrl, putObject } from "@/lib/storage/r2";
+import { uniqueSlug } from "@/lib/materials/uniqueSlug";
 import { isSafeToFetch, SAFE_FETCH_USER_AGENT } from "@/lib/net/safeFetch";
-import { slugify } from "@/lib/book/epubParser";
 
 // Longer than link-preview's FETCH_TIMEOUT_MS: that one only decorates a
 // card, while this is the reader's actual click waiting on a full article
@@ -49,18 +48,6 @@ function extractArticle(html: string, url: string) {
   return { article: { title: article.title, content: article.content, byline: article.byline }, leadImageUrl };
 }
 
-async function uniqueSlug(baseTitle: string): Promise<string> {
-  const admin = getSupabaseAdminClient();
-  const base = slugify(baseTitle) || "untitled";
-  let candidate = base;
-  for (let attempt = 1; attempt < 50; attempt++) {
-    const { data } = await admin.from("materials").select("id").eq("slug", candidate).maybeSingle();
-    if (!data) return candidate;
-    candidate = `${base}-${attempt + 1}`;
-  }
-  return `${base}-${randomUUID().slice(0, 8)}`;
-}
-
 /**
  * `POST /api/materials/from-url` — turns a URL into a `material_type:
  * "webpage"` row, per document-readers-spec.md § 4. Unlike PDF/DOCX/EPUB (a
@@ -85,7 +72,6 @@ export async function POST(request: Request) {
   // token has gone stale, which used to 401 here and dead-end the click —
   // just ingests an unowned public article.
   const reader = await getAuthenticatedReader(request);
-  const ownerFolder = reader?.readerId ?? "web";
 
   const body = await request.json().catch(() => null);
   const url = typeof body?.url === "string" ? body.url.trim() : "";
@@ -116,7 +102,7 @@ export async function POST(request: Request) {
     author: existing.author,
   };
   if (existing?.article_html_storage_path) {
-    const head = await fetch(resolveStorageUrl(existing.article_html_storage_path), { method: "HEAD" }).catch(() => null);
+    const head = await fetch(existing.article_html_storage_path, { method: "HEAD" }).catch(() => null);
     if (head?.ok) return NextResponse.json(existingPayload);
   }
 
@@ -147,24 +133,22 @@ export async function POST(request: Request) {
   const { article, leadImageUrl } = extracted;
 
   if (existing && existingPayload) {
-    // Healing a row whose HTML went missing (see above): re-upload to a
-    // fresh path and repoint the row — its id/slug stay, so every note,
-    // reading position and highlight already attached to it keeps working.
-    const healPath = `uploads/${ownerFolder}/${randomUUID()}.html`;
-    const { error: healUploadError } = await admin.storage
-      .from(STORAGE_BUCKET)
-      .upload(healPath, article.content, { contentType: "text/html", upsert: false });
-    if (healUploadError) return validationError("Could not upload the extracted article.");
+    // Healing a row whose HTML went missing (see above): re-upload it and
+    // repoint the row — its id/slug stay, so every note, reading position and
+    // highlight already attached to it keeps working.
+    const healKey = `books/${existing.slug}/article.html`;
+    try {
+      await putObject(healKey, article.content, "text/html; charset=utf-8");
+    } catch {
+      return validationError("Could not upload the extracted article.");
+    }
     const { error: healError } = await admin
       .from("materials")
-      .update({ article_html_storage_path: bucketPublicUrl(STORAGE_BUCKET, healPath) })
+      .update({ article_html_storage_path: cdnUrl(healKey) })
       .eq("id", existing.id);
     if (healError) return validationError("Could not update the library entry.");
     return NextResponse.json(existingPayload);
   }
-
-  const uploadId = randomUUID();
-  const htmlPath = `uploads/${ownerFolder}/${uploadId}.html`;
 
   const { data: pending, error: pendingError } = await admin
     .from("pending_materials")
@@ -179,12 +163,13 @@ export async function POST(request: Request) {
     .single();
   if (pendingError || !pending) return validationError("Could not record this submission.");
 
-  const { error: htmlUploadError } = await admin.storage
-    .from(STORAGE_BUCKET)
-    .upload(htmlPath, article.content, { contentType: "text/html", upsert: false });
-  if (htmlUploadError) return validationError("Could not upload the extracted article.");
-
   const slug = await uniqueSlug(titleOverride ?? article.title);
+  const htmlKey = `books/${slug}/article.html`;
+  try {
+    await putObject(htmlKey, article.content, "text/html; charset=utf-8");
+  } catch {
+    return validationError("Could not upload the extracted article.");
+  }
   const { data: material, error: materialError } = await admin
     .from("materials")
     .insert({
@@ -193,7 +178,7 @@ export async function POST(request: Request) {
       title: titleOverride ?? article.title,
       author: authorOverride ?? article.byline ?? "",
       cover_url: leadImageUrl,
-      article_html_storage_path: bucketPublicUrl(STORAGE_BUCKET, htmlPath),
+      article_html_storage_path: cdnUrl(htmlKey),
       source_url: url,
       status: "published",
       uploaded_by: reader?.readerId ?? null,

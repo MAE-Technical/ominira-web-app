@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Reader from "@/app/components/reader/Reader";
+import BookReader from "@/app/components/reader/BookReader";
 import PdfDocumentLoader from "@/app/components/reader/PdfDocumentLoader";
 import DocxDocumentView from "@/app/components/reader/DocxDocumentView";
 import ArticleDocumentView from "@/app/components/reader/ArticleDocumentView";
@@ -55,7 +55,7 @@ export default async function ReaderPage({
   const { slug } = await params;
   const { section, passage, passageIndex, page, block, note, noteId, thread, listen } = await searchParams;
 
-  const material = await loadReaderPageMaterial(slug, section);
+  const material = await loadReaderPageMaterial(slug);
 
   const urlLocator = locatorFromQuery({ section, passageIndex, page, block });
 
@@ -75,17 +75,17 @@ export default async function ReaderPage({
         materialId={material.materialId}
         title={material.title}
         sourceUrl={material.sourceUrl}
-        articleHtml={material.articleHtml}
+        articleUrl={material.articleUrl}
         urlLocator={urlLocator}
       />
     );
   }
 
   return (
-    <Reader
-      book={material.book}
+    <BookReader
+      metadata={material.metadata}
+      contentBase={material.contentBase}
       materialId={material.materialId}
-      eagerSectionIds={material.eagerSectionIds}
       targetSectionId={section}
       targetPassageId={passage}
       targetPassageIndex={passageIndex !== undefined && !Number.isNaN(Number(passageIndex)) ? Number(passageIndex) : undefined}

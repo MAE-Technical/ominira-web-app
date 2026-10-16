@@ -5,21 +5,21 @@ const CACHE_NAME = "ominira-shell-v12";
 // shouldn't make readers redownload what they've already opened.
 //  - documents: PDF/DOCX source files, written by the page itself
 //    (lib/offline/documentCache.ts — same name there).
-//  - content: book text from /api/materials/{id} — immutable per material id
-//    (see that route's Cache-Control).
+//  - content: book text from the CDN (reader.json and its chunks) — immutable,
+//    each version under its own folder.
 //  - pages: the last copy of each reader page (/read/<slug>, /reader/<slug>),
 //    the offline fallback for opening a book already opened online.
 //  - static: hashed /_next/static build files (JS, CSS, fonts, PDFium's
 //    wasm) and PDFium's versioned CDN fallback fonts — what a cached page
 //    needs to actually run.
-//  - media: in-book images from Storage.
+//  - media: in-book images from the CDN.
 const DOCUMENT_CACHE_NAME = "ominira-documents-v1";
-// content and media v2: Storage moved to a new Supabase project, so book text
-// cached before then names the old host (supabase-migration.md).
-const CONTENT_CACHE_NAME = "ominira-content-v2";
+// content and media v3: files moved to R2 behind cdn.projectominira.org, so
+// book text cached before then names Supabase Storage (bandwidth-spec.md step 4).
+const CONTENT_CACHE_NAME = "ominira-content-v3";
 const PAGE_CACHE_NAME = "ominira-pages-v1";
 const STATIC_CACHE_NAME = "ominira-static-v1";
-const MEDIA_CACHE_NAME = "ominira-media-v2";
+const MEDIA_CACHE_NAME = "ominira-media-v3";
 const KEPT_CACHES = [CACHE_NAME, DOCUMENT_CACHE_NAME, CONTENT_CACHE_NAME, PAGE_CACHE_NAME, STATIC_CACHE_NAME, MEDIA_CACHE_NAME];
 // Entry caps. Pages and media are trimmed least recently used first (a hit
 // re-stores the entry — see touch()), so a book reread daily outlives one
@@ -121,18 +121,9 @@ async function saveOrTouchReaderPage(event, key) {
 
 const READER_PAGE = /^\/(read|reader)\/[^/]+\/?$/;
 
-/** Mirrors app/api/materials/[materialId]/route.ts's own content check —
- * only book content is immutable; editable fields (title, …) aren't cached. */
-function isMaterialContent(url) {
-  if (!/^\/api\/materials\/[^/]+$/.test(url.pathname)) return false;
-  const params = url.searchParams;
-  const fields = (params.get("fields") || "").split(",").map((f) => f.trim());
-  return (
-    params.get("fullContent") === "true" ||
-    params.has("sectionId") ||
-    fields.some((f) => f === "sections" || f === "narrators" || f === "notes")
-  );
-}
+/** A book's text on the CDN: reader.json and its chunks, under a version
+ * folder, so immutable (lib/materials/readerFiles.ts). */
+const BOOK_TEXT = /^\/books\/[^/]+\/v\d+\/(reader\.json|s\/\d+\.json)$/;
 
 // Network-first for navigations (so readers always get fresh pages when
 // online). Reader pages keep their last good copy, so a book opened online
@@ -197,14 +188,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(event, STATIC_CACHE_NAME, { maxEntries: STATIC_MAX_ENTRIES }));
     return;
   }
-  if (sameOrigin && isMaterialContent(url)) {
+  if (url.hostname === "cdn.projectominira.org" && BOOK_TEXT.test(url.pathname)) {
     event.respondWith(cacheFirst(event, CONTENT_CACHE_NAME));
     return;
   }
   if (
     request.destination === "image" &&
-    url.hostname.endsWith(".supabase.co") &&
-    url.pathname.startsWith("/storage/v1/object/public/")
+    url.hostname === "cdn.projectominira.org"
   ) {
     event.respondWith(
       cacheFirst(event, MEDIA_CACHE_NAME, {

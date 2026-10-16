@@ -59,7 +59,7 @@ const MissionCard = forwardRef<HTMLDivElement, { className?: string }>(function 
             wrapping into a narrow column. */}
         <div className="flex flex-none flex-row items-center gap-4 sm:max-w-80">
           <img
-            src="https://zpkykgmtqzaglxbrwzah.supabase.co/storage/v1/object/public/public-cdn/rodney.jpeg"
+            src={`${process.env.NEXT_PUBLIC_CDN_BASE}/site/rodney.jpeg`}
             alt="Walter Rodney"
             className="h-20 w-20 flex-none object-cover object-[48%_20%] sm:h-24 sm:w-24"
           />

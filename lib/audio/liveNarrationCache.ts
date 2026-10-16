@@ -4,6 +4,8 @@ import { useSyncExternalStore } from "react";
 import type { Passage } from "@/lib/book/schema";
 import type { KaraokeWord } from "@/lib/audio/karaoke";
 import { chunkWordOffsets, passageChunkTexts } from "@/lib/audio/narrationText";
+import { alignWords, type SynthesizedWord } from "@/lib/audio/alignWords";
+import { apiFetch } from "@/lib/api/client";
 
 export type LiveClip = {
   status: "loading" | "ready" | "error";
@@ -13,29 +15,49 @@ export type LiveClip = {
   error: string | undefined;
 };
 
-type NarrationMeta = { durationMs: number; words: { word: string; startMs: number; endMs: number }[] };
+type NarrationMeta = { durationMs: number; words: SynthesizedWord[] };
 
-// Was 60, briefly dropped to 24: the real crash cause was the JSON+base64
-// round-trip per clip (see app/api/narration/route.ts's own doc comment on
-// the binary framing that replaced it), not the raw cached bytes
-// themselves — those are cheap now that nothing decodes or stringifies
-// them. Cutting this that hard mostly just shrank the cache-hit rate for
-// revisited sections, forcing more real fetches through the
-// MAX_CONCURRENT_FETCHES=1 pipeline below (client) and
-// MAX_CONCURRENT_SYNTHESIS=1 (synthesisGate.ts, server) — both
-// deliberately serial because Edge TTS stalls on concurrent connections —
-// which is what turned into noticeable lag/freezing after a run of
-// section jumps. 44 restores most of the old headroom for free replay
-// without going back to holding 60 whole-passage blobs at once.
+// ominira-tts-server, called straight from the browser so no audio passes
+// through Vercel.
+const TTS_URL = process.env.NEXT_PUBLIC_TTS_URL ?? "http://localhost:8000";
+
+// Was 60, briefly dropped to 24: the real crash cause was a JSON+base64
+// round-trip per clip (the binary framing below replaced it), not the raw
+// cached bytes themselves. Cutting this that hard mostly just shrank the
+// cache-hit rate for revisited sections, forcing more real fetches through
+// the serial pipeline below, which turned into lag after a run of section
+// jumps. 44 keeps most of the headroom for free replay.
 const MAX_CACHED_CLIPS = 44;
-// 1, not 2+: the default engine (lib/audio/engines/edge.ts) talks to an
-// unofficial websocket endpoint with no real SLA, and two connections
-// opened at once from the same request appear to make one of them stall
-// until Edge TTS's own request timeout — so prefetching still runs ahead
-// of playback (each queued chunk still starts the moment the one before it
-// finishes, well before playback catches up), just one request in flight
-// at a time rather than in parallel.
+// 1, not 2+: the TTS server synthesizes one clip at a time anyway, so a
+// second request would only wait there. Prefetching still runs ahead of
+// playback: each queued chunk starts the moment the one before finishes.
 const MAX_CONCURRENT_FETCHES = 1;
+
+// The short-lived token /api/tts-token mints (HMAC of reader and expiry),
+// shared by every clip fetch and refreshed a minute before it expires.
+let token: Promise<{ token: string; expiresAt: number }> | undefined;
+function ttsToken(force = false): Promise<string> {
+  if (force) token = undefined;
+  token ??= apiFetch<{ token: string; expiresAt: number }>("/tts-token").catch((err) => {
+    token = undefined;
+    throw err;
+  });
+  return token.then((t) => (t.expiresAt * 1000 - Date.now() > 60_000 ? t.token : ttsToken(true)));
+}
+
+async function synthesize(text: string, voice: string, retry = true): Promise<Response> {
+  const res = await fetch(`${TTS_URL}/synthesize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await ttsToken()}` },
+    body: JSON.stringify({ text, voice }),
+  });
+  // A token can lapse while a tab sleeps: mint a fresh one and try once more.
+  if (res.status === 401 && retry) {
+    await ttsToken(true);
+    return synthesize(text, voice, false);
+  }
+  return res;
+}
 
 /**
  * In-memory, session-only cache of synthesized live-narration clips, keyed
@@ -59,9 +81,8 @@ const MAX_CONCURRENT_FETCHES = 1;
  * this can enumerate a passage's chunks itself instead of asking the
  * server how many there are first.
  *
- * `bookSlug` is a cache-key namespace only, never sent to the server (see
- * app/api/narration/route.ts's own doc comment on why that route takes
- * nothing but raw text — it doesn't know what a "book" is) — it's here
+ * `bookSlug` is a cache-key namespace only, never sent to the server (it
+ * takes nothing but raw text and doesn't know what a "book" is) — it's here
  * purely to keep two different books' passages from colliding if they
  * ever happen to reuse the same structurally-generated id (e.g. two
  * books' own "13th section, 95th passage").
@@ -83,9 +104,9 @@ let activeFetches = 0;
 const queue: (() => void)[] = [];
 
 /** Splits the [4-byte big-endian metadata length][JSON metadata][raw MP3
- * bytes] framing app/api/narration/route.ts sends into its two parts. No
- * base64 anywhere in this path (see that route's own doc comment on why) —
- * the audio slice is handed to `Blob` exactly as received. */
+ * bytes] framing ominira-tts-server sends into its two parts. No base64
+ * anywhere in this path — the audio slice is handed to `Blob` exactly as
+ * received. */
 function splitNarrationBody(buf: ArrayBuffer): { meta: NarrationMeta; audio: Uint8Array<ArrayBuffer> } {
   const view = new DataView(buf);
   const metaLength = view.getUint32(0, false);
@@ -181,8 +202,8 @@ function fetchClip(bookSlug: string, passage: Passage, chunkIndex: number, voice
 
   // Resolved once, up front, rather than inside the queued job — the
   // reader already parsed this book to display it, so the exact chunk
-  // text is right here; the server (app/api/narration/route.ts) doesn't
-  // look anything up by id, it just synthesizes whatever text it's given.
+  // text is right here; the TTS server doesn't look anything up by id, it
+  // just synthesizes whatever text it's given.
   const text = passageChunkTexts(passage)[chunkIndex];
   // Words spoken by this passage's earlier chunks, so word indexes run
   // passage-wide (KaraokeWord.index).
@@ -206,17 +227,13 @@ function fetchClip(bookSlug: string, passage: Passage, chunkIndex: number, voice
       try {
         if (text === undefined) throw new Error(`Passage ${passage.id} has no chunk ${chunkIndex}.`);
         const fetchStart = performance.now();
-        const res = await fetch("/api/narration", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voice }),
-        });
+        const res = await synthesize(text, voice);
         console.debug(
           `[narration] ${key} priority=${priority} waited=${waited}ms fetch=${Math.round(performance.now() - fetchStart)}ms queueDepthAtStart=${queue.length}`
         );
         if (!res.ok) {
           const body = await res.json().catch(() => null);
-          throw new Error(body?.error?.message ?? `Narration request failed (${res.status})`);
+          throw new Error(body?.detail ?? `Narration request failed (${res.status})`);
         }
         const { meta, audio } = splitNarrationBody(await res.arrayBuffer());
         const src = URL.createObjectURL(new Blob([audio], { type: "audio/mpeg" }));
@@ -224,7 +241,7 @@ function fetchClip(bookSlug: string, passage: Passage, chunkIndex: number, voice
           status: "ready",
           src,
           durationMs: meta.durationMs,
-          words: meta.words.map((w, i) => ({
+          words: alignWords(text, meta.words).map((w, i) => ({
             passageId: passage.id,
             index: wordOffset + i,
             text: w.word,
@@ -235,9 +252,9 @@ function fetchClip(bookSlug: string, passage: Passage, chunkIndex: number, voice
         });
       } catch (err) {
         // Deliberately left retryable (see ensureClip) rather than a
-        // terminal state: this engine has no SLA (edge.ts's own doc
-        // comment), so a transient failure here must never mean a passage
-        // can no longer ever be narrated for the rest of the session.
+        // terminal state: a transient failure (a busy or restarting TTS
+        // host) must never mean a passage can no longer ever be narrated
+        // for the rest of the session.
         clips.set(key, {
           status: "error",
           src: undefined,
@@ -288,8 +305,7 @@ function fetchClip(bookSlug: string, passage: Passage, chunkIndex: number, voice
  * repeatedly: a chunk already *ready* or already in flight is a no-op —
  * but one that last ended in `error` is deliberately NOT treated as
  * settled here, and gets a fresh fetchClip call instead. Without this, a
- * single transient failure (this engine has no SLA — edge.ts's own doc
- * comment) permanently bricked that exact passage for the rest of the
+ * single transient failure permanently bricked that exact passage for the rest of the
  * session: `clips.has(key)` is true for an errored entry same as a ready
  * one, so the old guard silently refused to ever retry it, no matter how
  * many times playback or a skip later asked for it again — the narration

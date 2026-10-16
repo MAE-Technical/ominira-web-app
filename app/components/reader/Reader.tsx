@@ -17,6 +17,7 @@ import SelectionActions, { useShareQuote } from "./SelectionActions";
 import BackToCurrentButton from "./BackToCurrentButton";
 import Loader from "../Loader";
 import type { BookDocument, Passage, Section } from "@/lib/book/schema";
+import type { ReaderBook } from "@/lib/materials/readerFiles";
 import { useReaderStore, useTypographyStyle } from "@/stores/reader-store";
 import { useReadingPositionStore } from "@/stores/reading-position-store";
 import { useLayoutStore } from "@/stores/layout-store";
@@ -43,8 +44,8 @@ import { useRoomView } from "@/lib/room/useRoomView";
 
 export default function Reader({
   book,
+  contentBase,
   materialId,
-  eagerSectionIds,
   targetSectionId,
   targetPassageId,
   targetPassageIndex,
@@ -54,16 +55,16 @@ export default function Reader({
   autoListen,
   onClose,
 }: {
-  book: BookDocument;
+  /** reader.json: every section's structure, prose blank until
+   * useProgressiveText fetches its chunk. */
+  book: ReaderBook;
+  /** The book's version folder on the CDN, ending in "/". */
+  contentBase: string;
   /** The book's real `materials.id` (UUID) — distinct from `book.id`
    * (ingestion's own slug-like internal id, api-spec.md). Everything that
    * reads/writes reading position (reading-position-store, audio-store's
    * "now playing" slot) keys off this, never `book.id`. */
   materialId: string;
-  /** Which section(s) of `book.sections` already carry real prose —
-   * everything else starts with blanked-out passage text (see
-   * toBookDocument.ts), backfilled by useProgressiveText below. */
-  eagerSectionIds: string[];
   /** ?section=<id> — either a chapter link (ToC/search, first-passage
    * default) or, paired with targetPassageIndex, the book-detail page's own
    * "Resume reading" button. See useResumeScroll's own doc comment. */
@@ -163,8 +164,8 @@ export default function Reader({
 
   // Every section's structure (spine order, ids, audio, passage counts/
   // types) is real from the very first render — only the actual prose
-  // fills in progressively, section by section, starting from whichever
-  // one(s) `eagerSectionIds` names (see toBookDocument.ts). `sections`
+  // fills in progressively, chunk by chunk from the CDN, starting from
+  // wherever the reader lands (see useProgressiveText). `sections`
   // below is what every downstream consumer (orderedSections,
   // passageLookup, search, the book-wide notes feed, BookContent itself,
   // and — critically — audio-store's `book` once listen mode opens) reads
@@ -172,13 +173,13 @@ export default function Reader({
   // automatically as more of the book arrives, with no separate "is this
   // stale" bookkeeping needed anywhere else in this file.
   const { sections, ensureTextLoaded, loadAllTextInBackground } = useProgressiveText({
-    materialId,
+    contentBase,
     initialSections: book.sections,
-    eagerSectionIds,
+    chunks: book.chunks,
   });
   // The same BookDocument shape every child already expects, just with the
   // live (progressively-filling) sections tree swapped in for the static
-  // one the server sent — so BookContent/ChaptersDrawer/NarrationEngine
+  // one reader.json gave — so BookContent/ChaptersDrawer/NarrationEngine
   // need no prop-shape changes at all, only this one substitution at each
   // call site.
   const liveBook = useMemo<BookDocument>(() => ({ ...book, sections }), [book, sections]);
@@ -187,7 +188,7 @@ export default function Reader({
   // ReaderHeader's onListen does on click, fired instead on mount when the
   // book-detail page's Listen button is why we're here. Opens with
   // liveBook, not the static `book` prop — passing the static prop here
-  // used to mean any non-eager section (most of the book, on first open)
+  // used to mean any section not yet loaded (most of the book, on first open)
   // permanently had blank passage.text as far as NarrationEngine's
   // narrationIndex was concerned, even once the reader itself had the real
   // prose in hand — a section like this wouldn't just be missing from the
@@ -202,7 +203,7 @@ export default function Reader({
   // openBook above (or ReaderHeader's onListen) only ever runs once, at
   // whatever moment listen mode starts, and progressive loading keeps
   // running in the background well past that moment for any book longer
-  // than its eager section(s). Guarded to this book only (updateBookContent
+  // than its first chunk. Guarded to this book only (updateBookContent
   // itself also checks id, but isListen is the cheaper/earlier check) — a
   // reader who has navigated to a different book, or closed listen mode
   // for this one, shouldn't push stale content into whatever's playing now.
@@ -460,10 +461,9 @@ export default function Reader({
     serverPositionReady,
   });
 
-  // Whichever section the reader actually lands on (server's own eager
-  // guess, or — the common "just continue reading" case — wherever
-  // useResumeScroll's client-only saved position actually points, which the
-  // server has no way to have known) needs its real prose in hand before
+  // Whichever section the reader actually lands on (a ?section= link, or —
+  // the common "just continue reading" case — wherever useResumeScroll's
+  // client-only saved position actually points) needs its real prose in hand before
   // the loader lifts — same gate as hydrated/resumeReady below, just for
   // text instead of theme/scroll-position. Everywhere else in the book
   // keeps filling in via loadAllTextInBackground below regardless.
@@ -479,15 +479,15 @@ export default function Reader({
     };
   }, [resumeReady, activeSectionId, ensureTextLoaded]);
 
-  // The "rest of the book, at once" wave — fired exactly once, right after
-  // the reader's own starting section is settled, not paced by scroll or
-  // navigation at all (see useProgressiveText's own doc comment).
+  // The rest of the book, from the reader's own starting section onward —
+  // fired exactly once, right after that section is settled, not paced by
+  // scroll or navigation (see useProgressiveText's own doc comment).
   const backgroundLoadStartedRef = useRef(false);
   useEffect(() => {
     if (!resumeReady || backgroundLoadStartedRef.current) return;
     backgroundLoadStartedRef.current = true;
-    loadAllTextInBackground();
-  }, [resumeReady, loadAllTextInBackground]);
+    loadAllTextInBackground(activeSectionId);
+  }, [resumeReady, activeSectionId, loadAllTextInBackground]);
 
   // Defensive: a reader can navigate (chapters drawer, search result,
   // chapter-nav footer) to a section the background wave above hasn't

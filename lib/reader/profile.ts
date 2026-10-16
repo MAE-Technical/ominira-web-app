@@ -2,7 +2,6 @@ import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import { MATERIAL_SUMMARY_COLUMNS } from "@/lib/materials/columns";
 import { toMaterialSummary } from "@/lib/materials/summary";
 import { applyLibraryTypeFilter, withCurrentReaders } from "@/lib/materials/list";
-import { loadBookDocuments } from "@/lib/materials/bookDocuments";
 import { resolveExcerpt } from "@/lib/community/excerpt";
 import { enrichFeedItems, type FeedItem } from "@/lib/community/feed";
 import type { NoteRow } from "@/lib/community/notes";
@@ -79,23 +78,22 @@ export type ReaderProfilePage = {
 
 /** highlights rows -> quote-only cards (no note content — a bare highlight
  * has none), same excerpt-resolution step enrichFeedItems uses for notes.
- * Rows with nothing left to quote (a deleted section, an unparseable book
- * doc) are dropped rather than shown as an empty card. */
+ * Rows with nothing to quote (an old range saved without its text) are
+ * dropped rather than shown as an empty card. */
 async function enrichHighlights(rows: HighlightRow[]): Promise<ReaderProfileHighlight[]> {
   if (rows.length === 0) return [];
   const materialIds = Array.from(new Set(rows.map((r) => r.material_id)));
   const { data: materials } = await getSupabaseAdminClient()
     .from("materials")
-    .select("id, slug, title, author, json_storage_path")
+    .select("id, slug, title, author")
     .in("id", materialIds);
   const materialsById = new Map((materials ?? []).map((m) => [m.id, m]));
-  const bookByMaterialId = await loadBookDocuments(materials ?? []);
 
   return rows
     .map((row) => {
       const material = materialsById.get(row.material_id);
       if (!material) return null;
-      const { excerpt } = resolveExcerpt(bookByMaterialId.get(row.material_id), row.ranges as AnnotationRange[]);
+      const { excerpt } = resolveExcerpt(row.ranges as AnnotationRange[]);
       if (!excerpt) return null;
       return {
         id: row.id,

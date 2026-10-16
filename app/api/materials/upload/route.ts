@@ -1,44 +1,31 @@
 import { NextResponse, after } from "next/server";
-import { randomUUID } from "node:crypto";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import { getAuthenticatedReader, isAdminReader } from "@/lib/auth/session";
 import { forbidden, unauthorized, validationError } from "@/lib/api/errors";
 import { readerCanUpload } from "@/lib/auth/profile";
-import { bucketPublicUrl, STORAGE_BUCKET } from "@/lib/storage/config";
-import { deleteContentObjects, putContentObject } from "@/lib/storage/filebase";
-import { parseBookDocument } from "@/lib/book/schema";
-import { slugify } from "@/lib/book/epubParser";
+import { cdnUrl, copyObject, deletePrefix, fetchStorageText, listObjects, putObject } from "@/lib/storage/r2";
+import { parseBookDocument, type BookDocument } from "@/lib/book/schema";
+import { readerObjects } from "@/lib/materials/readerFiles";
 import { enrichMaterial } from "@/lib/materials/enrichMaterial";
-import { buildMaterialManifest, manifestStoragePath } from "@/lib/materials/manifest";
+import { buildMaterialManifest } from "@/lib/materials/manifest";
 import { ADMIN_UPLOAD_LIMITS, MEMBER_UPLOAD_LIMITS, formatBytes } from "@/lib/materials/uploadLimits";
-import { invalidateMaterialStorage } from "@/lib/materials/storageCache";
-import { MAX_UPLOAD_IMAGES, isUploadMaterialType, thumbnailExtension, uploadObjectPaths } from "@/lib/materials/uploadPaths";
+import { uniqueSlug } from "@/lib/materials/uniqueSlug";
+import { isUploadMaterialType, thumbnailExtension, uploadObjectPaths } from "@/lib/materials/uploadPaths";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-async function uniqueSlug(baseTitle: string): Promise<string> {
-  const admin = getSupabaseAdminClient();
-  const base = slugify(baseTitle) || "untitled";
-  let candidate = base;
-  for (let attempt = 1; attempt < 50; attempt++) {
-    const { data } = await admin.from("materials").select("id").eq("slug", candidate).maybeSingle();
-    if (!data) return candidate;
-    candidate = `${base}-${attempt + 1}`;
-  }
-  return `${base}-${randomUUID().slice(0, 8)}`;
-}
 
 /**
  * Step 2 (finalize) of the single upload flow behind HomeComposer's "Add a
  * book", the library's "add a book", and /admin/library/new
  * (reader-uploads-spec.md § 3's DRY note — one server path for all). Step 1,
  * POST /api/materials/upload/sign, already had the browser PUT the bytes
- * straight into Storage; this route checks what actually landed there
- * (existence and real size, from Storage's own metadata — never the client's
+ * straight into R2; this route checks what actually landed there
+ * (existence and real size, from R2's own listing — never the client's
  * claim), re-validates an EPUB's parsed JSON independently (never trusts a
- * client-supplied blob just because it claims to be schema-valid — same rule
- * loadBookDocuments/projectMaterial apply to every fetched BookDocument), and
- * only then records the material. Any rejection removes the uploaded objects.
+ * client-supplied blob just because it claims to be schema-valid), and
+ * only then moves the files into `books/<slug>/` (R2 copies them; no bytes
+ * pass through here except the book JSON) and records the material. Any
+ * rejection removes the uploaded objects.
  *
  * Paths come from uploadObjectPaths(readerId, uploadId) — the caller can only
  * ever finalize objects in their own uploads/ folder.
@@ -72,28 +59,16 @@ export async function POST(request: Request) {
   const visibility = body.visibility === "public" ? "public" : "personal";
 
   const admin = getSupabaseAdminClient();
-  const bucket = admin.storage.from(STORAGE_BUCKET);
   const paths = uploadObjectPaths(reader.readerId, uploadId, materialType, thumbnailExtension(body.thumbnailType));
-  const uploadedPaths = [paths.source, paths.json, paths.thumbnail].filter((p): p is string => !!p);
-  let manifestKey: string | null = null;
+  let bookFolder: string | null = null;
   const reject = async (message: string, field?: string) => {
-    await bucket.remove(uploadedPaths).catch(() => {});
-    if (paths.images) {
-      const { data: images } = await bucket.list(paths.images, { limit: MAX_UPLOAD_IMAGES });
-      if (images?.length) await bucket.remove(images.map((o) => `${paths.images}/${o.name}`)).catch(() => {});
-    }
-    if (manifestKey) await deleteContentObjects([manifestKey]).catch(() => {});
+    await Promise.all([deletePrefix(`${paths.folder}/`), bookFolder ? deletePrefix(bookFolder) : null]).catch(() => {});
     return validationError(message, field);
   };
 
-  // What actually landed — one listing of this upload's objects.
-  const { data: listed } = await bucket.list(paths.folder, { search: uploadId, limit: 10 });
-  const sizeOf = (path: string | null) => {
-    if (!path) return null;
-    const name = path.slice(paths.folder.length + 1);
-    const size = (listed ?? []).find((o) => o.name === name)?.metadata?.size;
-    return typeof size === "number" ? size : null;
-  };
+  // What actually landed — one listing of this upload's folder.
+  const listed = new Map((await listObjects(`${paths.folder}/`)).map((o) => [o.key, o.size]));
+  const sizeOf = (path: string | null) => (path ? (listed.get(path) ?? null) : null);
 
   const sourceSize = sizeOf(paths.source);
   if (sourceSize === null) return reject("The file didn't finish uploading. Please try again.", "sourceFile");
@@ -101,12 +76,10 @@ export async function POST(request: Request) {
   if (sourceSize > limits.maxFileSizeBytes) return reject(`Files must be under ${formatBytes(limits.maxFileSizeBytes)}.`, "sourceFile");
   const thumbPath = sizeOf(paths.thumbnail) !== null ? paths.thumbnail : null;
 
-  // Resolved up front (not down by the materials insert, as before) — the
-  // book branch below needs this exact, final, de-duplicated slug to write
-  // the manifest under the same key fetchMaterialManifest will look it up
-  // by (manifestStoragePath(slug)), not the EPUB document's own client-side
-  // slug (which can differ — see buildMaterialManifest's own doc comment).
   const slug = await uniqueSlug(title);
+  const folder = (bookFolder = `books/${slug}/`);
+  // uploads/<reader>/<uploadId>/x -> books/<slug>/x
+  const finalKey = (path: string) => folder + path.slice(paths.folder.length + 1);
 
   let jsonStoragePath: string | null = null;
   let pageCountEstimate: number | null = null;
@@ -118,52 +91,50 @@ export async function POST(request: Request) {
     if (jsonSize === null) return reject("Parsed book JSON is required.", "documentJson");
     if (jsonSize > limits.maxFileSizeBytes * 4) return reject("Parsed book is too large.", "documentJson");
 
-    const { data: jsonBlob, error: downloadError } = await bucket.download(paths.json!);
-    if (downloadError || !jsonBlob) return reject("Could not read the parsed book.", "documentJson");
     let parsedRaw: unknown;
     try {
-      parsedRaw = JSON.parse(await jsonBlob.text());
+      parsedRaw = JSON.parse(await fetchStorageText(paths.json!));
     } catch {
-      return reject("Parsed book JSON is not valid JSON.", "documentJson");
+      return reject("Could not read the parsed book.", "documentJson");
     }
     const validated = parseBookDocument(parsedRaw);
     if (!validated.ok) return reject(`Parsed book failed schema validation: ${validated.error.message}`, "documentJson");
 
-    // Rewritten with the validated (normalized) document rather than keeping
-    // the client's bytes as-is.
-    const { error: jsonUploadError } = await bucket.upload(paths.json!, JSON.stringify(validated.data), {
-      contentType: "application/json",
-      upsert: true,
-    });
-    if (jsonUploadError) return reject("Could not save the parsed book.");
-    jsonStoragePath = bucketPublicUrl(STORAGE_BUCKET, paths.json!);
-    pageCountEstimate = validated.data.metadata.pageCountEstimate ?? null;
-
-    // Without this, the book detail page 404s on "manifest not found" the
-    // moment a reader opens it — getMaterialDetail/projectMaterial both
-    // require fetchMaterialManifest to succeed unconditionally.
-    //
-    // Written to Filebase, where fetchMaterialManifest reads it. Overwrites
-    // deliberately: this key is the slug alone (not the uploadId prefix), so
-    // it's the one object a retry of the same title can genuinely collide
-    // with — `uniqueSlug` only guarantees this slug is free in the
-    // `materials` table, not in storage, and an earlier failed attempt may
-    // have left this exact object behind with no row pointing at it. Safe to
-    // overwrite — nothing can be depending on an orphan's content.
-    const manifest = buildMaterialManifest(validated.data, slug);
+    // Saved as the validated (normalized) document rather than the client's
+    // bytes, with its cover and image URLs pointing into the book's folder;
+    // beside it, the manifest and the reader's chunks (readerFiles.ts).
+    jsonStoragePath = `${folder}v1/book.json`;
+    const json = JSON.stringify(validated.data).replaceAll(cdnUrl(`${paths.folder}/`), cdnUrl(folder));
+    const objects = [
+      { key: jsonStoragePath, body: json },
+      { key: `${folder}v1/manifest.json`, body: JSON.stringify(buildMaterialManifest(validated.data, slug)) },
+      ...readerObjects(JSON.parse(json) as BookDocument, `${folder}v1/`),
+    ];
     try {
-      await putContentObject(manifestStoragePath(slug), JSON.stringify(manifest), "application/json");
+      for (let i = 0; i < objects.length; i += 20) {
+        await Promise.all(objects.slice(i, i + 20).map((o) => putObject(o.key, o.body, "application/json")));
+      }
     } catch {
-      return reject("Could not upload the book manifest.");
+      return reject("Could not save the parsed book.");
     }
-    // The slug may have belonged to a since-deleted book.
-    invalidateMaterialStorage(slug);
-    manifestKey = manifestStoragePath(slug);
+    pageCountEstimate = validated.data.metadata.pageCountEstimate ?? null;
   } else if (materialType === "pdf") {
     pageCountEstimate = typeof body.pageCount === "number" && body.pageCount > 0 ? Math.round(body.pageCount) : null;
   }
   // materialType === "docx": metadata-only, no page count (see docxParser.ts)
   // — pageCountEstimate stays null.
+
+  // The source, cover and images move into the book's folder, a few copies
+  // at a time; then the upload folder goes.
+  const toCopy = [...listed.keys()].filter((key) => key !== paths.json);
+  try {
+    for (let i = 0; i < toCopy.length; i += 20) {
+      await Promise.all(toCopy.slice(i, i + 20).map((key) => copyObject(key, finalKey(key))));
+    }
+  } catch {
+    return reject("Could not save this upload. Please try again.");
+  }
+  await deletePrefix(`${paths.folder}/`).catch(() => {});
 
   const { data: pending, error: pendingError } = await admin
     .from("pending_materials")
@@ -172,7 +143,7 @@ export async function POST(request: Request) {
       title: title.trim(),
       author: author.trim(),
       reader_id: reader.readerId,
-      storage_path: paths.source,
+      storage_path: finalKey(paths.source),
       original_filename: typeof body.fileName === "string" ? body.fileName.slice(0, 500) : null,
       mime_type: typeof body.mimeType === "string" && body.mimeType ? body.mimeType.slice(0, 200) : null,
       file_size_bytes: sourceSize,
@@ -188,9 +159,9 @@ export async function POST(request: Request) {
       material_type: materialType,
       title: title.trim(),
       author: author.trim(),
-      cover_url: thumbPath ? bucketPublicUrl(STORAGE_BUCKET, thumbPath) : null,
+      cover_url: thumbPath ? cdnUrl(finalKey(thumbPath)) : null,
       json_storage_path: jsonStoragePath,
-      source_url: bucketPublicUrl(STORAGE_BUCKET, paths.source),
+      source_url: cdnUrl(finalKey(paths.source)),
       page_count_estimate: pageCountEstimate,
       file_size_bytes: sourceSize,
       status: "published",

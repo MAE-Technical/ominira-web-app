@@ -55,7 +55,7 @@ export function spokenPassageText(passage: Passage): string {
  * The pieces a passage's spoken text is actually synthesized as — pure text
  * splitting, no network call, so the client (liveNarrationCache.ts) can
  * enumerate a passage's chunks — and pick out any one chunk's exact text
- * to send to app/api/narration/route.ts for synthesis — without asking
+ * to send to ominira-tts-server for synthesis — without asking
  * the server anything first. A passage splits into chunks of a sentence or
  * two (textChunk.ts's size budget, and its doc comment on why), so the
  * reader waits for the first chunk, not the whole passage. Sentences are

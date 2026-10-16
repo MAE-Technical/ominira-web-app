@@ -18,19 +18,19 @@ export const IOS_INSTALL_STEPS: InstallStep[] = [
   {
     label: "Tap the Share icon",
     screenshot:
-      "https://zpkykgmtqzaglxbrwzah.supabase.co/storage/v1/object/public/public-cdn/pwa-1.png",
+      `${process.env.NEXT_PUBLIC_CDN_BASE}/site/pwa-1.png`,
     placeholder: "Screenshot: Safari toolbar, Share icon circled",
   },
   {
     label: "Scroll down, tap “Add to Home Screen”",
     screenshot:
-      "https://zpkykgmtqzaglxbrwzah.supabase.co/storage/v1/object/public/public-cdn/pwa-2.png",
+      `${process.env.NEXT_PUBLIC_CDN_BASE}/site/pwa-2.png`,
     placeholder: "Screenshot: Share sheet, Add to Home Screen row highlighted",
   },
   {
     label: "Tap “Add” in the top right",
     screenshot:
-      "https://zpkykgmtqzaglxbrwzah.supabase.co/storage/v1/object/public/public-cdn/pwa-3.png",
+      `${process.env.NEXT_PUBLIC_CDN_BASE}/site/pwa-3.png`,
     placeholder: "Screenshot: confirmation dialog, Add button circled",
   },
 ];

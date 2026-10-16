@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
+import Loader from "../Loader";
 import { useReaderStore, useTypographyStyle } from "@/stores/reader-store";
 import type { Locator } from "@/lib/reader/locator";
 import { useArticleProgress } from "@/lib/reader/useArticleProgress";
@@ -18,9 +19,7 @@ const RAIL_INSET_PX = 16;
  * Web-page body renderer — see document-readers-spec.md § 1/§ 3. Renders
  * the *already* Readability-extracted HTML (never re-fetches or re-extracts
  * the live page at read time — that happened once, server-side, at
- * ingestion), fetched server-side by loadReaderMaterial alongside the rest
- * of the material row, so it arrives as a prop exactly like EPUB's
- * BookDocument — no client-side loading gate before the article can render.
+ * ingestion), fetched from the CDN before the article mounts.
  * Renders it the same reflowing-article way as DocxDocumentView, via the
  * shared `.reader-article` typography (globals.css). The "View original"
  * link (Brave-Speedreader-style) lives in ReaderHeader itself via its
@@ -33,6 +32,28 @@ const RAIL_INSET_PX = 16;
  * one implementation rather than each approximating it.
  */
 export default function ArticleDocumentView({
+  articleUrl,
+  ...props
+}: Omit<ComponentProps<typeof ArticleBody>, "articleHtml"> & { articleUrl: string }) {
+  const [loaded, setLoaded] = useState<{ url: string; html: string } | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(articleUrl)
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(`article: ${res.status}`))))
+      .then((html) => !cancelled && setLoaded({ url: articleUrl, html }))
+      .catch((err: Error) => !cancelled && setError(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [articleUrl]);
+
+  if (error) throw error;
+  if (loaded?.url !== articleUrl) return <Loader />;
+  return <ArticleBody key={articleUrl} articleHtml={loaded.html} {...props} />;
+}
+
+function ArticleBody({
   materialId,
   title,
   sourceUrl,

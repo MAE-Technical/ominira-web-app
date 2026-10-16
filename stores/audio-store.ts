@@ -17,7 +17,7 @@ import { DEFAULT_VOICE_ID } from "@/lib/audio/voices";
 type AudioState = {
   isPlaying: boolean;
   currentTimeMs: number;
-  /** Which Edge TTS voice (lib/audio/voices.ts) live narration speaks in —
+  /** Which narrator (lib/audio/voices.ts) live narration speaks in —
    * a reader-wide preference, same footing as `speed`, not tied to any one
    * book. */
   voice: string;

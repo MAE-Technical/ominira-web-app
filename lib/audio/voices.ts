@@ -1,15 +1,13 @@
-import type { EngineVoice } from "@/lib/audio/engines/types";
-
 /**
  * The narrators a reader can pick: exactly the voices the default engine,
- * Pocket (lib/audio/engines/pocket.ts), has on ominira-tts-server — each a
+ * Pocket, has on ominira-tts-server — each a
  * clip of a consenting speaker in its voices/<id>.wav. Only voices that
  * exist are listed; add one here when its clip lands on the server.
  *
  * Kept in this standalone, dependency-free file so client code (audio-store's
  * persisted preference, AudioPlayer's switcher UI) can import it.
  */
-export type AfricanVoice = EngineVoice & { name: string; country: string; traits: string; avatar: string };
+export type AfricanVoice = { id: string; label: string; name: string; country: string; traits: string; avatar: string };
 
 export const AFRICAN_VOICES: AfricanVoice[] = [
   { id: "abiodun", label: "Abiodun (Nigeria)", name: "Abiodun", country: "Nigeria", traits: "Deep · Measured", avatar: "/images/avatars/abeodun.png" },

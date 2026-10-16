@@ -45,7 +45,7 @@ function setPlaybackRate(audio: HTMLAudioElement, rate: number) {
  * passages (a whole passage is the synthesis unit — see narrationText.ts's
  * own doc comment on why it's not split into sentences), lib/audio/
  * narrationQueue keeps ~60s of it synthesized ahead of whichever one is
- * current (via the Edge engine, lib/audio/engines/edge.ts), and lib/audio/
+ * current (via ominira-tts-server, called from the browser), and lib/audio/
  * liveNarrationCache caches the results for the rest of the session — so
  * by the time playback actually reaches passage N its clip is normally
  * already there, and stepping back into an earlier section just replays
@@ -365,10 +365,10 @@ export default function NarrationEngine() {
   // else in this file ever re-asks for a passage once it's already the
   // target (requestTarget's own queueRef effect only fires again on a real
   // target/voice *change*), so without this, one transient failure against
-  // an engine with no SLA (edge.ts's own doc comment) left the reader
+  // the TTS host (busy, restarting, a dropped connection) left the reader
   // staring at a buffering spinner that could never resolve on its own —
   // exactly the frozen-loader symptom a skip/jump landing on a passage hit
-  // by a momentary Edge TTS hiccup produced. Backs off a couple seconds
+  // by a momentary TTS hiccup produced. Backs off a couple seconds
   // between attempts rather than hammering it, and stops entirely once the
   // clip is no longer the live target (the cleanup below) or turns ready.
   useEffect(() => {

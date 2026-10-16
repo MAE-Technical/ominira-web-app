@@ -6,28 +6,11 @@ import DocxDocumentModal from "@/app/components/reader/DocxDocumentModal";
 import ArticleDocumentModal from "@/app/components/reader/ArticleDocumentModal";
 import { loadReaderMaterial, MaterialNotFoundError } from "@/lib/reader/loadReaderMaterial";
 import { locatorFromQuery } from "@/lib/reader/locator";
-import { getMaterialDetail } from "@/lib/materials/detail";
-import { PLATFORM_NAME } from "@/lib/config/platform";
+import { readerPageMetadata } from "@/lib/reader/readerPageData";
 
-// Same cheap DB-only metadata as app/read/[slug]/page.tsx's own
-// generateMetadata — kept in sync so the tab title still reflects the book
-// being read even when this intercepted overlay, not the hard-navigation
-// page, is what's actually mounted.
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  let material;
-  try {
-    material = await getMaterialDetail(slug);
-  } catch {
-    return { title: "Not found" };
-  }
-  const { title, author, description } = material;
-  const desc = description || `${title} by ${author} — read or listen on ${PLATFORM_NAME}.`;
-  return { title, description: desc };
+  return readerPageMetadata(slug);
 }
 
 /** Same server-side load as app/read/[slug]/page.tsx, deliberately
@@ -63,7 +46,7 @@ export default async function ReadBookModalPage({
 
   let material;
   try {
-    material = await loadReaderMaterial(slug, { eagerSectionId: section });
+    material = await loadReaderMaterial(slug);
   } catch (err) {
     if (err instanceof MaterialNotFoundError) {
       notFound();
@@ -83,14 +66,15 @@ export default async function ReadBookModalPage({
     };
     if (material.kind === "pdf") return <PdfDocumentModal {...documentProps} />;
     if (material.kind === "docx") return <DocxDocumentModal {...documentProps} />;
-    return <ArticleDocumentModal {...documentProps} articleHtml={material.articleHtml} />;
+    return <ArticleDocumentModal {...documentProps} articleUrl={material.articleUrl} />;
   }
 
   return (
     <ReaderModal
-      book={material.book}
+      slug={material.slug}
+      metadata={material.metadata}
+      contentBase={material.contentBase}
       materialId={material.materialId}
-      eagerSectionIds={material.eagerSectionIds}
       targetSectionId={section}
       targetPassageId={passage}
       targetNoteId={note}

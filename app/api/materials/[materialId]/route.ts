@@ -3,50 +3,24 @@ import { forbidden, notFound, unauthorized, validationError } from "@/lib/api/er
 import { getAuthenticatedReader } from "@/lib/auth/session";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import { resolveMaterialRow } from "@/lib/materials/resolve";
-import { MaterialSectionNotFoundError, projectMaterial } from "@/lib/materials/projection";
-import { STORAGE_BUCKET, objectPathFromPublicUrl } from "@/lib/storage/config";
-import { MAX_UPLOAD_IMAGES, uploadImagesFolder } from "@/lib/materials/uploadPaths";
-import { invalidateMaterialStorage } from "@/lib/materials/storageCache";
+import { projectMaterial } from "@/lib/materials/projection";
+import { deleteMaterialAssets } from "@/lib/materials/deleteMaterialAssets";
 
-const CONTENT_FIELDS = new Set(["sections", "narrators", "notes"]);
-const CONTENT_CACHE = "public, max-age=31536000, immutable";
 const METADATA_CACHE = "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
 
+/** Metadata only (`fields=`, see projectMaterial): a book's text comes from
+ * the CDN (lib/materials/readerFiles.ts), never through here. */
 export async function GET(request: Request, { params }: { params: Promise<{ materialId: string }> }) {
   const { materialId } = await params;
   const row = await resolveMaterialRow(materialId);
   if (!row) return notFound();
 
-  const url = new URL(request.url);
-  const fieldsParam = url.searchParams.get("fields");
-  const fields = fieldsParam
-    ? fieldsParam
-        .split(",")
-        .map((f) => f.trim())
-        .filter(Boolean)
-    : [];
-  const sectionId = url.searchParams.get("sectionId") ?? undefined;
-  const passagesOnly = url.searchParams.get("passagesOnly") === "true";
-  const fullContent = url.searchParams.get("fullContent") === "true";
-
-  try {
-    const projected = await projectMaterial(row, { fields, sectionId, passagesOnly, fullContent });
-    // Every reader open fetches the whole book's text through here
-    // (useProgressiveText's background wave) — uncached, that's multi-MB of
-    // uncompressed JSON per open billed as Vercel Fast Origin Transfer, the
-    // Hobby limit that kept pausing deployments. Book content never changes
-    // once published, and the URL is keyed by the material's own id (never
-    // reused, unlike a slug), so the browser and Vercel's CDN keep it for a
-    // year; DB-only
-    // fields (title, author, …) are editable, so those get a short window.
-    const isContent = fullContent || sectionId !== undefined || fields.some((f) => CONTENT_FIELDS.has(f));
-    return NextResponse.json(projected, {
-      headers: { "Cache-Control": isContent ? CONTENT_CACHE : METADATA_CACHE },
-    });
-  } catch (err) {
-    if (err instanceof MaterialSectionNotFoundError) return notFound();
-    throw err;
-  }
+  const fields = (new URL(request.url).searchParams.get("fields") ?? "")
+    .split(",")
+    .map((f) => f.trim())
+    .filter(Boolean);
+  const projected = await projectMaterial(row, { fields });
+  return NextResponse.json(projected, { headers: { "Cache-Control": METADATA_CACHE } });
 }
 
 /**
@@ -155,12 +129,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ma
  * § 3), or the library's own "remove" on a personal-library item. Distinct
  * from `DELETE /api/admin/materials/[materialId]` (admin-only, no ownership
  * check, editorial catalog): this route only ever touches a material this
- * reader themselves uploaded, and cleans up exactly the Storage objects
- * `POST /api/materials/upload` wrote for it (parsed from the row's own
- * source_url/json_storage_path/cover_url — there's no other record of which
- * objects belong to this upload, since reader uploads don't follow the
- * fixed slug-based layout deleteMaterialAssets.ts assumes for editorial
- * books).
+ * reader themselves uploaded, and removes its `books/<slug>/` folder.
  */
 export async function DELETE(request: Request, { params }: { params: Promise<{ materialId: string }> }) {
   const reader = await getAuthenticatedReader(request);
@@ -185,21 +154,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ m
 
   const { error: deleteError } = await admin.from("materials").delete().eq("id", row.id);
   if (deleteError) return notFound();
-  invalidateMaterialStorage(row.slug);
-
-  const objectPaths = [row.source_url, row.json_storage_path, row.cover_url]
-    .filter((url): url is string => !!url)
-    .map((url) => objectPathFromPublicUrl(STORAGE_BUCKET, url))
-    .filter((path): path is string => !!path);
-  const bucket = admin.storage.from(STORAGE_BUCKET);
-  // A reader-uploaded EPUB's body images sit in a folder beside its JSON.
-  const jsonPath = row.json_storage_path ? objectPathFromPublicUrl(STORAGE_BUCKET, row.json_storage_path) : null;
-  if (jsonPath?.startsWith("uploads/")) {
-    const folder = uploadImagesFolder(jsonPath);
-    const { data: images } = await bucket.list(folder, { limit: MAX_UPLOAD_IMAGES });
-    objectPaths.push(...(images ?? []).map((o) => `${folder}/${o.name}`));
-  }
-  if (objectPaths.length > 0) await bucket.remove(objectPaths);
+  await deleteMaterialAssets(row.slug);
 
   return NextResponse.json({ deleted: true });
 }

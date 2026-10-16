@@ -1,6 +1,6 @@
 import Loader from "@/app/components/Loader";
 
-// The intercepted modal route's own book fetch (page.tsx's getBookDocument)
+// The intercepted modal route's own row lookup (page.tsx's loadReaderMaterial)
 // had no loading.tsx of its own before this — meaning Next had no fallback
 // scoped specifically to this segment while that data resolved, and fell
 // back on whatever Suspense boundary it found instead. Giving this segment

@@ -14,13 +14,6 @@ const nextConfig: NextConfig = {
       "pdfjs-dist": "pdfjs-dist/legacy/build/pdf.mjs",
     },
   },
-  // `ws` (lib/audio/engines/edge.ts) has optional native addons
-  // (bufferutil/utf-8-validate) for performance — left external so it's
-  // `require()`d from node_modules at request time like any other
-  // server-only dependency, rather than risking Turbopack's dev bundling
-  // mishandling it the way it did the isomorphic package this used to go
-  // through (see edge.ts's own doc comment).
-  serverExternalPackages: ["ws"],
   // /reading became /shelf once it stopped being just the in-progress list
   // and grew Saved/Finished tabs (see ShelfView). Permanent, and kept
   // indefinitely rather than treated as a migration window: the old path is

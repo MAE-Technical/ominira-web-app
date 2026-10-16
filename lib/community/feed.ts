@@ -1,5 +1,5 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
-import { loadBookDocuments } from "@/lib/materials/bookDocuments";
+import { loadSectionLabels } from "@/lib/materials/sectionLabels";
 import { resolveExcerpt } from "./excerpt";
 import { hydrateNotes, type NoteRow } from "./notes";
 import type { AnnotationRange, MaterialSummary, Note } from "@/lib/api/types";
@@ -32,8 +32,8 @@ export type FeedItem = {
  * Turns a page of top-level note rows into full feed items — the
  * material/section/label/excerpt enrichment `GET /api/community/notes` and
  * `GET /api/community/notes/{noteId}` both need (api-spec.md § 3). One
- * Storage fetch per unique material referenced on the page (not per note),
- * and one reply query for the whole page.
+ * manifest read per unique book on the page (not per note), for section
+ * labels, and one reply query for the whole page.
  */
 export async function enrichFeedItems(rows: NoteRow[], callerId: string | undefined): Promise<FeedItem[]> {
   if (rows.length === 0) return [];
@@ -45,7 +45,7 @@ export async function enrichFeedItems(rows: NoteRow[], callerId: string | undefi
   const { data: materials } = await admin.from("materials").select(`${MATERIAL_SUMMARY_COLUMNS}, json_storage_path`).in("id", materialIds);
   const materialsById = new Map((materials ?? []).map((m) => [m.id, m]));
 
-  const bookByMaterialId = await loadBookDocuments(materials ?? []);
+  const labelsByMaterialId = await loadSectionLabels(materials ?? []);
 
   const { data: replyRows } = rows.length
     ? await admin
@@ -91,7 +91,7 @@ export async function enrichFeedItems(rows: NoteRow[], callerId: string | undefi
     // null) is never skipped here; it just renders with no book context.
     if (row.material_id && !material) continue;
 
-    const excerptInfo = material ? resolveExcerpt(bookByMaterialId.get(material.id), row.ranges as AnnotationRange[]) : null;
+    const excerptInfo = material ? resolveExcerpt(row.ranges as AnnotationRange[], labelsByMaterialId.get(material.id)) : null;
 
     const replies = (repliesByParent.get(row.id) ?? [])
       .map((r) => hydratedById.get(r.id))

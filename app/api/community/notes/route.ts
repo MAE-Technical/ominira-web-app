@@ -10,6 +10,7 @@ import type { AnnotationRange, NoteContent } from "@/lib/api/types";
 import { notifyReader } from "@/lib/notifications/notify";
 import { comradeName } from "@/lib/reader/authorDisplay";
 import { notificationSnippet } from "@/lib/notifications/snippet";
+import { cdnUrl } from "@/lib/storage/r2";
 
 type Sort = "recent" | "top" | "trending";
 type TopCursor = { reactionCount: number; createdAt: string; id: string };
@@ -142,7 +143,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as CreateNoteBody;
   if (!body.content) return validationError("content is required.", "content");
-  if (body.content.kind === "voice" && !body.content.audioUrl.includes("/storage/v1/object/public/voice-notes/")) {
+  if (body.content.kind === "voice" && !body.content.audioUrl.startsWith(cdnUrl("voice-notes/"))) {
     return validationError("audioUrl must come from POST /api/community/voice-notes.", "content");
   }
 

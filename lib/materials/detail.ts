@@ -87,16 +87,11 @@ export async function getMaterialDetail(slug: string): Promise<MaterialDetail> {
   if (!row) throw new MaterialNotFoundError(slug);
 
   const admin = getSupabaseAdminClient();
-  // Only epub/native sectioned books get a manifest written to Storage
-  // (buildMaterialManifest's own doc comment) — pdf/docx/webpage materials
-  // have no TOC/spine concept there at all, so fetchMaterialManifest would
-  // 400 for every one of them and take this whole page load down with it.
-  // Those formats simply have no outline on this page (empty toc/spine);
-  // OutlineTab already renders nothing when sections is empty.
-  const needsManifest = row.material_type !== "pdf" && row.material_type !== "docx" && row.material_type !== "webpage";
+  // Only sectioned books (an EPUB or native book) have a JSON and a manifest
+  // beside it; pdf/docx/webpage materials get an empty outline.
   const [projected, manifest, currentReadersByMaterial, contributorRow] = await Promise.all([
     projectMaterial(row, { fields: DETAIL_FIELDS.filter((field) => field !== "spine" && field !== "sections" && field !== "toc_titles") }),
-    needsManifest ? fetchMaterialManifest(row.slug) : Promise.resolve({ schemaVersion: 1 as const, slug: row.slug, toc: [], spine: [] }),
+    row.json_storage_path ? fetchMaterialManifest(row.json_storage_path) : Promise.resolve({ schemaVersion: 1 as const, slug: row.slug, toc: [], spine: [] }),
     listCurrentReaders([row.id], CURRENT_READERS_DETAIL_CAP),
     row.uploaded_by
       ? admin.from("readers").select("id, pseudonym, avatar_color, avatar_url").eq("id", row.uploaded_by).maybeSingle()
